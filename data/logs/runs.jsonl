@@ -1,0 +1,1 @@
+{"run_id": "8758587d", "timestamp": "2026-05-15T21:30:34", "agent": "chat", "tool": "General Chat", "provider": "ollama", "model": "llama3", "mode": "Local only", "prompt_summary": "Hello world test", "status": "success", "input_tokens": 50, "output_tokens": 120, "cost_eur": 0.0, "duration_sec": 0.0, "error": null}

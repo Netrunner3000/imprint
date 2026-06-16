@@ -1,0 +1,52 @@
+{
+  "eur_per_usd": 0.92,
+
+  "openai": {
+    "default": {
+      "input_per_1m_usd": 0.15,
+      "output_per_1m_usd": 0.60
+    },
+    "gpt-4o-mini": {
+      "input_per_1m_usd": 0.15,
+      "output_per_1m_usd": 0.60
+    },
+    "gpt-4.1-mini": {
+      "input_per_1m_usd": 0.40,
+      "output_per_1m_usd": 1.60
+    },
+    "gpt-4.1": {
+      "input_per_1m_usd": 2.00,
+      "output_per_1m_usd": 8.00
+    }
+  },
+
+  "deepseek": {
+    "default": {
+      "input_per_1m_usd": 0.14,
+      "output_per_1m_usd": 0.28
+    },
+    "deepseek-chat": {
+      "input_per_1m_usd": 0.14,
+      "output_per_1m_usd": 0.28
+    },
+    "deepseek-reasoner": {
+      "input_per_1m_usd": 0.55,
+      "output_per_1m_usd": 2.19
+    }
+  },
+
+  "gemini": {
+    "default": {
+      "input_per_1m_usd": 0.00,
+      "output_per_1m_usd": 0.00
+    },
+    "gemini-1.5-flash": {
+      "input_per_1m_usd": 0.00,
+      "output_per_1m_usd": 0.00
+    },
+    "gemini-1.5-pro": {
+      "input_per_1m_usd": 0.00,
+      "output_per_1m_usd": 0.00
+    }
+  }
+}

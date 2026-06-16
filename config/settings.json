@@ -1,0 +1,11 @@
+{
+  "hybrid_mode": true,
+  "local_model_primary": "deepseek-r1:8b",
+  "local_model_fallback": "deepseek-r1:1.5b",
+  "cloud_model": "gpt-5",
+  "deepseek_model": "deepseek-chat",
+  "gemini_model": "gemini-2.5-flash",
+  "hybrid_cloud_target": "auto",
+  "default_model_ollama": "deepseek-r1:8b",
+  "default_model_deepseek": "deepseek-v4-flash"
+}

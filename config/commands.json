@@ -1,0 +1,8 @@
+{
+  "General Chat": "",
+  "Summarize": "Summarize the following clearly and concisely:",
+  "Rewrite Professional": "Rewrite the following in professional business English:",
+  "Explain Code": "Explain this code step by step and identify any issues:",
+  "Debug Python": "Review the following Python code, identify the bug, explain the cause, and provide a corrected version:",
+  "OSINT Brief": "Create a structured OSINT briefing from the following information. Include entities, dates, risks, gaps, and next steps:"
+}

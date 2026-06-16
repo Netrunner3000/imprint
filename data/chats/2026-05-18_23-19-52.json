@@ -1,0 +1,22 @@
+{
+  "timestamp": "2026-05-18_23-19-52",
+  "agent": "chat",
+  "backend": "ollama",
+  "model": "deepseek-r1:8b",
+  "command": "General Chat",
+  "messages": [
+    {
+      "role": "system",
+      "content": "You are a helpful general assistant."
+    },
+    {
+      "role": "user",
+      "content": "what is 1 + 1"
+    },
+    {
+      "role": "assistant",
+      "content": "The answer is 2.\n\nLet me know if you have any other questions!"
+    }
+  ],
+  "response": "The answer is 2.\n\nLet me know if you have any other questions!"
+}

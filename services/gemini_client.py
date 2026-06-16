@@ -1,0 +1,65 @@
+import os
+from google import genai
+
+
+class GeminiClientWrapper:
+    def __init__(self):
+        self.api_key = os.getenv("GEMINI_API_KEY")
+        self.client = genai.Client(api_key=self.api_key) if self.api_key else None
+
+    @staticmethod
+    def key_available():
+        return bool(os.getenv("GEMINI_API_KEY"))
+
+    def chat(self, messages, model="gemini-1.5-flash"):
+        if not self.client:
+            raise RuntimeError("GEMINI_API_KEY is not set.")
+
+        prompt = "\n".join(
+            f"{m.get('role', 'user')}: {m.get('content', '')}"
+            for m in messages
+        )
+
+        response = self.client.models.generate_content(
+            model=model,
+            contents=prompt,
+        )
+
+        text = response.text or ""
+
+        usage_metadata = getattr(response, "usage_metadata", None)
+
+        usage = {
+            "input_tokens": getattr(usage_metadata, "prompt_token_count", 0) if usage_metadata else 0,
+            "output_tokens": getattr(usage_metadata, "candidates_token_count", 0) if usage_metadata else 0,
+            "total_tokens": getattr(usage_metadata, "total_token_count", 0) if usage_metadata else 0,
+        }
+
+        return text, usage
+
+    def generate(self, prompt, model="gemini-1.5-flash"):
+        messages = [{"role": "user", "content": prompt}]
+        return self.chat(messages=messages, model=model)
+    
+    def stream_chat(self, messages, model="gemini-1.5-flash"):
+        if not self.client:
+            raise RuntimeError("GEMINI_API_KEY is not set.")
+
+        prompt = "\n".join(
+            f"{m.get('role', 'user')}: {m.get('content', '')}"
+            for m in messages
+        )
+
+        try:
+            stream = self.client.models.generate_content_stream(
+                model=model,
+                contents=prompt,
+            )
+
+            for chunk in stream:
+                text = getattr(chunk, "text", "")
+                if text:
+                    yield text
+
+        except Exception as e:
+            raise RuntimeError(f"Gemini streaming request failed: {e}")

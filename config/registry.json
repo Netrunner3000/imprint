@@ -1,0 +1,151 @@
+{
+  "agents": [
+    {
+      "name": "chat",
+      "type": "agent",
+      "label": "Chat",
+      "enabled": true,
+      "version": "1.0",
+      "allowed_providers": [
+        "ollama",
+        "openai",
+        "deepseek",
+        "gemini"
+      ],
+      "allowed_tools": [
+        "General Chat",
+        "Writing",
+        "Coding",
+        "Summarize",
+        "Rewrite"
+      ],
+      "budget_limit_eur": null,
+      "requires_approval": false,
+      "description": "General-purpose chat agent.",
+      "log_path": "data/logs/runs.jsonl"
+    },
+    {
+      "name": "osint",
+      "type": "agent",
+      "label": "OSINT",
+      "enabled": true,
+      "version": "1.0",
+      "allowed_providers": [
+        "ollama",
+        "openai",
+        "deepseek",
+        "gemini"
+      ],
+      "allowed_tools": [
+        "General Chat",
+        "Summarize"
+      ],
+      "budget_limit_eur": 2.0,
+      "requires_approval": false,
+      "description": "Open-source intelligence research and investigation agent.",
+      "log_path": "data/logs/runs.jsonl"
+    },
+    {
+      "name": "audiobook",
+      "type": "agent",
+      "label": "Audiobook",
+      "enabled": true,
+      "version": "1.0",
+      "allowed_providers": [
+        "openai"
+      ],
+      "allowed_tools": [],
+      "budget_limit_eur": 10.0,
+      "requires_approval": false,
+      "description": "Converts ebooks to audiobooks using OpenAI TTS.",
+      "log_path": "data/logs/runs.jsonl"
+    },
+    {
+      "name": "manuscript",
+      "type": "agent",
+      "label": "Publisher",
+      "enabled": true,
+      "version": "1.0",
+      "allowed_providers": ["anthropic", "openai", "deepseek", "gemini"],
+      "allowed_tools": ["General Chat", "Summarize"],
+      "budget_limit_eur": 2.0,
+      "requires_approval": false,
+      "description": "Book publishing metrics, platform distribution tracking, and todo management.",
+      "log_path": "data/logs/runs.jsonl"
+    }
+  ],
+  "tools": [
+    {
+      "name": "General Chat",
+      "type": "tool",
+      "enabled": true,
+      "version": "1.0",
+      "allowed_providers": [
+        "ollama",
+        "openai",
+        "deepseek",
+        "gemini"
+      ],
+      "budget_limit_eur": null,
+      "requires_approval": false,
+      "description": "Free-form general assistant mode."
+    },
+    {
+      "name": "Writing",
+      "type": "tool",
+      "enabled": true,
+      "version": "1.0",
+      "allowed_providers": [
+        "ollama",
+        "openai",
+        "gemini"
+      ],
+      "budget_limit_eur": null,
+      "requires_approval": false,
+      "description": "Professional writing, editing, and tone improvement."
+    },
+    {
+      "name": "Coding",
+      "type": "tool",
+      "enabled": true,
+      "version": "1.0",
+      "allowed_providers": [
+        "ollama",
+        "openai",
+        "deepseek"
+      ],
+      "budget_limit_eur": null,
+      "requires_approval": false,
+      "description": "Code debugging, refactoring, and explanation."
+    },
+    {
+      "name": "Summarize",
+      "type": "tool",
+      "enabled": true,
+      "version": "1.0",
+      "allowed_providers": [
+        "ollama",
+        "openai",
+        "deepseek",
+        "gemini"
+      ],
+      "budget_limit_eur": null,
+      "requires_approval": false,
+      "description": "Clear and concise summarization of long texts."
+    },
+    {
+      "name": "Rewrite",
+      "type": "tool",
+      "enabled": true,
+      "version": "1.0",
+      "allowed_providers": [
+        "ollama",
+        "openai",
+        "gemini"
+      ],
+      "budget_limit_eur": null,
+      "requires_approval": false,
+      "description": "Rewrite text for clarity and professionalism."
+    }
+  ]
+}

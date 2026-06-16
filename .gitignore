@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Environments
+venv/
+.venv/
+env/
+
+# Secrets
+.env
+*.key
+
+# Local tooling
+.claude/settings.local.json
+.DS_Store
+
+# Generated / data
+*.log
+*.db
+*.zip
+output/
+data/cache/
+screenshots/

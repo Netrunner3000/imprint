@@ -1,0 +1,102 @@
+[
+  {
+    "timestamp": "2026-04-27T22:08:51",
+    "agent": "chat",
+    "backend": "ollama",
+    "model": "deepseek-r1:8b",
+    "prompt_units": 6,
+    "response_units": 36,
+    "estimated_cost": 0.0,
+    "cloud": false
+  },
+  {
+    "timestamp": "2026-04-29T21:52:04",
+    "agent": "writing",
+    "backend": "auto",
+    "model": "deepseek-r1:8b",
+    "prompt_units": 9,
+    "response_units": 11,
+    "estimated_cost": 0.0,
+    "cloud": false
+  },
+  {
+    "timestamp": "2026-04-29T21:54:35",
+    "agent": "chat",
+    "backend": "auto",
+    "model": "deepseek-r1:8b",
+    "prompt_units": 3,
+    "response_units": 640,
+    "estimated_cost": 0.0,
+    "cloud": false
+  },
+  {
+    "timestamp": "2026-04-29T21:59:34",
+    "agent": "chat",
+    "backend": "auto",
+    "model": "deepseek-r1:8b",
+    "prompt_units": 9,
+    "response_units": 7,
+    "estimated_cost": 0.0,
+    "cloud": false
+  },
+  {
+    "timestamp": "2026-04-29T22:39:48",
+    "agent": "chat",
+    "backend": "auto",
+    "model": "deepseek-r1:8b",
+    "prompt_units": 4,
+    "response_units": 26,
+    "estimated_cost": 0.0,
+    "cloud": false
+  },
+  {
+    "timestamp": "2026-04-29T23:00:34",
+    "agent": "chat",
+    "backend": "auto",
+    "model": "deepseek-r1:8b",
+    "prompt_units": 2,
+    "response_units": 6,
+    "estimated_cost": 0.0,
+    "cloud": false
+  },
+  {
+    "timestamp": "2026-04-29T23:09:36",
+    "agent": "chat",
+    "backend": "ollama",
+    "model": "deepseek-r1:8b",
+    "prompt_units": 4,
+    "response_units": 5,
+    "estimated_cost": 0.0,
+    "cloud": false
+  },
+  {
+    "timestamp": "2026-04-30T01:36:23",
+    "agent": "chat",
+    "backend": "ollama",
+    "model": "deepseek-r1:8b",
+    "prompt_units": 1,
+    "response_units": 18,
+    "estimated_cost": 0.0,
+    "cloud": false
+  },
+  {
+    "timestamp": "2026-04-30T18:00:39",
+    "agent": "chat",
+    "backend": "ollama",
+    "model": "deepseek-r1:8b",
+    "prompt_units": 4,
+    "response_units": 11,
+    "estimated_cost": 0.0,
+    "cloud": false
+  },
+  {
+    "timestamp": "2026-05-01T01:12:49",
+    "agent": "chat",
+    "backend": "ollama",
+    "model": "deepseek-r1:8b",
+    "prompt_units": 1,
+    "response_units": 3,
+    "estimated_cost": 0.0,
+    "cloud": false
+  }
+]

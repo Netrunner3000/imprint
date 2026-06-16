@@ -1,0 +1,12 @@
+{
+  "audiobook": {
+    "name": "Audiobook Converter",
+    "script_path": "/Users/as/Documents/lab/active/narrator/ebook_to_audiobook.py",
+    "working_dir": "/Users/as/Documents/lab/active/narrator",
+    "venv_python": "/Users/as/Documents/lab/active/narrator/.venv/bin/python",
+    "default_input": "/Users/as/Documents/Files/Narrator/Books Input",
+    "default_output": "/Users/as/Documents/Files/Narrator/Books Output",
+    "default_voice": "alloy",
+    "default_chunk_tokens": 1400
+  }
+}
