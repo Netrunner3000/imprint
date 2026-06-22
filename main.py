@@ -2,6 +2,7 @@ import json
 import os
 import re
 import subprocess
+import sys
 import time
 from datetime import datetime
 from pathlib import Path
@@ -9095,14 +9096,17 @@ class GodAI(QWidget):
         self.audiobook_refresh_btn.setEnabled(False)
 
         tool = self.tool_runner.tools["audiobook"]
+        project_root = str(Path(__file__).resolve().parent)
         self.audiobook_process = QProcess(self)
         self.audiobook_process.setProcessChannelMode(QProcess.MergedChannels)
-        self.audiobook_process.setWorkingDirectory(tool["working_dir"])
+        # Run from the project root so "-m services.narrator.converter" resolves,
+        # using Sentinel's own interpreter (no separate venv -> PyInstaller-friendly).
+        self.audiobook_process.setWorkingDirectory(project_root)
 
-        program = tool["venv_python"]
+        program = sys.executable
         arguments = [
             "-u",
-            tool["script_path"],
+            "-m", tool.get("module", "services.narrator.converter"),
             "--input", config["input"],
             "--output", config["output"],
             "--voice", config["voice"],
