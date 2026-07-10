@@ -1,50 +1,46 @@
-# QUICK ROI — Return-on-Investment Analyser
+# QUICK ROI — Short-to-medium term opportunity analysis
+
+`key: roi` · class: `agents/roi_agent.py → ROIAgent` · panel: `build_roi_panel()` · handler: `roi_analyse()`
+
+> ⚠️ Analytical output only, not financial advice.
 
 ## What it does
-Quick ROI is a short-to-medium term opportunity analyser across all asset classes — stocks, crypto, real estate, business ventures, and more. It produces a structured analysis with bull and bear cases, an ROI calculation breakdown, and a final recommendation with a risk-adjusted score.
+Evaluates a specific trade/opportunity across asset classes (equities, options, crypto, forex, ETFs, commodities) on a days-to-months horizon and returns a structured five-part analysis with quantified risk/reward.
 
-> ⚠️ **Disclaimer:** This tool is for informational and educational purposes only. It is not financial advice. Always do your own research and consult a qualified financial adviser before making investment decisions.
-
----
-
-## How to use
-
-1. **Enter the investment description** — e.g. `Bitcoin at $65,000`, `Buying NVDA shares`, `Rental property €200k in Munich`.
-2. *(Optional)* **Set the investment amount** and **time horizon**.
-3. *(Optional)* **Add context** — current market conditions, your risk tolerance, relevant news.
-4. **Select a Provider & Model**.
-5. Click **Analyse**.
-
----
-
-## Output tabs
-
-| Tab | Contents |
+## Inputs (panel controls)
+| Control | Purpose |
 |---|---|
-| Summary | Overview of the opportunity, key metrics, final verdict |
-| Bull / Bear | Two-sided argument — upside case vs downside risks |
-| ROI Details | Calculation breakdown: entry, targets, % return, annualised ROI |
-| Recommendation | Risk-adjusted score (1–10), position sizing hints, action guidance |
+| Ticker / Asset | The instrument. |
+| Asset Type | Frames the analysis (Stock/Crypto/Options/Forex/ETF/Commodity/Other). |
+| Timeframe | Short (<2w) / Medium (2–8w) / Long (2–6m). |
+| Risk Tolerance | Conservative / Moderate / Aggressive — drives sizing + the Risk bar. |
+| Capital (€) | Optional — for absolute sizing. |
+| Context / Notes | Optional — price levels, news, thesis. |
+| Provider / Model, Analyse / Stop / Help / Save / Clear | Run + manage. |
 
----
+## Outputs
+Four tabs: **Summary** (§1), **Bull / Bear** (§2+§3), **ROI Details** (§4), **Recommendation** (§5). Sidebar indicators: **Risk Level** bar (0–10, colour-coded), **Expected ROI** range, **Risk : Reward**, **Confidence** badge — all regex-parsed from the response.
 
-## Asset classes supported
-- **Equities** — individual stocks, ETFs, sector plays
-- **Crypto** — Bitcoin, Ethereum, altcoins, DeFi tokens
-- **Real Estate** — residential, commercial, REITs
-- **Business / Side Income** — franchise, SaaS, freelancing
-- **Commodities** — gold, silver, oil
-- **Bonds / Fixed Income**
-- **Options / Derivatives** (conceptual analysis, not pricing)
+## How it works
+`ROIAgent.build_messages()` uses a system prompt that mandates: `1. OPPORTUNITY SUMMARY`, `2. BULL CASE`, `3. BEAR CASE`, `4. ROI ANALYSIS`, `5. ACTIONABLE RECOMMENDATION`, always with a stop-loss and disclaimer. Streams the Summary tab live, then parses on finish.
 
----
+## Under the hood — files & functions
+| Location | Role |
+|---|---|
+| `agents/roi_agent.py` | `ROIAgent` — 5-section system prompt. |
+| `main.py: build_roi_panel()` | Form, tabs, indicators. |
+| `main.py: roi_analyse()/_roi_on_finished()` | Fire + finalise. |
+| `main.py: _parse_roi_sections()/_update_roi_indicators()/_populate_roi_tabs()` | Regex → tabs + indicators. |
+| `main.py: roi_save()/roi_clear()` | Export / reset. |
 
-## Tips
-- Include the **current price** and any **recent catalyst** (earnings, news) for a more specific analysis.
-- Use Quick ROI for a fast sanity check before a more detailed deep-dive with the **Oracle** (Investment) agent.
-- The **Bull/Bear** tab is especially useful for identifying what assumptions the thesis rests on — stress-test those assumptions yourself.
+## Extend it
+- **New indicator**: have the prompt emit a labelled line, parse it in `_update_roi_indicators()`.
+- **Live prices**: fetch a quote in `roi_analyse()` and inject it into the prompt.
+- **New asset class**: extend the Asset Type combo + a note in the system prompt.
+- Section headers must stay verbatim — `_parse_roi_sections()` matches them.
 
----
+## Requirements
+Provider key (Claude sonnet/opus best for section compliance). No live market data — supply current price in Notes.
 
 ## See also
-**Oracle (Investment)** — deeper longer-horizon analysis with macro, technical, and fundamental synthesis and price targets.
+**Oracle** (`investment`) for deeper, longer-horizon macro/technical/fundamental synthesis.

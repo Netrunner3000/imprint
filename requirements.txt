@@ -32,3 +32,6 @@ anthropic
 python-pptx        # slide generation (.pptx export)
 python-whois       # WHOIS lookups for domain_lookup provider
 dnspython          # DNS record resolution for domain_lookup provider
+PySide6             # desktop GUI
+google-genai         # Gemini provider
+psutil               # resource monitor

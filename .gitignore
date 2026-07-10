@@ -19,8 +19,15 @@ env/
 # Generated / data
 *.log
 *.db
+*.db-shm
+*.db-wal
 *.zip
 output/
 data/cache/
 screenshots/
 .claude/
+
+# Build artifacts
+dist/
+build/
+*.iconset

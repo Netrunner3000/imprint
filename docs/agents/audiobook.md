@@ -1,60 +1,44 @@
-# NARRATOR — Ebook to Audiobook Converter
+# NARRATOR — Ebook → MP3 audiobook
+
+`key: audiobook` · converter: `services/narrator/converter.py` · panel: `build_audiobook_panel()` · handler: `start_selected_audiobook_book()`
+
+> Uses **OpenAI TTS** regardless of the provider selected elsewhere — an OpenAI API key is required.
 
 ## What it does
-Narrator converts ebook files (PDF, EPUB, TXT, MOBI) into MP3 audiobooks using OpenAI's Text-to-Speech (TTS) API. It handles text extraction, chunking, voice synthesis, and stitches the audio into a single MP3 file — all locally.
+Converts `.pdf` / `.epub` / `.txt` / `.mobi` ebooks into MP3 audiobooks: extracts text, chunks it, synthesises speech via OpenAI TTS, and stitches the audio — running as a background process so the GUI stays responsive.
 
-> **Requirement:** An OpenAI API key is required. This agent uses OpenAI TTS regardless of the provider selected elsewhere in the app.
-
----
-
-## How to use
-
-1. **Select input file** — click **Browse** and choose a PDF, EPUB, TXT, or MOBI file.
-2. **Select output folder** — where the final MP3 will be saved.
-3. **Choose a voice** — pick from the six available OpenAI TTS voices (see below).
-4. *(Optional)* **Adjust chunk size** — controls how much text is sent per TTS API call (default: 1400 tokens). Smaller chunks = more API calls but smoother long-form audio.
-5. Click **Start** to begin conversion.
-6. Monitor progress in the **Output Log** — each chunk is logged as it completes.
-7. Click **Stop** to cancel at any time.
-
----
-
-## Supported input formats
-
-| Format | Notes |
+## Inputs (panel controls)
+| Control | Purpose |
 |---|---|
-| TXT | Direct text extraction — fastest and most reliable |
-| PDF | Text extracted from PDF; scanned PDFs may produce poor results |
-| EPUB | Full ebook extraction with chapter structure |
-| MOBI | Amazon Kindle format — text extracted automatically |
+| Book list + Refresh | Books found in the configured input folder. |
+| Input / Output folders | Source ebooks, MP3 destination (Change to pick). |
+| Voice | OpenAI TTS voice (from the audiobook tool config). |
+| Chunk Tokens | Text per TTS call (default 1400) — trades API calls vs chunk size. |
+| Start / Stop | Begin / kill the conversion. |
 
----
+## Outputs
+MP3(s) in the output folder + a live **Output Log** (chunk progress, resume state, quota/error detection). Progress bar reflects completed chunks.
 
-## Available voices
+## How it works
+The converter runs as a separate process via `QProcess`:
+- **Dev**: `python -u -m services.narrator.converter --input ... --output ... --voice ... --chunk-tokens ...`
+- **Frozen app**: the bundle has no `python -m`, so it re-invokes its own executable with the `--narrator-worker` sentinel (intercepted at the top of `main.py`, which runs `converter.main()` and exits). Args are otherwise identical.
 
-| Voice | Character |
+`converter.convert()` does extraction (pypdf / ebooklib / BeautifulSoup), tiktoken chunking, and parallel TTS calls.
+
+## Under the hood — files & functions
+| Location | Role |
 |---|---|
-| **alloy** | Neutral, versatile — good default |
-| **echo** | Male, clear and measured |
-| **fable** | British accent, expressive |
-| **onyx** | Deep, authoritative |
-| **nova** | Female, warm and natural |
-| **shimmer** | Female, soft and gentle |
+| `services/narrator/converter.py` | `convert()`, `main()`, extraction + TTS + chunking. |
+| `main.py: start_selected_audiobook_book()` | Builds the QProcess command (dev vs frozen branch). |
+| `main.py: handle_audiobook_stdout()/_finished()/_error()` | Streams log, detects done/blocked/paused/quota. |
+| `services/tool_runner.py: run_audiobook()` | In-process convert path (used by ToolRunner). |
+| `config/tools.json` (`audiobook.module`) | Points at the converter module. |
 
----
+## Extend it
+- **More voices/models**: extend the voice combo + pass `--model tts-1-hd` through to `convert()`.
+- **Per-chapter files**: have `convert()` emit one MP3 per chapter instead of stitching.
+- **Other TTS providers**: add an engine switch in `converter.py`.
 
-## Output
-A single `.mp3` file saved to your chosen output folder, named after the source file. Large books are chunked and stitched automatically — you receive one continuous file.
-
----
-
-## Tips
-- **TXT files** give the cleanest results — if your ebook is available as plain text, use it.
-- **PDF accuracy** depends on the PDF's formatting. Scanned/image PDFs need OCR first (not handled by Narrator).
-- For **very long books**, the conversion may take several minutes — the log shows live progress.
-- The **chunk size** setting affects cost: larger chunks = fewer API calls but each call costs slightly more. Default (1400) is optimised for most books.
-
----
-
-## Cost
-Narrator uses OpenAI TTS, billed per character. A typical novel (~80,000 words, ~500,000 characters) costs approximately **$7.50 USD** at $0.015/1K characters (tts-1 model). See the **Cost** panel for live session tracking.
+## Requirements
+**OpenAI API key** (TTS billed per character; ~$7–10 for a novel). Input folder configured in `config/tools.json`.

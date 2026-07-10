@@ -1,47 +1,43 @@
-# PLAYMAKER — NFL Prop Bet Analyser
+# PLAYMAKER — NFL prop bet analysis
+
+`key: nfl_bet` · class: `agents/nfl_bet_agent.py → NflBetAgent` · panel: `build_nfl_bet_panel()` · handlers: `nfl_bet_analyse()` + `nfl_bet_build_model()`
+
+> ⚠️ Analytical output only, not betting advice. Bet responsibly and legally.
 
 ## What it does
-Playmaker is an NFL prop bet analysis agent. It evaluates player props, game totals, and spread bets using statistical modelling, season trend analysis, and edge assessment. It calculates expected value (EV), assigns confidence levels, and generates a projection for the relevant stat line.
+Two tools in one panel:
+1. **Prop analysis** — evaluates a player/team prop from data you supply and returns an edge assessment with EV.
+2. **Season Predictive Model** — parses a pasted season game log into real computed stats (mean, recency-weighted projection, floor/ceiling, consistency) and projects the next game against an optional line.
 
-> ⚠️ **Disclaimer:** Sports betting analysis is for entertainment and informational purposes. Gambling involves risk. Bet responsibly and within legal limits in your jurisdiction.
+It never fabricates stats — it reasons only over what you provide.
 
----
-
-## How to use
-
-1. **Enter the bet** — e.g. `Patrick Mahomes over 285.5 passing yards vs Ravens`, `Eagles -3.5 vs Cowboys`, `Ravens/Eagles game total over 47.5`.
-2. *(Optional)* **Add context** — recent stats, injury reports, weather, line movement, or relevant matchup data.
-3. *(Optional)* **Specify season week** — helps the model anchor projections to the correct point in the season.
-4. **Select a Provider & Model**.
-5. Click **Analyse**.
-
----
-
-## Output tabs
-
-| Tab | Contents |
+## Inputs (panel controls)
+| Control | Purpose |
 |---|---|
-| Full Analysis | Comprehensive breakdown covering all relevant factors |
-| Over Case | Statistical arguments supporting the over |
-| Under Case | Statistical arguments supporting the under |
-| Edge Assessment | Implied probability vs estimated true probability; edge % |
-| Projection | Model's predicted stat line with confidence range |
-| Season Trends | Recent trend context — last 5 games, season averages, splits |
+| Player / Team, Prop Type, Line, Odds, Game Context | Prop analysis inputs. |
+| Stats / Data box | Paste game logs / matchup data / injury reports. |
+| **Season model**: Player, Stat Category, Prop Line, Game Log Data, Opponent/Context | Feeds the computed projection. |
+| Analyse Prop / Build Projection / Stop | Run each tool. |
 
----
+## Outputs
+Prop tabs: **Full Analysis**, **Over Case**, **Under Case**, **Edge Assessment** (lean, confidence, EV, unit size), **Projection**, **Season Trends**. Season model: interprets computed stats → point estimate + range + line lean. Sidebar: lean / confidence / EV / unit size.
 
-## Metrics explained
+## How it works
+- `NflBetAgent.build_messages()` → 5-section prop prompt with an EV formula.
+- `NflBetAgent.build_season_model_messages(computed_stats_text, ...)` interprets stats produced by `agents/nfl_stats_parser.py` (`parse_game_log()`, `compute_stats()`, `format_computed_stats()`) — the numbers are computed in Python, not by the LLM.
 
-**Edge %** — the difference between the book's implied probability and Playmaker's estimated true probability. Positive edge = value bet.
+## Under the hood — files & functions
+| Location | Role |
+|---|---|
+| `agents/nfl_bet_agent.py` | Prop + season-model system prompts. |
+| `agents/nfl_stats_parser.py` | Real stat computation (ground truth for the model). |
+| `main.py: nfl_bet_analyse()` / `nfl_bet_build_model()` | The two runners. |
+| `main.py: nfl_bet_save()/nfl_bet_clear()` | Export / reset. |
 
-**EV (Expected Value)** — the average return per $100 wagered given the estimated edge. Positive EV = mathematically profitable long-term.
+## Extend it
+- **Live data**: replace pasted logs with an API pull feeding `parse_game_log()`.
+- **New stat metrics**: extend `compute_stats()` (e.g. opponent-adjusted) and surface in `format_computed_stats()`.
+- **Auto-EV**: compute EV in Python from odds + projection instead of asking the model.
 
-**Confidence level** — how reliable the projection is given available data. Low confidence = lean cautiously or pass.
-
----
-
-## Tips
-- Include **injury reports** — a missing offensive lineman or cornerback changes projections significantly.
-- Include **weather conditions** for outdoor games (wind, rain, temperature all affect passing and kicking lines).
-- Mention **line movement** (e.g. "opened -3.5, now -5") — Playmaker interprets this as sharp money signals.
-- For **same-game parlays**, run each leg individually and check for correlation conflicts.
+## Requirements
+Provider key. A sportsbook account to act on it (legality varies by jurisdiction).

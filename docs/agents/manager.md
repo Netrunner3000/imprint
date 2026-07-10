@@ -1,53 +1,39 @@
-# FORGE — Agent Builder
+# FORGE — Agent factory
+
+`key: manager` · class: `agents/manager_agent.py → ManagerAgent` · factory: `services/agent_factory.py → AgentFactory` · panel: `build_manager_panel()` · handlers: `manager_analyze_idea()`, `manager_approve_spec()`
+
+> **Dev-only when packaged.** Forge writes new `agents/*.py` files and registers them — a frozen `.app` cannot import newly written code. Run from source (`python main.py`) to create agents, then rebuild the app to ship them.
 
 ## What it does
-Forge is a meta-agent that creates new Sentinel AI agents from plain-language descriptions. You describe what you want an agent to do, and Forge writes the Python agent class, the system prompt, the configuration spec, and registers it in the agent registry — ready to use immediately.
+A meta-agent that turns a plain-language idea into a real new agent: it asks an LLM for a structured JSON spec, you review it, and on approval the Agent Factory writes the Python agent file and inserts the DB rows — no manual coding for a basic agent.
 
----
-
-## How to use
-
-1. **Describe your agent idea** in the text box — be as specific as possible about:
-   - What the agent does
-   - What input it takes
-   - What output/sections it produces
-   - Any special behaviour (modes, toggles, structured output, etc.)
-2. *(Optional)* **Select a base agent template** — Forge can model the new agent after an existing one (e.g. "like TRACE but for LinkedIn profiles").
-3. **Select the model** — use a powerful model (Claude Sonnet or GPT-4o) for best code quality.
-4. Click **Analyze**.
-5. Forge generates:
-   - A Python agent class file
-   - A system prompt
-   - A JSON configuration spec
-6. Review the output in the code box.
-7. Click **Register Agent** to save and activate it.
-
----
-
-## What Forge generates
-
-**Python agent class** — a new file in `agents/` with the proper `BaseAgent` inheritance, `__init__`, `build_messages()`, and `parse_spec()` methods.
-
-**System prompt** — a detailed, role-specific system prompt following Sentinel AI's conventions.
-
-**JSON spec** — the configuration entry for `agents_config.json` including the agent name, display label, and supported providers.
-
----
-
-## Input description tips
-
-The more detail you give, the better the output:
-
-| Vague | Better |
+## Inputs (panel controls)
+| Control | Purpose |
 |---|---|
-| "An agent for Twitter" | "An agent that analyses a Twitter/X username and generates a follower growth strategy, tweet frequency analysis, and content calendar" |
-| "A cooking agent" | "An agent that takes ingredients as input and generates a recipe, macros per serving, and a shopping list" |
-| "A legal agent" | "An agent that reviews contract clauses for common risks and outputs: risk flags with severity, plain-English summaries of each clause, and recommended edits" |
+| Idea box | Describe the agent: purpose, inputs, output sections, providers. |
+| Provider / Model | Model that drafts the spec (strong model → better spec). |
+| Analyze Idea | Generate the JSON spec. |
+| Clear | Reset. |
+| Approve & Create / Reject | Commit or discard the reviewed spec. |
 
----
+## Outputs
+A reviewable **JSON spec** (name, label, description, allowed_providers, allowed_tools, budget, requires_approval, system_prompt) in the spec box, plus a **Creation Log**. On approval: a new `agents/<name>_agent.py`, an `agents` table row, and a `tools` row. Restart to see it in the sidebar.
 
-## Tips
-- Describe the **output structure** explicitly — list the tabs, sections, or fields you want.
-- Mention **modes** if needed (like Manuscript's Write/Publish/Market split).
-- After generation, review the code before registering — Forge is thorough but you may want to tweak naming or prompt wording.
-- Registered agents appear immediately in the left sidebar after the app refreshes.
+## How it works
+`ManagerAgent` prompts the LLM to emit the JSON spec; `manager_analyze_idea()` parses/validates it into `pending_spec`; `manager_approve_spec()` hands it to `AgentFactory`, which writes the class file (with `build_messages()`) and the DB entries.
+
+## Under the hood — files & functions
+| Location | Role |
+|---|---|
+| `agents/manager_agent.py` | `ManagerAgent` — spec-generation prompt. |
+| `services/agent_factory.py` | `AgentFactory` — writes files + DB rows. |
+| `main.py: manager_analyze_idea()/manager_approve_spec()/manager_reject_spec()` | Review flow. |
+| `services/database.py: _seed_default_agents()` | Where built-in agents are also seeded. |
+
+## Extend it
+- **Custom GUI generation**: today Forge creates standard-panel agents; extend `AgentFactory` to scaffold a `build_<name>_panel()` too.
+- **Validation**: tighten spec checks (provider names, prompt length) before approval.
+- **Hot-reload**: in dev, import the new module without a restart.
+
+## Requirements
+Provider key. Must run from source to create agents (see the dev-only note above).

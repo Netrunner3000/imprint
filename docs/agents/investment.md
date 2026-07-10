@@ -1,49 +1,40 @@
-# ORACLE — Deep Investment Analysis
+# ORACLE — Longer-horizon market analysis
+
+`key: investment` · class: `agents/investment_agent.py → InvestmentAgent` · panel: `build_investment_panel()` · handler: `inv_analyse()`
+
+> ⚠️ Market analysis for research only. Not financial advice.
 
 ## What it does
-Oracle is the longer-horizon investment analysis agent. It synthesises macro, technical, and fundamental analysis to produce institutional-grade research notes with price targets, risk assessment, and a structured investment thesis. Use it when you need depth — not just a quick ROI check.
+Synthesises macro, technical, and fundamental signals into an evidence-based outlook with explicit price targets and probabilities, over a weeks-to-a-year+ horizon. The longer-horizon counterpart to Quick ROI.
 
-> ⚠️ **Disclaimer:** For informational purposes only. Not financial advice. Consult a qualified adviser before making investment decisions.
-
----
-
-## How to use
-
-1. **Enter the asset or opportunity** — ticker, company name, crypto asset, or investment thesis.
-2. *(Optional)* **Add fundamental data** — revenue, earnings, P/E, debt levels, or paste a news article/earnings report.
-3. *(Optional)* **Specify the time horizon** — short (weeks), medium (months), long (years).
-4. *(Optional)* **Set your risk profile** — conservative, moderate, aggressive.
-5. **Select a Provider & Model** — a capable reasoning model (Claude Sonnet, GPT-4o) gives more nuanced analysis.
-6. Click **Analyse**.
-
----
-
-## Output sections
-
-| Section | Contents |
+## Inputs (panel controls)
+| Control | Purpose |
 |---|---|
-| Macro Context | Interest rate environment, sector tailwinds/headwinds, relevant macro trends |
-| Fundamental Analysis | Business model quality, earnings quality, balance sheet, competitive moat |
-| Technical Analysis | Key support/resistance levels, trend direction, momentum indicators |
-| Price Targets | Base case, bull case, bear case price targets with rationale |
-| Risk Factors | Top 5 risks with probability and impact assessment |
-| Investment Thesis | Structured long/short argument with conviction rating |
-| Recommended Action | Buy/Hold/Sell/Watch with position sizing guidance |
+| Ticker / Asset | Instrument or market (e.g. NVDA, BTC, S&P 500). |
+| Market | Equities / Crypto / Forex / Commodities / ETF-Index / Fixed Income / Other. |
+| Analysis type | Combined / Technical / Fundamental / Macro. |
+| Horizon | 1 week → 1 year+. |
+| Context | Optional — thesis, focus, concerns. |
+| Provider / Model, Analyse / Stop / Save / Clear | Run + manage. |
 
----
+## Outputs
+Six-section report streamed into the panel: `1. MARKET OVERVIEW`, `2. TECHNICAL PICTURE`, `3. MACRO & SECTOR CONTEXT`, `4. FUNDAMENTALS` (equities/ETFs only), `5. PRICE TARGETS & PREDICTION` (base/bull/bear with probabilities + UP/DOWN/SIDEWAYS), `6. KEY RISKS`. Sidebar shows the predicted **direction**.
 
-## Compared to Quick ROI
+## How it works
+`InvestmentAgent.build_messages()` uses a system prompt that enforces the six sections, probabilistic language, explicit assumptions, and a mandatory disclaimer block. Runs through `ChatWorker`.
 
-| | Quick ROI | Oracle |
-|---|---|---|
-| Speed | Fast (< 30 s) | Slower (60–90 s) |
-| Depth | Surface analysis | Multi-layer synthesis |
-| Time horizon | Short–medium | Medium–long |
-| Best for | Quick sanity check | Research-grade thesis |
+## Under the hood — files & functions
+| Location | Role |
+|---|---|
+| `agents/investment_agent.py` | `InvestmentAgent` — 6-section system prompt. |
+| `main.py: build_investment_panel()` | Form, output, direction indicator. |
+| `main.py: inv_analyse()/inv_stop()/inv_save()/inv_clear()` | Lifecycle. |
 
----
+## Extend it
+- **Fundamentals feed**: pull earnings/ratios in `inv_analyse()` and inject them so §4 is data-backed.
+- **Charting**: parse the support/resistance levels from §2 and draw them.
+- **Direction history**: log each prediction to compare against outcomes later.
+- Tune the six-section spec in `agents/investment_agent.py`.
 
-## Tips
-- Paste **recent earnings data or news** into the context field — Oracle integrates it into the fundamental section.
-- For crypto, include the **token's use case, network metrics, and recent protocol changes** for a meaningful analysis.
-- The **Price Targets** section works best when you provide the current market price.
+## Requirements
+Capable model recommended (`claude-sonnet`/`gpt-4o`). Supply current price/fundamentals in Context — no live feed.

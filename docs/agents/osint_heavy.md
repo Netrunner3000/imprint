@@ -1,55 +1,39 @@
-# BLOODHOUND — Deep OSINT Dossier
+# BLOODHOUND — Deep OSINT investigation
+
+`key: osint_heavy` · class: `agents/osint_heavy_agent.py → OsintHeavyAgent` · panel: `build_osint_heavy_panel()` · handler: `osint_heavy_investigate()`
 
 ## What it does
-Bloodhound is the deep-investigation OSINT agent. It builds a comprehensive, structured intelligence dossier on a target — a person, username, email, domain, or organisation. The output is significantly more detailed than TRACE: it assigns a **threat level**, calculates a **confidence score**, offers **scope controls**, and adds advanced tradecraft tool recommendations alongside image metadata hints.
+Produces a research-grade, five-section intelligence dossier on a target, with an embedded threat score, confidence score, and a curated tradecraft tool library (~60 tools grouped by target type: people, username, email, domain/IP, breach, phone, image, archive, geolocation). Accepts an optional **image** and folds its EXIF metadata into the analysis. A planning/reasoning layer — no live network calls.
 
-Like TRACE, Bloodhound is a **planning layer** — it does not perform live lookups. It produces a research-grade dossier that tells investigators exactly what to pursue and how.
-
----
-
-## How to use
-
-1. **Enter a target** (person name, username, email, domain, or organisation).
-2. *(Optional)* **Add context** — any known details: location, employer, known aliases, linked accounts.
-3. *(Optional)* **Select scope** — controls how broad or narrow the dossier should be.
-4. *(Optional)* **Enable image metadata** — includes reverse image search strategies and EXIF analysis hints.
-5. **Select a Provider & Model** — Anthropic or OpenAI strongly recommended for the structured multi-section output.
-6. Click **Investigate**.
-
----
-
-## Output sections
-
-| Section | Contents |
+## Inputs (panel controls)
+| Control | Purpose |
 |---|---|
-| Executive Summary | One-paragraph overview with threat level (LOW / MEDIUM / HIGH / CRITICAL) and confidence score (0–100 %) |
-| Identity Matrix | Full breakdown of names, aliases, accounts, and corroborating data points |
-| Digital Footprint | Social profiles, forums, paste sites, breach data, public posts |
-| Network & Infrastructure | Domains, IPs, WHOIS, DNS records, certificate transparency logs |
-| Tradecraft Tools | Specific tool recommendations (Maltego, Spiderfoot, Sherlock, etc.) with usage notes |
-| Threat Assessment & Next Steps | Prioritised action plan, risk indicators, and recommended investigation sequence |
+| Target identifier | Person / username / email / domain / IP / organisation. |
+| Target type | Guides which tool families and pivots are emphasised. |
+| Scope | `Quick Scan` (3–5 pts/section), `Standard`, or `Deep Dive` (exhaustive). |
+| Objective / context | Free-text investigation goal. |
+| Image upload | Optional — EXIF is parsed and injected into the prompt. |
+| Investigate / Stop / Save Report | Run, cancel, export. |
 
----
+## Outputs — the dossier (exact section headers the parser keys off)
+`## 1. OVERVIEW` (with `THREAT LEVEL: X/10`, `CONFIDENCE: X%`, `SOURCES REFERENCED: X`) · `## 2. DIGITAL FOOTPRINT` · `## 3. INFRASTRUCTURE / SOCIAL PROFILE` · `## 4. RISK & RED FLAGS` · `## 5. METHODOLOGY & TOOLS`. Sidebar indicators (threat bar, confidence, sources) are regex-parsed from those exact lines.
 
-## Threat levels
-- **LOW** — minimal public exposure; routine monitoring sufficient
-- **MEDIUM** — moderate footprint; targeted follow-up warranted
-- **HIGH** — significant exposure or anomalies; active investigation recommended
-- **CRITICAL** — severe exposure or indicators; immediate action required
+## How it works
+`OsintHeavyAgent.build_messages(target, target_type, scope, objective, image_metadata)` assembles the target + scope hint + optional EXIF block. The system prompt carries the full tool library and the strict section format the UI depends on.
 
----
+## Under the hood — files & functions
+| Location | Role |
+|---|---|
+| `agents/osint_heavy_agent.py` | `OsintHeavyAgent` + the tool library + section spec. |
+| `main.py: build_osint_heavy_panel()` | Panel, image picker, indicators. |
+| `main.py: osint_heavy_investigate()` | Reads form + EXIF, fires `ChatWorker`. |
+| `main.py: osint_heavy_save()` | Saves dossier to `.txt`. |
 
-## Confidence score
-Ranges from 0 to 100 %. Reflects how much data was available to support the dossier. A low confidence score means the target has a thin online footprint — treat conclusions cautiously.
+## Extend it
+- **New tool family**: add a block to the tool library in the system prompt (keep the `Name: URL — description` format).
+- **New indicator**: emit a new `KEY: value` line in section 1 and parse it in the panel's indicator update.
+- **Live pivots**: enrich `osint_heavy_investigate()` with `providers/*_lookup.py` before sending.
+- Keep section headers verbatim — the parser matches them exactly.
 
----
-
-## Tips
-- Enable **image metadata** when you have a profile photo or image associated with the target — it generates EXIF extraction commands and reverse-image search strings.
-- Use **scope: narrow** for a fast first pass; use **scope: full** when preparing for a formal investigation.
-- Bloodhound prompts are long — use a model with a large context window (`claude-sonnet-4-6`, `gpt-4o`).
-
----
-
-## See also
-**TRACE** — the lightweight query planner. Use it first for a quick sweep; escalate to Bloodhound when depth is needed.
+## Requirements
+Large-context model recommended (`claude-sonnet`/`opus`, `gpt-4o`). Optional OSINT API keys in `.env`. Pillow (bundled) handles EXIF.

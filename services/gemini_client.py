@@ -2,14 +2,21 @@ import os
 from google import genai
 
 
+def _gemini_api_key():
+    """Read the Gemini key, accepting either name. Google's own SDK uses
+    GOOGLE_API_KEY; Sentinel historically referenced GEMINI_API_KEY. Support
+    both so whichever is set in .env works."""
+    return os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
+
+
 class GeminiClientWrapper:
     def __init__(self):
-        self.api_key = os.getenv("GEMINI_API_KEY")
+        self.api_key = _gemini_api_key()
         self.client = genai.Client(api_key=self.api_key) if self.api_key else None
 
     @staticmethod
     def key_available():
-        return bool(os.getenv("GEMINI_API_KEY"))
+        return bool(_gemini_api_key())
 
     def chat(self, messages, model="gemini-1.5-flash"):
         if not self.client:

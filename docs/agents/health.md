@@ -1,48 +1,40 @@
-# VITALITY — Health & Wellness Guide
+# VITALITY — Health & wellness guidance
+
+`key: health` · class: `agents/health_agent.py → HealthAgent` · panel: `build_health_panel()` · handler: `health_analyse()`
+
+> ⚠️ General wellness guidance only, not medical advice. Consult a qualified professional for personalised decisions.
 
 ## What it does
-Vitality is a health, nutrition, fitness, and lifestyle guidance agent. It analyses your personal profile and goals to generate a structured, evidence-based action plan covering nutrition, exercise, sleep, and mental wellness.
+An evidence-minded advisor across nutrition, fitness, mental wellness, sleep, weight management, and performance. Turns a profile + goal into a structured, prioritised four-part plan with quick wins vs longer-term habits.
 
-> ⚠️ **Medical disclaimer:** Vitality provides general health information only — it is not a licensed medical professional and this is not medical advice. Always consult a qualified doctor or healthcare provider before making changes to your diet, exercise routine, or health management, especially if you have existing conditions.
-
----
-
-## How to use
-
-1. **Fill in your profile:**
-   - Age, sex, weight, height
-   - Activity level (sedentary → very active)
-   - Current health goals (e.g. lose weight, build muscle, improve sleep, reduce stress)
-2. *(Optional)* **Add health context** — any conditions, medications, dietary restrictions, allergies, or relevant history.
-3. *(Optional)* **Specify what you need** — full plan, nutrition only, workout only, mental wellness focus.
-4. **Select a Provider & Model**.
-5. Click **Analyse**.
-
----
-
-## Output tabs
-
-| Tab | Contents |
+## Inputs (panel controls)
+| Control | Purpose |
 |---|---|
-| Overview | Summary of your profile, key findings, and overall wellness score |
-| Action Plan | Prioritised week-by-week action steps for your main goal |
-| Nutrition & Lifestyle | Macro targets, food recommendations, meal timing, sleep hygiene, stress management |
-| Important Notes | Caveats, red flags to discuss with a doctor, contraindications |
+| Category | General / Nutrition / Fitness / Mental Health / Wellness / Weight Management / Performance. |
+| Goal | Weight loss / muscle gain / energy / stress / sleep / etc. |
+| Activity Level | Sedentary → Athlete (drives calorie/training targets). |
+| Age | Optional. |
+| Question / Goal | Free-text detail. |
+| Provider / Model, Analyse / Stop / Help / Save / Clear | Run + manage. |
 
----
+## Outputs
+Four tabs: **Overview** (§1 Summary), **Action Plan** (§2), **Nutrition & Lifestyle** (§3 Diet & Lifestyle), **Important Notes** (§4 Cautions). Sidebar: Category, Goal, and a **Confidence** badge parsed from the response.
 
-## What Vitality covers
+## How it works
+`HealthAgent.build_messages()` uses a system prompt mandating: `1. SUMMARY`, `2. ACTION PLAN`, `3. DIET & LIFESTYLE`, `4. CAUTIONS`, metric units, mechanism-based advice, and a disclaimer. Streams to Overview, then parses to tabs.
 
-- **Nutrition** — calorie targets, macro split, meal timing, food quality, hydration
-- **Fitness** — workout structure, frequency, progressive overload, recovery
-- **Sleep** — sleep hygiene protocols, circadian rhythm optimisation
-- **Mental wellness** — stress management techniques, mindfulness, work-life balance
-- **Lifestyle** — habit stacking, environment design, tracking metrics
+## Under the hood — files & functions
+| Location | Role |
+|---|---|
+| `agents/health_agent.py` | `HealthAgent` — 4-section system prompt. |
+| `main.py: build_health_panel()` | Form, tabs, confidence badge. |
+| `main.py: health_analyse()/_health_on_finished()` | Fire + finalise. |
+| `main.py: _parse_health_sections()/_update_health_indicators()/_populate_health_tabs()` | Regex → tabs + badge. |
 
----
+## Extend it
+- **Add metrics**: compute BMI/TDEE in `health_analyse()` from age/weight/height and inject, or show as an indicator.
+- **Progress tracking**: persist plans per date and diff them.
+- **New indicator**: emit a labelled line in the prompt, parse in `_update_health_indicators()`.
 
-## Tips
-- Be honest about your **activity level** — overestimating it leads to over-aggressive calorie targets.
-- Include **dietary restrictions** upfront (vegan, lactose intolerant, low-FODMAP, etc.) so recommendations are immediately applicable.
-- If you only want one area focused on, say so in the context field — e.g. "focus on sleep improvement only".
-- Re-run Vitality every 4–6 weeks as your metrics change to get an updated plan.
+## Requirements
+Provider key (any). No external services.

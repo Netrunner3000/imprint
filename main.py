@@ -8,8 +8,27 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
+# ── Frozen-app narrator worker dispatch ──────────────────────────────────────
+# The packaged app can't run `python -m services.narrator.converter`, so it
+# re-invokes its own executable with this sentinel. Handle it before importing
+# the GUI stack so the audiobook worker process stays lightweight.
+if "--narrator-worker" in sys.argv:
+    sys.argv.remove("--narrator-worker")
+    from services.narrator.converter import main as _narrator_main
+    _narrator_main()
+    sys.exit(0)
+
+from services.runtime_paths import resource_base, user_data_base, ensure_seeded, is_frozen
+ensure_seeded()
+
+# Anchor the working directory to the writable base so the handful of services
+# that still use relative paths ("data/chats", "config/settings.json", ...) resolve
+# correctly no matter how the app was launched (Finder launches with cwd="/").
+os.chdir(str(user_data_base()))
+
 from dotenv import load_dotenv
-load_dotenv(Path(__file__).resolve().parent / ".env")
+# API keys: user-data .env when frozen, project .env in dev. Real env vars still win.
+load_dotenv(user_data_base() / ".env")
 
 import markdown
 
@@ -59,7 +78,10 @@ from agents.investment_agent import InvestmentAgent
 from services.agent_factory import AgentFactory
 
 
-BASE_DIR = Path(__file__).resolve().parent
+# Writable base = project root in dev, ~/Library/Application Support/Sentinel AI when frozen.
+BASE_DIR = user_data_base()
+# Read-only bundled resources (README, config defaults) = project root in dev, bundle when frozen.
+RESOURCE_DIR = resource_base()
 CONFIG_DIR = BASE_DIR / "config"
 DATA_DIR = BASE_DIR / "data"
 CHATS_DIR = DATA_DIR / "chats"
@@ -69,7 +91,7 @@ AGENTS_FILE = CONFIG_DIR / "agents.json"
 COMMANDS_FILE = CONFIG_DIR / "commands.json"
 TOOL_PROMPTS_FILE = CONFIG_DIR / "tool_prompts.json"
 REGISTRY_FILE = CONFIG_DIR / "registry.json"
-README_FILE = BASE_DIR / "README.md"
+README_FILE = RESOURCE_DIR / "README.md"
 
 SUPPORTED_EBOOKS = {".pdf", ".epub", ".txt", ".mobi"}
 
@@ -2303,7 +2325,7 @@ class GodAI(QWidget):
 
         self.roi_help_btn.setObjectName("ChipBtn")
         self.roi_help_btn.setToolTip("Open ROI Agent documentation")
-        self.roi_help_btn.clicked.connect(self.show_docs)
+        self.roi_help_btn.clicked.connect(self.show_agent_docs)
         provider_row.addWidget(self.roi_help_btn)
 
         setup_layout.addLayout(provider_row, 4, 0, 1, 4)
@@ -2474,7 +2496,7 @@ class GodAI(QWidget):
 
         self.health_help_btn.setObjectName("ChipBtn")
         self.health_help_btn.setToolTip("Open Health Agent documentation")
-        self.health_help_btn.clicked.connect(self.show_docs)
+        self.health_help_btn.clicked.connect(self.show_agent_docs)
         provider_row.addWidget(self.health_help_btn)
 
         provider_row.addStretch()
@@ -3260,7 +3282,7 @@ class GodAI(QWidget):
 
         self.music_help_btn.setObjectName("ChipBtn")
         self.music_help_btn.setToolTip("Open Music Agent documentation")
-        self.music_help_btn.clicked.connect(self.show_docs)
+        self.music_help_btn.clicked.connect(self.show_agent_docs)
         provider_row.addWidget(self.music_help_btn)
 
         provider_row.addStretch()
@@ -4785,7 +4807,7 @@ class GodAI(QWidget):
 
 
         self.wifi_help_btn.setObjectName("ChipBtn")
-        self.wifi_help_btn.clicked.connect(self.show_docs)
+        self.wifi_help_btn.clicked.connect(self.show_agent_docs)
         provider_row.addWidget(self.wifi_help_btn)
 
         provider_row.addStretch()
@@ -9062,6 +9084,23 @@ class GodAI(QWidget):
         output_path = self.audiobook_output_path.text().strip()
         voice = self.audiobook_voice_box.currentText().strip()
 
+        # Preflight: narrator needs an OpenAI key for TTS. Catch the most common
+        # failure (missing key) before launching, so the user gets a clear message
+        # instead of a process that silently exits.
+        if not OpenAIClientWrapper.key_available():
+            self.audiobook_status_label.setText("[Error] OPENAI_API_KEY not set.")
+            QMessageBox.critical(
+                self,
+                "OpenAI API Key Required",
+                "Audiobook conversion uses OpenAI's text-to-speech API, but "
+                "OPENAI_API_KEY is not set.\n\n"
+                "Add your key to the .env file in the project root:\n"
+                "    OPENAI_API_KEY=sk-...\n\n"
+                "then restart Sentinel and try again. "
+                "Get a key at platform.openai.com/api-keys.",
+            )
+            return
+
         try:
             chunk_tokens = int(self.audiobook_chunk_input.text().strip())
         except ValueError:
@@ -9104,18 +9143,43 @@ class GodAI(QWidget):
         self.audiobook_process.setWorkingDirectory(project_root)
 
         program = sys.executable
-        arguments = [
-            "-u",
-            "-m", tool.get("module", "services.narrator.converter"),
+        conv_args = [
             "--input", config["input"],
             "--output", config["output"],
             "--voice", config["voice"],
             "--chunk-tokens", str(config["chunk_tokens"]),
         ]
+        if is_frozen():
+            # Packaged app: re-invoke our own executable with the worker sentinel
+            # (PyInstaller apps have no `python -m`).
+            arguments = ["--narrator-worker"] + conv_args
+        else:
+            arguments = ["-u", "-m", tool.get("module", "services.narrator.converter")] + conv_args
 
         self.audiobook_process.readyReadStandardOutput.connect(self.handle_audiobook_stdout)
         self.audiobook_process.finished.connect(self.handle_audiobook_finished)
+        self.audiobook_process.errorOccurred.connect(self.handle_audiobook_error)
         self.audiobook_process.start(program, arguments)
+
+    def handle_audiobook_error(self, error):
+        """Fired when the process fails to start/crashes at the QProcess level
+        (e.g. interpreter not found) — distinct from a non-zero exit code."""
+        # FailedToStart still emits finished() on some platforms; on others it
+        # does not, so report here to guarantee the user sees something.
+        reason = {
+            QProcess.FailedToStart: "The converter process failed to start "
+                                    "(interpreter or module not found).",
+            QProcess.Crashed: "The converter process crashed.",
+            QProcess.Timedout: "The converter process timed out.",
+        }.get(error, "The converter process encountered an unknown error.")
+
+        self.stop_btn.setEnabled(False)
+        self.audiobook_start_btn.setEnabled(True)
+        self.audiobook_refresh_btn.setEnabled(True)
+        self.tool_progress.setValue(0)
+        self.audiobook_status_label.setText("[Error] Converter could not run.")
+        self.output_box.append(f"\n[Error] {reason}")
+        QMessageBox.critical(self, "Audiobook Conversion Failed", reason)
 
     def handle_audiobook_stdout(self):
         data = self.audiobook_process.readAll().data().decode("utf-8", errors="replace")
@@ -9140,14 +9204,16 @@ class GodAI(QWidget):
         self.audiobook_refresh_btn.setEnabled(True)
 
         exit_code = self.audiobook_process.exitCode() if self.audiobook_process else 0
+        exit_status = self.audiobook_process.exitStatus() if self.audiobook_process else QProcess.NormalExit
         output_text = self.output_box.toPlainText()
+        crashed = exit_status == QProcess.CrashExit
 
-        if exit_code != 0:
-            self.tool_progress.setValue(0)
-            self.audiobook_status_label.setText("[Error] Process exited with error.")
-            self.output_box.append(f"\n[Error] Process exited with code {exit_code}.")
+        success = "ALL BOOKS COMPLETED" in output_text or "🎉" in output_text
+        quota_hit = any(k in output_text for k in (
+            "insufficient_quota", "exceeded your current quota", "Billing hard limit"))
+        paused = "Conversion paused" in output_text or "⏸️" in output_text
 
-        elif any(k in output_text for k in ("insufficient_quota", "exceeded your current quota", "Billing hard limit")):
+        if quota_hit:
             self.tool_progress.setValue(0)
             self.audiobook_status_label.setText("[Blocked] OpenAI quota exceeded — top up your account.")
             self.output_box.append(
@@ -9155,8 +9221,13 @@ class GodAI(QWidget):
                 "Top up your account at platform.openai.com/settings/billing,\n"
                 "then click Start on the same book to resume automatically."
             )
+            QMessageBox.warning(
+                self, "OpenAI Quota Exceeded",
+                "Your OpenAI account has run out of quota. Top up at "
+                "platform.openai.com/settings/billing, then click Start to resume.",
+            )
 
-        elif "Conversion paused" in output_text or "⏸️" in output_text:
+        elif paused and exit_code != 0:
             self.tool_progress.setValue(0)
             self.audiobook_status_label.setText("[Paused] Incomplete — click Start to resume.")
             self.output_box.append(
@@ -9164,17 +9235,55 @@ class GodAI(QWidget):
                 "Click Start on the same book to resume automatically."
             )
 
-        elif "ALL BOOKS COMPLETED" in output_text or "🎉" in output_text:
+        elif crashed or exit_code != 0:
+            reason = self._extract_audiobook_error(output_text)
+            self.tool_progress.setValue(0)
+            self.audiobook_status_label.setText("[Error] Conversion failed.")
+            self.output_box.append(
+                f"\n[Error] Conversion failed (exit code {exit_code}).\n{reason}"
+            )
+            QMessageBox.critical(
+                self, "Audiobook Conversion Failed",
+                f"The conversion did not complete.\n\n{reason}",
+            )
+
+        elif success:
             self.tool_progress.setValue(100)
             self.audiobook_status_label.setText("[Done] Audiobook created successfully.")
             self.output_box.append("\n[Done] Audiobook created successfully.")
 
         else:
-            self.tool_progress.setValue(100)
-            self.audiobook_status_label.setText("[Finished]")
-            self.output_box.append("\n[Finished] Process ended.")
+            # Exit 0 but no success marker — don't fake success.
+            reason = self._extract_audiobook_error(output_text)
+            self.tool_progress.setValue(0)
+            self.audiobook_status_label.setText("[Warning] Ended without confirming success.")
+            self.output_box.append(
+                "\n[Warning] The converter exited without reporting completion. "
+                f"Nothing may have been produced.\n{reason}"
+            )
+            QMessageBox.warning(
+                self, "Audiobook Conversion Incomplete",
+                "The converter exited without confirming the audiobook was "
+                f"created.\n\n{reason}",
+            )
 
         self.refresh_audiobook_books()
+
+    @staticmethod
+    def _extract_audiobook_error(output_text: str) -> str:
+        """Pull the most informative error line out of the converter's output so
+        the user sees *why* it failed, not just that it did."""
+        lines = [ln.strip() for ln in output_text.splitlines() if ln.strip()]
+        # Prefer lines that name a concrete cause over generic failure notices.
+        specific = ("not found", "not set", "Fatal error", "Traceback", "Exception",
+                    "quota", "Authentication", "401", "Failed to read")
+        for ln in reversed(lines):
+            if any(m in ln for m in specific):
+                return ln
+        for ln in reversed(lines):
+            if "❌" in ln or "Error" in ln:
+                return ln
+        return lines[-1] if lines else "No output was produced by the converter."
 
     def load_models(self):
         self.model_box.clear()
@@ -9785,8 +9894,8 @@ class GodAI(QWidget):
         }
         doc_key = doc_file_map.get(agent_name, agent_name)
 
-        # Resolve path relative to this file
-        docs_dir = Path(__file__).parent / "docs" / "agents"
+        # Read-only bundled resource (works in dev and in the frozen .app)
+        docs_dir = RESOURCE_DIR / "docs" / "agents"
         doc_path = docs_dir / f"{doc_key}.md"
 
         # Read the markdown source

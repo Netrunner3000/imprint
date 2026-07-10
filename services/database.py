@@ -2,7 +2,10 @@ import json
 import sqlite3
 from pathlib import Path
 
-BASE_DIR = Path(__file__).resolve().parent.parent
+from services.runtime_paths import user_data_base
+
+# Writable base: project root in dev, ~/Library/Application Support/Sentinel AI when frozen.
+BASE_DIR = user_data_base()
 DB_PATH = BASE_DIR / "data" / "sentinel.db"
 
 SCHEMA = """

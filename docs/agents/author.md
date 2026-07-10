@@ -1,58 +1,42 @@
-# MANUSCRIPT — Long-Form Fiction Studio
+# MANUSCRIPT — Long-form writing studio
+
+`key: author` · class: `agents/author_agent.py → AuthorAgent` (+ `agents/manuscript_agent.py`) · panel: `build_author_panel()` · handlers: `author_write()`, `author_continue()`, `author_pub_generate()`, `author_mkt_generate()`
 
 ## What it does
-Manuscript is a long-form creative writing assistant built for novelists, screenwriters, and storytellers. It gives you a structured workspace with separate tabs for your draft, outline, character profiles, and world-building notes — plus AI-powered generation for each layer of the story.
+A three-mode writing workspace for novelists:
+1. **Write** — draft prose, outlines, characters, and world-building into separate editable tabs.
+2. **Publish** — generate query letters, synopses, blurbs, KDP metadata.
+3. **Market** — generate launch posts, ARC outreach, newsletter/press copy.
 
----
-
-## Modes
-
-Manuscript has three modes, switchable from the top toolbar:
-
-### ✍️ Write Mode
-The main drafting workspace with four editable tabs:
-
-| Tab | Purpose |
+## Inputs (panel controls)
+| Control | Purpose |
 |---|---|
-| Draft | Your manuscript — write, paste, or generate scenes here |
-| Outline | Chapter-by-chapter plot structure |
-| Characters | Character profiles — names, arcs, relationships, backstory |
-| World Notes | Setting, lore, rules, geography, history |
+| Task / mode | Free write · Generate Outline · Develop Characters · Build World (Write mode). |
+| Direction / instruction box | What to write next. |
+| Provider / Model | Large-context model recommended. |
+| Write / Continue / Stop / Save / Clear | Drafting lifecycle. |
+| Publish + Market sub-panels | Their own generate / copy / save buttons. |
 
-**How to generate:**
-1. Switch to the tab you want to fill.
-2. Type an instruction in the prompt field (e.g. "Write chapter 3 where Elena discovers the map").
-3. Click **Generate** — the AI writes into that tab.
-4. Edit freely — all tabs are fully editable.
+## Outputs
+Write mode tabs: **Draft**, **Outline**, **Characters**, **World** — all editable. Sidebar: word count, scene count. Publish/Market render generated documents into their own areas with copy/save.
 
----
+## How it works
+`AuthorAgent.build_messages()` uses a prose-craft system prompt with structured markers `[DRAFT]` / `[OUTLINE]` / `[CHARACTER]` / `[WORLD]`; `_parse_author_sections()` routes each marked block to the right tab. `author_continue()` resends the current draft as context to keep going.
 
-### 📚 Publish Mode
-Generates publishing-related documents from your manuscript:
-- Query letters (literary agents)
-- Book synopses (one-page and chapter-by-chapter)
-- Back-cover blurb / pitch copy
-- Publisher submission packages
+## Under the hood — files & functions
+| Location | Role |
+|---|---|
+| `agents/author_agent.py` | `AuthorAgent` — craft prompt + markers. |
+| `agents/manuscript_agent.py` | Publishing/marketing prompt logic. |
+| `main.py: author_write()/author_continue()` | Write mode. |
+| `main.py: author_pub_generate()/_copy()/_save()` | Publish mode. |
+| `main.py: author_mkt_generate()/_copy()/_save()` | Market mode. |
+| `main.py: _parse_author_sections()/_populate_author_tabs()` | Marker routing. |
 
-**How to use:** Paste or summarise your manuscript, select the document type, click **Generate**.
+## Extend it
+- **Consistency memory**: feed the Characters/World tabs into every Write request so generated scenes stay canonical.
+- **Export**: add EPUB/DOCX export from the Draft tab (python-pptx/docx patterns already in the deps).
+- **New Publish/Market doc types**: add options + a branch in the respective `*_generate()`.
 
----
-
-### 📣 Market Mode
-Generates marketing and promotional copy:
-- Amazon/Kindle product descriptions
-- Social media launch posts
-- ARC reader outreach emails
-- Newsletter announcements
-- Press release templates
-
-**How to use:** Describe your book and target audience, select the copy type, click **Generate**.
-
----
-
-## Tips
-- Use **World Notes** first — establishing your setting and rules before drafting prevents consistency issues.
-- Use **Characters** tab to lock in your cast before writing scenes — the AI references character profiles when generating dialogue and actions.
-- For long novels, generate **chapter-by-chapter outlines** first, then expand each chapter individually.
-- All generated content is **fully editable** — treat it as a first draft and revise as needed.
-- Use a **large-context model** (Claude Sonnet, GPT-4o) when working with long manuscripts to maintain consistency.
+## Requirements
+Provider key. Large-context model (`claude-sonnet`/`gpt-4o`) for long manuscripts.

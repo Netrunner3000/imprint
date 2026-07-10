@@ -1,65 +1,37 @@
-# MAESTRO — Music & Artist Development
+# MAESTRO — Spotify artist setup & release strategy
+
+`key: music` · class: `agents/music_agent.py → MusicAgent` · panel: `build_music_panel()` · handler: `music_analyse()`
 
 ## What it does
-Maestro is a music career and release strategy agent for independent artists and producers. It builds a complete artist development plan: Spotify profile optimisation, release strategy, distribution recommendations, Spotify growth tactics, and a multi-stream income roadmap.
+A music-business consultant that produces a complete, copy-paste-ready release-and-monetisation plan for independent artists. Every section explicitly marks **[AI OUTPUT — COPY-PASTE READY]** vs **[HUMAN ACTION REQUIRED]** so you always know what to paste and what to do manually.
 
----
-
-## How to use
-
-1. **Describe your artist project** — genre, style, stage in career (just starting, releasing first EP, scaling up).
-2. *(Optional)* Add **existing presence** — Spotify monthly listeners, social following, previous releases, distributor.
-3. *(Optional)* Specify your **goal** — more streams, more followers, sync licensing, touring, passive income.
-4. **Select a Provider & Model**.
-5. Click **Analyse**.
-
----
-
-## Output tabs
-
-| Tab | Contents |
+## Inputs (panel controls)
+| Control | Purpose |
 |---|---|
-| Artist Profile | Spotify profile setup, bio copy, artist photo guidelines, playlist pitch strategy |
-| Release Setup | Release timeline, pre-save campaign, metadata checklist (ISRC, UPC, credits) |
-| Distribution | Distributor comparison (DistroKid, TuneCore, CD Baby, Amuse), recommendation for your situation |
-| Spotify Strategy | Playlist pitching targets, algorithmic playlist triggers, release radar optimisation |
-| Income Roadmap | Multi-stream income breakdown: streaming, sync, merch, live, Patreon, licensing |
+| Artist / Project Name | Identity. |
+| Genre | Primary sound. |
+| Release Type | Single / EP / Album / Mixtape. |
+| Distributor | Not signed up yet / DistroKid / TuneCore / CD Baby / etc. |
+| Target Audience, Describe Your Music | Optional context. |
+| Provider / Model, Generate Plan / Stop / Help / Save / Clear | Run + manage. |
 
----
+## Outputs
+Five tabs mirroring the plan: **Artist Profile** (short+long bio, genre tags, similar artists), **Release Setup** (title options, tracklist, cover-art spec, ISRC/UPC), **Distribution** (DistroKid/TuneCore/CD Baby comparison + pick), **Spotify Strategy** (editorial pitch ≤500 chars, Canvas brief, curator targets), **Income Roadmap** (stream-revenue projections, PRO/SoundExchange steps). Sidebar echoes release type / genre / distributor + a static procedure checklist.
 
-## Topics covered
+## How it works
+`MusicAgent.build_messages()` uses a system prompt with the exact five-section format, real distributor names/prices, and the AI/HUMAN action markers. Streamed then split into tabs.
 
-**Artist Profile**
-- Spotify for Artists bio writing
-- Genre and mood tag strategy
-- Canvas video and artist pick guidance
-- Press kit bullet points
+## Under the hood — files & functions
+| Location | Role |
+|---|---|
+| `agents/music_agent.py` | `MusicAgent` — five-section consultant prompt. |
+| `main.py: build_music_panel()` | Form, five tabs, sidebar. |
+| `main.py: music_analyse()/music_stop()/music_save()/music_clear()` | Lifecycle. |
 
-**Release Setup**
-- Release date selection strategy
-- Pre-save link setup
-- Metadata best practices (clean metadata = better algorithmic reach)
-- Promotional timeline (6 weeks out → release day)
+## Extend it
+- **Live data**: pull Spotify for Artists / Soundcharts stats and inject them so advice is data-backed.
+- **Per-section export**: split Save into per-tab files (paste-ready bios, pitch, etc.).
+- **New distributor**: add to the combo + a note in the system prompt's comparison.
 
-**Distribution**
-- Feature comparison table
-- Royalty split and fee structure
-- Which distributor to choose for your situation
-
-**Spotify Strategy**
-- Editorial playlist submission (Spotify for Artists)
-- Independent playlist curator outreach
-- Algorithmic trigger behaviours (saves, skip rate, completion rate)
-- Collaborative playlists and listener funnels
-
-**Income Roadmap**
-- Per-stream revenue estimates by distributor and territory
-- Sync licensing basics and placement strategy
-- Merch, live performance, and direct-to-fan channels
-
----
-
-## Tips
-- Include your **genre** precisely — "lo-fi hip hop" gives better playlist targets than "hip hop".
-- Mention your **current distributor** if you have one — Maestro will advise whether to switch.
-- If you're planning a release, include the **planned release date** for a concrete timeline.
+## Requirements
+Provider key (Claude best for long structured plans). External accounts to act on it: Spotify for Artists, a distributor, a PRO (see the Income Roadmap output and README §18).

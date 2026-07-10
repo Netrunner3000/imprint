@@ -1,5 +1,6 @@
 import os
 import re
+import sys
 import json
 import time
 import random
@@ -776,15 +777,24 @@ def convert(input=None, output=None, voice=None, chunk_tokens=None, force_rebuil
 
 
 def main():
-    """CLI entry point. Also runnable as:  python -m services.narrator.converter"""
+    """CLI entry point. Also runnable as:  python -m services.narrator.converter
+
+    Exits non-zero on any failure so the GUI (which keys off the process exit
+    code) can tell a real failure apart from a successful run.
+    """
     args = parse_args()
-    convert(
-        input=args.input,
-        output=args.output,
-        voice=args.voice,
-        chunk_tokens=args.chunk_tokens,
-        force_rebuild=args.force_rebuild,
-    )
+    try:
+        ok = convert(
+            input=args.input,
+            output=args.output,
+            voice=args.voice,
+            chunk_tokens=args.chunk_tokens,
+            force_rebuild=args.force_rebuild,
+        )
+    except Exception as e:
+        print(f"\n❌ Fatal error: {e}")
+        sys.exit(1)
+    sys.exit(0 if ok else 1)
 
 
 if __name__ == "__main__":

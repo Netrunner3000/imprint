@@ -1,45 +1,38 @@
-# CHAT — General-Purpose Conversation
+# CHAT — General-purpose conversation
+
+`key: chat` · class: `agents/chat_agent.py → ChatAgent` · panel: standard `normal_panel` (no custom panel) · handler: `send_prompt()`
 
 ## What it does
-Chat is the default agent for open-ended conversation with any supported AI provider and model. It forwards your message directly to the selected model and streams the response back in real time. Use it for brainstorming, Q&A, summarisation, translation, quick analysis, or anything that doesn't need a specialist agent.
+The default agent. Plain text in, plain text out, with full multi-turn conversation history. It has no domain framing of its own — instead it wears whichever **Tool** you pick (General Chat, Writing, Coding, Summarize, Rewrite), each supplying a different system prompt. Use it for anything without a dedicated specialist agent.
 
----
-
-## How to use
-
-1. **Select a Provider** — choose from Ollama (local/free), OpenAI, DeepSeek, Gemini, or Anthropic in the Provider drop-down.
-2. **Select a Model** — pick from the models available for that provider. Hit **Refresh Models** if the list is empty.
-3. *(Optional)* **Select a Tool** — pre-loads a system prompt tailored to a specific task (Coding, Writing, OSINT, etc.).
-4. *(Optional)* **Select a Command** — applies a fixed instruction style on top of the tool prompt.
-5. **Type your message** and press **Send** (or Ctrl+Enter).
-6. The response streams into the output box token by token.
-7. Use **Stop** to abort a running request at any time.
-
----
-
-## Controls
-
+## Inputs (panel controls)
 | Control | Purpose |
 |---|---|
-| Provider | Which AI backend to call |
-| Model | Specific model within that provider |
-| Tool | Pre-built system prompt for a domain |
-| Command | Style modifier (e.g. "Explain like I'm 5") |
-| Refresh Models | Re-query available models for the current provider |
-| Model Guide | Open the full model selection guide |
-| Send | Submit the current message |
-| Stop | Cancel the in-progress request |
-| Clear | Wipe the output box |
+| Tool | System prompt frame prepended to every message. |
+| Command | Optional pre-built prompt scaffold from `config/commands.json`. |
+| Provider / Model | Which LLM runs the request. |
+| Mode + API checkboxes | Local-only / hybrid / cloud, and per-provider permission. |
+| Prompt box | Your message. Send, or Stop to cancel. |
 
----
+## Outputs
+Streaming text into the **Output** box (auto-hidden until there's content). Each turn is appended to `current_messages`, so follow-ups keep context. Conversations auto-save to `data/chats/` and appear in **Saved Chats**.
 
-## Tips
-- For **private/offline** use, pick Ollama and a local model — no API key or internet needed.
-- For **best quality**, use Anthropic `claude-sonnet-4-6` or OpenAI `gpt-4o`.
-- For **lowest cost**, use Anthropic `claude-haiku-4-5-20251001` or DeepSeek.
-- The **Tool** drop-down is the fastest way to switch the agent's personality without leaving Chat.
+## How it works
+`ChatAgent.build_messages()` returns `[system(tool prompt), user]`. On later turns the prior assistant reply is included so the model sees the whole thread. Token-by-token streaming for streaming backends, word-by-word emulation otherwise.
 
----
+## Under the hood — files & functions
+| Location | Role |
+|---|---|
+| `agents/chat_agent.py` | `ChatAgent` — message builder. |
+| `main.py: send_prompt()` | Builds request, spawns `ChatWorker`, streams tokens. |
+| `main.py: ChatWorker` (QThread) | Runs the backend call off the UI thread. |
+| DB `tools` table / `config/tool_prompts.json` | The actual system prompts per Tool. |
+| `services/history_store.py` | Saves/loads chats in `data/chats/`. |
 
-## Cost
-Depends entirely on the provider and model selected. Ollama is always free. API providers charge per token — see the **Cost** panel (right sidebar) for live estimates.
+## Extend it
+- **Add a Tool**: insert a row in the `tools` table (or `config/tool_prompts.json`) with a new system prompt — it shows up in the Tool combo automatically.
+- **Add command scaffolds**: extend `config/commands.json`.
+- **Attachments / RAG**: `send_prompt()` is the hook — enrich the user message before it reaches `ChatWorker`.
+
+## Requirements
+Any provider. Ollama is free/local; cloud providers need an API key (app `.env`).

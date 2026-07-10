@@ -1,45 +1,45 @@
-# BEACON — Wireless Reconnaissance
+# BEACON — Wi-Fi reconnaissance & Kali command builder
+
+`key: wifi` · class: `agents/wifi_agent.py → WiFiAgent` · panel: `build_wifi_panel()` · handler: `wifi_run()`
+
+> ⚠️ Only test networks you own or have written authorisation to assess.
 
 ## What it does
-Beacon is a wireless security and reconnaissance agent. It generates Kali Linux command sequences, signal analysis workflows, and network assessment plans for Wi-Fi environments. It is designed for authorised penetration testing, CTF challenges, and wireless security research.
+Two capabilities in one panel:
+1. **Live macOS diagnostics** — runs real subprocesses (the `airport` utility, `ping`, interface queries) and shows raw output.
+2. **Offensive tooling** — detects known USB Wi-Fi adapters and generates ready-to-run **Kali Linux** command sequences (aircrack-ng / hashcat) for authorised testing. An optional **AI Analysis** step feeds the raw scan output to an LLM for interpretation.
 
-> ⚠️ **Legal notice:** Only use Beacon against networks you own or have explicit written permission to test. Unauthorised access to computer networks is illegal in most jurisdictions.
-
----
-
-## How to use
-
-1. **Describe the target environment** — e.g. network name (SSID), known security type (WPA2/WPA3), channel, approximate location/setup.
-2. *(Optional)* **Specify your hardware** — e.g. Alfa card, internal Wi-Fi adapter, whether monitor mode is available.
-3. *(Optional)* **Select a task type** — reconnaissance, handshake capture, deauthentication, signal analysis, report generation.
-4. **Select a Provider & Model**.
-5. Click **Analyse**.
-
----
-
-## What Beacon generates
-
-- **Kali Linux command sequences** — `airmon-ng`, `airodump-ng`, `aireplay-ng`, `hashcat`, `hcxtools`, and related commands with flags explained.
-- **Scan & enumeration workflows** — step-by-step procedures for discovering networks, capturing traffic, and identifying clients.
-- **Signal analysis notes** — channel congestion, interference sources, signal strength interpretation.
-- **Security assessment reports** — structured findings with risk ratings and remediation advice.
-- **CTF / lab hints** — for known challenge scenarios.
-
----
-
-## Common use cases
-
-| Use case | What to enter |
+## Inputs (panel controls)
+| Control | Purpose |
 |---|---|
-| Network audit | SSID, channel, WPA type, number of clients |
-| Handshake capture | Interface name, target BSSID, channel |
-| Signal mapping | Floor plan description, AP locations |
-| Password cracking (authorised) | Captured .hccapx path, wordlist strategy |
-| WPA3 assessment | SAE/Dragonfly environment details |
+| Mode | `Interface Info` · `Scan Networks` · `Signal Monitor` · `Ping Test` · `Kali Command Builder`. |
+| Interface | Network interface (e.g. `en0`). |
+| Target Host | Used by Ping Test. |
+| Kali sub-form (hidden unless Kali mode) | Operation (`Handshake Capture` / `Deauth Attack` / `WPS Audit` / `PMKID Attack`), Adapter, BSSID, Channel, ESSID. |
+| AI Analysis checkbox | Pipe subprocess output to the LLM for a written assessment. |
+| Detect Adapters | Scan USB for known adapters. |
+| Run / Stop / Save Output / Help | Execute, cancel, export, docs. |
 
----
+## Outputs
+Tabs: **Raw Output** (subprocess text), **AI Analysis** (LLM interpretation), **Kali Commands** (generated sequence). Sidebar: detected adapter, chipset, capabilities (monitor/injection), signal bar, security.
 
-## Tips
-- Specify your **adapter capabilities** (monitor mode, packet injection) — Beacon tailors commands to what your hardware can do.
-- Include **channel information** for more precise scan commands.
-- For report generation, describe what you already found — Beacon will structure it into a professional assessment format.
+## How it works
+- `detect_usb_adapters()` parses `system_profiler SPUSBDataType -json` against `KNOWN_ADAPTERS` (VID/PID → chipset, monitor/inject support, Kali iface, driver notes).
+- `build_kali_commands(operation, adapter, bssid, channel, essid)` returns a numbered, commented command block; refuses injection ops on adapters that can't inject.
+- Live modes run via `SubprocessWorker` (QThread). AI Analysis routes raw output through `ChatWorker` + `WiFiAgent.build_messages()`.
+
+## Under the hood — files & functions
+| Location | Role |
+|---|---|
+| `agents/wifi_agent.py` | `KNOWN_ADAPTERS`, `AIRPORT` path, `detect_usb_adapters()`, `build_kali_commands()`, `WiFiAgent`. |
+| `main.py: build_wifi_panel()` | Panel + Kali sub-form toggle. |
+| `main.py: wifi_run()` | Dispatches by Mode (subprocess vs Kali build vs AI). |
+| `main.py: SubprocessWorker` | Runs shell commands off the UI thread. |
+
+## Extend it
+- **Add an adapter**: add a `(vid, pid): {...}` entry to `KNOWN_ADAPTERS`.
+- **Add a Kali operation**: add a branch in `build_kali_commands()` (respect the `inject` capability check).
+- **Add a live mode**: add a Mode option and a subprocess command in `wifi_run()`.
+
+## Requirements
+macOS `airport` binary (built-in path in `AIRPORT`). Kali commands assume a Kali box + compatible adapter (user's: TL-WN722N, AWUS036ACH, TL-WN725N V3). AI Analysis needs a provider key.

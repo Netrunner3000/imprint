@@ -1,48 +1,35 @@
-# TRACE — Light OSINT Query Planner
+# TRACE — Light OSINT
+
+`key: osint` · class: `agents/osint_agent.py → OSINTAgent` · panel: `build_osint_panel()` · handler: `osint_analyse()`
 
 ## What it does
-TRACE is a structured open-source intelligence (OSINT) query planner. Given a target — a person, username, email address, domain, or organisation — it generates a ready-to-execute research plan: typed search queries, Google dorks, curated public sources, and a prioritised next-steps summary.
+A fast, lightweight open-source-intelligence assistant. Given a target (name, username, email, domain, org) plus optional context, it structures a research query, suggests public sources and search operators, and summarises what to look for. It is a **reasoning/planning layer** — it does not perform live lookups itself.
 
-TRACE does **not** perform live lookups or browse the web. It is a planning layer — it tells you exactly what to search and where, so you can execute manually or hand off to an automated pipeline.
-
----
-
-## How to use
-
-1. **Enter a target** in the Target field (e.g. `john.doe@example.com`, `@johndoe`, `example.com`).
-2. *(Optional)* **Add context** — known details about the target that help narrow the search (city, company, role, etc.).
-3. **Select a Provider & Model** — Anthropic or OpenAI recommended for structured output quality.
-4. Click **Analyse**.
-5. Results are split across four output tabs:
-
-| Tab | Contents |
+## Inputs (panel controls)
+| Control | Purpose |
 |---|---|
-| Query Structure | Typed breakdown of search strings by category |
-| Google Dorks | `site:`, `inurl:`, `filetype:` and other advanced Google operators |
-| Public Sources | Recommended databases, directories, and platforms to check |
-| Summary & Next Steps | Prioritised list of follow-up actions |
+| Query / target box | The subject to research and any known context. |
+| Provider / Model | LLM for the analysis (Anthropic/OpenAI give the cleanest structure). |
+| Analyse / Stop | Run or cancel. |
 
----
+## Outputs
+Streamed structured text into the OSINT tabs/output area. Raw response is retained (`last_raw_osint`) so it can be reused.
 
-## Output explained
+## How it works
+`OSINTAgent.build_messages()` wraps the target in a system prompt tuned for defensive, legal OSINT. Runs through the shared `ChatWorker`.
 
-**Query Structure** — organises queries by type (name, email, username, domain, social, professional). Each entry is ready to paste into a search engine.
+## Under the hood — files & functions
+| Location | Role |
+|---|---|
+| `agents/osint_agent.py` | `OSINTAgent` — system prompt + message builder. |
+| `main.py: build_osint_panel()` | Builds the panel. |
+| `main.py: osint_analyse()` / `osint_stop()` | Fire/cancel the request. |
+| `providers/username_lookup.py`, `email_lookup.py`, `domain_lookup.py` | Real lookup helpers (WHOIS/DNS) available for wiring in. |
 
-**Google Dorks** — precision search operators that surface hidden or indexed content. Copy-paste directly into Google, Bing, or a dorking tool.
+## Extend it
+- **Live enrichment**: call the `providers/*_lookup.py` modules from `osint_analyse()` and feed real WHOIS/DNS/breach data into the prompt before sending.
+- **Escalation**: hand results to **Bloodhound** (`osint_heavy`) for a full dossier.
+- Edit the system prompt in `agents/osint_agent.py` to change tradecraft focus.
 
-**Public Sources** — a curated checklist of relevant platforms (LinkedIn, HaveIBeenPwned, WHOIS registrars, breach databases, social networks, etc.) tailored to the target type.
-
-**Summary & Next Steps** — a short prioritised plan stating which leads are highest value and what to do first.
-
----
-
-## Tips
-- The more context you provide, the more precise the dorks and sources.
-- TRACE is fast — it's designed for a quick first sweep before deciding whether a deeper investigation (Bloodhound) is warranted.
-- For **email targets**, it automatically generates breach-check and data-broker queries.
-- For **domain targets**, it generates WHOIS, certificate transparency, and subdomain enumeration queries.
-
----
-
-## See also
-**Bloodhound** — the heavy OSINT agent. Use it when you need a full six-section dossier with threat level, confidence scores, and advanced tradecraft tool recommendations.
+## Requirements
+Any provider (API key for cloud). Optional OSINT API keys (`HIBP_API_KEY`, `VIRUSTOTAL_API_KEY`, etc. in `.env`) for the lookup providers.
