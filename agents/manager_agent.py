@@ -13,7 +13,7 @@ Schema (all fields required):
   "name": "snake_case_name",
   "label": "Display Name (title case)",
   "description": "One sentence describing what this agent does.",
-  "allowed_providers": ["ollama", "openai", "deepseek", "gemini"],
+  "allowed_providers": ["ollama", "openai", "deepseek", "kimi", "gemini"],
   "allowed_tools": ["General Chat"],
   "budget_limit_eur": null,
   "requires_approval": false,

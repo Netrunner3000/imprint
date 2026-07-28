@@ -38,6 +38,19 @@ Extract: total_units_sold, total_royalties_usd, by_marketplace (list),
 kenp_pages_read (if present), period_start, period_end.
 Return only valid JSON, no prose."""
 
+QUOTE_SUGGESTION_PROMPT = """You extract quotable lines from a manuscript for social media
+content — Instagram/Pinterest quote graphics and short-form video (TikTok/Reels/Shorts).
+
+Select the most quotable, standalone lines from the text. A good line:
+- Makes sense with zero context (no pronouns referring to earlier text, no "as I said")
+- Is emotionally sharp or insight-dense — the kind of line a reader would screenshot
+- Is short enough to read in 3-6 seconds (roughly 6-20 words)
+- Is copied EXACTLY as written in the source text — do not paraphrase, rewrite, shorten,
+  or invent. Every quote must be a verbatim substring of the provided text.
+
+Return ONLY a JSON array of strings, no prose, no markdown fences. Example:
+["Quote one.", "Quote two.", "Quote three."]"""
+
 
 class ManuscriptAgent:
     """Publishing metrics, platform tracking, and todo management."""
@@ -64,4 +77,10 @@ class ManuscriptAgent:
         return [
             {"role": "system", "content": KDP_PROMPT},
             {"role": "user", "content": rows_json},
+        ]
+
+    def build_quote_suggestions_messages(self, manuscript_text: str, count: int = 10) -> list[dict]:
+        return [
+            {"role": "system", "content": QUOTE_SUGGESTION_PROMPT},
+            {"role": "user", "content": f"Extract the {count} most quotable lines from this text:\n\n{manuscript_text}"},
         ]

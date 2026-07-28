@@ -32,6 +32,7 @@ INITIAL_TODOS = [
     ("Set pricing across all territories", "all"),
     ("Request ARC copies for launch team", "marketing"),
     ("Submit to BookBub Featured Deal", "marketing"),
+    ("Identify TikTokers/BookTokers in genre and pitch quote-clip promo", "marketing"),
 ]
 
 

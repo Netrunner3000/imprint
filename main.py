@@ -44,6 +44,7 @@ from PySide6.QtWidgets import (
 from services.ollama_client import OllamaClient
 from services.openai_client import OpenAIClientWrapper
 from services.deepseek_client import DeepSeekClientWrapper
+from services.kimi_client import KimiClientWrapper
 from services.gemini_client import GeminiClientWrapper
 from services.anthropic_client import AnthropicClientWrapper
 from services.resource_monitor import ResourceMonitor
@@ -240,6 +241,34 @@ class FiverrImageWorker(QThread):
         self.all_done_signal.emit(paths)
 
 
+class ShortsWorker(QThread):
+    """Narrates a quote and renders it into a short vertical MP4."""
+    status_signal = Signal(str)
+    done_signal = Signal(str)   # output video path
+    error_signal = Signal(str)
+
+    def __init__(self, quote: str, image_path: Path, output_path: Path,
+                 use_elevenlabs: bool, voice_id: str):
+        super().__init__()
+        self.quote = quote
+        self.image_path = image_path
+        self.output_path = output_path
+        self.use_elevenlabs = use_elevenlabs
+        self.voice_id = voice_id
+
+    def run(self):
+        from services.shorts_generator import render_short
+        try:
+            self.status_signal.emit("[Narrating…]")
+            render_short(
+                self.quote, self.image_path, self.output_path,
+                use_elevenlabs=self.use_elevenlabs, voice_id=self.voice_id,
+            )
+            self.done_signal.emit(str(self.output_path))
+        except Exception as e:
+            self.error_signal.emit(str(e))
+
+
 class CollapsibleSection(QWidget):
     """Modern accordion-style section with header button and toggleable content."""
 
@@ -330,6 +359,7 @@ class GodAI(QWidget):
         self.ollama = OllamaClient()
         self.openai = OpenAIClientWrapper()
         self.deepseek = DeepSeekClientWrapper()
+        self.kimi = KimiClientWrapper()
         self.gemini = GeminiClientWrapper()
         self.anthropic = AnthropicClientWrapper()
         self.monitor = ResourceMonitor()
@@ -358,6 +388,9 @@ class GodAI(QWidget):
         self.author_mkt_worker: Optional[ChatWorker] = None
         self.manuscript_worker: Optional[ChatWorker] = None
         self._manuscript_last_data: str = ""
+        self.shorts_worker: Optional[ShortsWorker] = None
+        self._last_short_path: str = ""
+        self.quote_finder_worker: Optional[ChatWorker] = None
         self.music_worker: Optional[ChatWorker] = None
         self._last_music_response: str = ""
         self.nfl_bet_worker: Optional[ChatWorker] = None
@@ -492,6 +525,7 @@ class GodAI(QWidget):
             "execution_mode_box":      "Local-only: only Ollama. Hybrid: pick best of local/cloud. Cloud-only: only paid providers.",
             "allow_openai_checkbox":   "Allow this request to use the OpenAI API (paid).",
             "allow_deepseek_checkbox": "Allow this request to use the DeepSeek API (paid, cheap).",
+            "allow_kimi_checkbox": "Allow this request to use the Kimi API (paid, strong at coding/agentic tasks).",
             "allow_gemini_checkbox":   "Allow this request to use Google Gemini (free tier available).",
             "allow_anthropic_checkbox":"Allow this request to use Anthropic Claude (paid).",
             "input_box":               "Type your prompt here. Long prompts cost more on paid providers.",
@@ -560,6 +594,7 @@ class GodAI(QWidget):
             "settings_btn":             "Open the Settings dialog (pricing, agents, tools, EUR/USD rate).",
             "openai_key_label":         "Whether an OpenAI API key is configured. Set OPENAI_API_KEY in .env or ~/.zshrc.",
             "deepseek_key_label":       "Whether a DeepSeek API key is configured. Set DEEPSEEK_API_KEY in .env or ~/.zshrc.",
+            "kimi_key_label":           "Whether a Kimi (Moonshot AI) API key is configured. Set KIMI_API_KEY in .env or ~/.zshrc.",
             "gemini_key_label":         "Whether a Google Gemini API key is configured. Set GOOGLE_API_KEY in .env or ~/.zshrc.",
             "anthropic_key_label":      "Whether an Anthropic API key is configured. Set ANTHROPIC_API_KEY in .env or ~/.zshrc.",
         })
@@ -780,7 +815,7 @@ class GodAI(QWidget):
                 base = 12
             else:
                 base = 25
-        elif backend in {"openai", "deepseek", "gemini"}:
+        elif backend in {"openai", "deepseek", "kimi", "gemini"}:
             base = 15
         return min(180, max(10, base + words // 20))
 
@@ -793,6 +828,7 @@ class GodAI(QWidget):
             "ollama": 0.0,
             "openai": 0.000002,
             "deepseek": 0.0000005,
+            "kimi": 0.0000025,
             "gemini": 0.000001,
         }
 
@@ -829,7 +865,7 @@ class GodAI(QWidget):
         filter_row = QHBoxLayout()
 
         provider_filter = QComboBox()
-        provider_filter.addItems(["all", "ollama", "openai", "deepseek", "gemini"])
+        provider_filter.addItems(["all", "ollama", "openai", "deepseek", "kimi", "gemini"])
         filter_row.addWidget(QLabel("Provider:"))
         filter_row.addWidget(provider_filter)
 
@@ -1271,7 +1307,7 @@ class GodAI(QWidget):
                 f"FREE (local execution)\n"
                 f"{model} · ~{approx_tokens} tokens"
             )
-        elif backend in {"openai", "deepseek", "gemini"}:
+        elif backend in {"openai", "deepseek", "kimi", "gemini"}:
             self.live_estimate_label.setText(
                 f"Estimated Request Cost:\n"
                 f"~€{estimated_cost:.2f}\n"
@@ -1391,6 +1427,14 @@ class GodAI(QWidget):
                     "reason": f"{tool} recommends DeepSeek, but API is disabled. Using local model."
                 }
 
+            if tool_provider == "kimi" and not self.allow_kimi_checkbox.isChecked():
+                return {
+                    "mode": "Local only",
+                    "provider": "ollama",
+                    "model": self.model_box.currentText(),
+                    "reason": f"{tool} recommends Kimi, but API is disabled. Using local model."
+                }
+
             if tool_provider == "gemini" and not self.allow_gemini_checkbox.isChecked():
                 return {
                     "mode": "Local only",
@@ -1448,6 +1492,8 @@ class GodAI(QWidget):
         if any(k in text for k in ["debug", "error", "traceback", "python", "code", "refactor", "function", "class"]):
             if self.allow_anthropic_checkbox.isChecked():
                 return {"mode": "Hybrid allowed", "provider": "anthropic", "model": "claude-sonnet-4-6", "reason": "Coding/debugging task; Claude Sonnet is excellent for code analysis and generation."}
+            if self.allow_kimi_checkbox.isChecked():
+                return {"mode": "Hybrid allowed", "provider": "kimi", "model": "kimi-k2.7-code", "reason": "Coding/debugging task; Kimi K2.7 Code is purpose-built for coding and long-context tool use."}
             if self.allow_deepseek_checkbox.isChecked():
                 return {"mode": "Hybrid allowed", "provider": "deepseek", "model": "deepseek-chat", "reason": "Coding/debugging task; DeepSeek is strong for code analysis."}
             if self.allow_openai_checkbox.isChecked():
@@ -1464,6 +1510,8 @@ class GodAI(QWidget):
             return {"mode": "Local only", "provider": "ollama", "model": self.model_box.currentText(), "reason": "Writing task detected, but APIs are not enabled. Using local model."}
 
         if any(k in text for k in ["osint", "investigate", "research", "summarize sources", "analysis", "report"]):
+            if self.allow_kimi_checkbox.isChecked():
+                return {"mode": "Hybrid allowed", "provider": "kimi", "model": "kimi-k2.7-code", "reason": "Analysis/OSINT-style task; Kimi's strong tool-use/agentic performance suits multi-step investigation."}
             if self.allow_deepseek_checkbox.isChecked():
                 return {"mode": "Hybrid allowed", "provider": "deepseek", "model": "deepseek-chat", "reason": "Analysis/OSINT-style task; DeepSeek is recommended."}
             if self.allow_gemini_checkbox.isChecked():
@@ -1810,7 +1858,7 @@ class GodAI(QWidget):
         top_row_2 = QHBoxLayout()
 
         self.provider_box = QComboBox()
-        self.provider_box.addItems(["ollama", "openai", "deepseek", "gemini", "anthropic"])
+        self.provider_box.addItems(["ollama", "openai", "deepseek", "kimi", "gemini", "anthropic"])
         self.provider_box.setMinimumWidth(120)
         top_row_2.addWidget(QLabel("Provider:"))
         top_row_2.addWidget(self.provider_box)
@@ -1862,6 +1910,10 @@ class GodAI(QWidget):
         self.allow_deepseek_checkbox = QCheckBox("DeepSeek")
         self.allow_deepseek_checkbox.setChecked(False)
         top_row_3.addWidget(self.allow_deepseek_checkbox)
+
+        self.allow_kimi_checkbox = QCheckBox("Kimi")
+        self.allow_kimi_checkbox.setChecked(False)
+        top_row_3.addWidget(self.allow_kimi_checkbox)
 
         self.allow_gemini_checkbox = QCheckBox("Gemini")
         self.allow_gemini_checkbox.setChecked(False)
@@ -1953,6 +2005,9 @@ class GodAI(QWidget):
 
         self.allow_deepseek_checkbox.stateChanged.connect(self.update_live_cost_estimate)
         self.allow_deepseek_checkbox.stateChanged.connect(self.update_recommendation_label)
+
+        self.allow_kimi_checkbox.stateChanged.connect(self.update_live_cost_estimate)
+        self.allow_kimi_checkbox.stateChanged.connect(self.update_recommendation_label)
 
         self.allow_gemini_checkbox.stateChanged.connect(self.update_live_cost_estimate)
         self.allow_gemini_checkbox.stateChanged.connect(self.update_recommendation_label)
@@ -2174,7 +2229,7 @@ class GodAI(QWidget):
         idea_btn_row = QHBoxLayout()
 
         self.manager_provider_box = QComboBox()
-        self.manager_provider_box.addItems(["ollama", "openai", "deepseek", "gemini", "anthropic"])
+        self.manager_provider_box.addItems(["ollama", "openai", "deepseek", "kimi", "gemini", "anthropic"])
         self.manager_provider_box.setCurrentText("deepseek")
         idea_btn_row.addWidget(QLabel("Provider:"))
         idea_btn_row.addWidget(self.manager_provider_box)
@@ -2297,7 +2352,7 @@ class GodAI(QWidget):
         provider_row = QHBoxLayout()
         provider_row.addWidget(QLabel("Provider:"))
         self.roi_provider_box = QComboBox()
-        self.roi_provider_box.addItems(["ollama", "openai", "deepseek", "gemini", "anthropic"])
+        self.roi_provider_box.addItems(["ollama", "openai", "deepseek", "kimi", "gemini", "anthropic"])
         self.roi_provider_box.setCurrentText("anthropic")
         provider_row.addWidget(self.roi_provider_box)
 
@@ -2471,7 +2526,7 @@ class GodAI(QWidget):
         provider_row = QHBoxLayout()
 
         self.health_provider_box = QComboBox()
-        self.health_provider_box.addItems(["ollama", "openai", "deepseek", "gemini", "anthropic"])
+        self.health_provider_box.addItems(["ollama", "openai", "deepseek", "kimi", "gemini", "anthropic"])
         self.health_provider_box.setCurrentText("anthropic")
         provider_row.addWidget(self.health_provider_box)
 
@@ -2590,6 +2645,8 @@ class GodAI(QWidget):
                 models = self.openai.list_models()
             elif provider == "deepseek":
                 models = self.deepseek.list_models()
+            elif provider == "kimi":
+                models = self.kimi.list_models()
             elif provider == "gemini":
                 models = self.gemini.list_models()
             elif provider == "anthropic":
@@ -2849,7 +2906,7 @@ class GodAI(QWidget):
 
         sb.addWidget(QLabel("Provider:"))
         self.author_provider_box = QComboBox()
-        self.author_provider_box.addItems(["ollama", "openai", "deepseek", "gemini", "anthropic"])
+        self.author_provider_box.addItems(["ollama", "openai", "deepseek", "kimi", "gemini", "anthropic"])
         self.author_provider_box.setCurrentText("anthropic")
         sb.addWidget(self.author_provider_box)
 
@@ -3257,7 +3314,7 @@ class GodAI(QWidget):
         provider_row = QHBoxLayout()
 
         self.music_provider_box = QComboBox()
-        self.music_provider_box.addItems(["ollama", "openai", "deepseek", "gemini", "anthropic"])
+        self.music_provider_box.addItems(["ollama", "openai", "deepseek", "kimi", "gemini", "anthropic"])
         self.music_provider_box.setCurrentText("anthropic")
         provider_row.addWidget(self.music_provider_box)
 
@@ -3438,7 +3495,7 @@ class GodAI(QWidget):
         provider_row = QHBoxLayout()
         provider_row.addWidget(QLabel("Provider:"))
         self.nfl_bet_provider_box = QComboBox()
-        self.nfl_bet_provider_box.addItems(["ollama", "openai", "deepseek", "gemini", "anthropic"])
+        self.nfl_bet_provider_box.addItems(["ollama", "openai", "deepseek", "kimi", "gemini", "anthropic"])
         self.nfl_bet_provider_box.setCurrentText("anthropic")
         provider_row.addWidget(self.nfl_bet_provider_box)
 
@@ -3652,7 +3709,7 @@ class GodAI(QWidget):
         provider_row = QHBoxLayout()
         provider_row.addWidget(QLabel("Provider:"))
         self.osint_provider_box = QComboBox()
-        self.osint_provider_box.addItems(["ollama", "openai", "deepseek", "gemini", "anthropic"])
+        self.osint_provider_box.addItems(["ollama", "openai", "deepseek", "kimi", "gemini", "anthropic"])
         self.osint_provider_box.setCurrentText("anthropic")
         provider_row.addWidget(self.osint_provider_box)
 
@@ -3770,7 +3827,7 @@ class GodAI(QWidget):
         provider_row = QHBoxLayout()
         provider_row.addWidget(QLabel("Provider:"))
         self.osint_heavy_provider_box = QComboBox()
-        self.osint_heavy_provider_box.addItems(["ollama", "openai", "deepseek", "gemini", "anthropic"])
+        self.osint_heavy_provider_box.addItems(["ollama", "openai", "deepseek", "kimi", "gemini", "anthropic"])
         self.osint_heavy_provider_box.setCurrentText("anthropic")
         provider_row.addWidget(self.osint_heavy_provider_box)
 
@@ -3950,6 +4007,8 @@ class GodAI(QWidget):
                 models = self.openai.list_models()
             elif provider == "deepseek":
                 models = self.deepseek.list_models()
+            elif provider == "kimi":
+                models = self.kimi.list_models()
             elif provider == "gemini":
                 models = self.gemini.list_models()
             elif provider == "anthropic":
@@ -4070,6 +4129,8 @@ class GodAI(QWidget):
                 models = self.openai.list_models()
             elif provider == "deepseek":
                 models = self.deepseek.list_models()
+            elif provider == "kimi":
+                models = self.kimi.list_models()
             elif provider == "gemini":
                 models = self.gemini.list_models()
             elif provider == "anthropic":
@@ -4411,7 +4472,7 @@ class GodAI(QWidget):
         provider_row = QHBoxLayout()
         provider_row.addWidget(QLabel("Provider:"))
         self.webdesign_provider_box = QComboBox()
-        self.webdesign_provider_box.addItems(["ollama", "openai", "deepseek", "gemini", "anthropic"])
+        self.webdesign_provider_box.addItems(["ollama", "openai", "deepseek", "kimi", "gemini", "anthropic"])
         self.webdesign_provider_box.setCurrentText("anthropic")
         provider_row.addWidget(self.webdesign_provider_box)
 
@@ -4570,7 +4631,7 @@ class GodAI(QWidget):
         provider_row = QHBoxLayout()
         provider_row.addWidget(QLabel("Provider:"))
         self.inv_provider_box = QComboBox()
-        self.inv_provider_box.addItems(["ollama", "openai", "deepseek", "gemini", "anthropic"])
+        self.inv_provider_box.addItems(["ollama", "openai", "deepseek", "kimi", "gemini", "anthropic"])
         self.inv_provider_box.setCurrentText("anthropic")
         provider_row.addWidget(self.inv_provider_box)
 
@@ -4778,7 +4839,7 @@ class GodAI(QWidget):
         provider_row = QHBoxLayout()
 
         self.wifi_provider_box = QComboBox()
-        self.wifi_provider_box.addItems(["ollama", "openai", "deepseek", "gemini", "anthropic"])
+        self.wifi_provider_box.addItems(["ollama", "openai", "deepseek", "kimi", "gemini", "anthropic"])
         self.wifi_provider_box.setCurrentText("anthropic")
         provider_row.addWidget(self.wifi_provider_box)
 
@@ -4939,6 +5000,8 @@ class GodAI(QWidget):
                 models = self.openai.list_models()
             elif provider == "deepseek":
                 models = self.deepseek.list_models()
+            elif provider == "kimi":
+                models = self.kimi.list_models()
             elif provider == "gemini":
                 models = self.gemini.list_models()
             elif provider == "anthropic":
@@ -5202,6 +5265,8 @@ class GodAI(QWidget):
                 models = self.openai.list_models()
             elif provider == "deepseek":
                 models = self.deepseek.list_models()
+            elif provider == "kimi":
+                models = self.kimi.list_models()
             elif provider == "gemini":
                 models = self.gemini.list_models()
             elif provider == "anthropic":
@@ -5368,6 +5433,8 @@ class GodAI(QWidget):
                 models = self.openai.list_models()
             elif provider == "deepseek":
                 models = self.deepseek.list_models()
+            elif provider == "kimi":
+                models = self.kimi.list_models()
             elif provider == "gemini":
                 models = self.gemini.list_models()
             elif provider == "anthropic":
@@ -5702,7 +5769,7 @@ class GodAI(QWidget):
         provider_row = QHBoxLayout()
         provider_row.addWidget(QLabel("Text Provider:"))
         self.fiverr_provider_box = QComboBox()
-        self.fiverr_provider_box.addItems(["anthropic", "openai", "deepseek", "gemini", "ollama"])
+        self.fiverr_provider_box.addItems(["anthropic", "openai", "deepseek", "kimi", "gemini", "ollama"])
         self.fiverr_provider_box.setCurrentText("anthropic")
         provider_row.addWidget(self.fiverr_provider_box)
 
@@ -5847,6 +5914,8 @@ class GodAI(QWidget):
                 models = self.openai.list_models()
             elif provider == "deepseek":
                 models = self.deepseek.list_models()
+            elif provider == "kimi":
+                models = self.kimi.list_models()
             elif provider == "gemini":
                 models = self.gemini.list_models()
             elif provider == "anthropic":
@@ -6081,6 +6150,8 @@ class GodAI(QWidget):
                 models = self.openai.list_models()
             elif provider == "deepseek":
                 models = self.deepseek.list_models()
+            elif provider == "kimi":
+                models = self.kimi.list_models()
             elif provider == "gemini":
                 models = self.gemini.list_models()
             elif provider == "anthropic":
@@ -6241,6 +6312,8 @@ class GodAI(QWidget):
                 models = self.openai.list_models()
             elif provider == "deepseek":
                 models = self.deepseek.list_models()
+            elif provider == "kimi":
+                models = self.kimi.list_models()
             elif provider == "gemini":
                 models = self.gemini.list_models()
             elif provider == "anthropic":
@@ -6650,6 +6723,13 @@ class GodAI(QWidget):
         tb.addStretch()
         layout.addWidget(top_bar)
 
+        self.manuscript_tabs = QTabWidget()
+        layout.addWidget(self.manuscript_tabs, 1)
+
+        overview_tab = QWidget()
+        overview_layout = QVBoxLayout(overview_tab)
+        overview_layout.setContentsMargins(0, 0, 0, 0)
+
         # ── Main area: metrics display + Q&A sidebar ─────────────────────────
         splitter = QSplitter(Qt.Horizontal)
 
@@ -6676,7 +6756,7 @@ class GodAI(QWidget):
 
         sb.addWidget(QLabel("Provider:"))
         self.manuscript_provider_box = QComboBox()
-        self.manuscript_provider_box.addItems(["anthropic", "openai", "deepseek", "gemini"])
+        self.manuscript_provider_box.addItems(["anthropic", "openai", "deepseek", "kimi", "gemini"])
         self.manuscript_provider_box.currentTextChanged.connect(self.manuscript_load_models)
         sb.addWidget(self.manuscript_provider_box)
 
@@ -6716,7 +6796,17 @@ class GodAI(QWidget):
         sb.addLayout(todo_btn_row)
 
         splitter.addWidget(sidebar)
-        layout.addWidget(splitter, 1)
+        overview_layout.addWidget(splitter)
+        self.manuscript_tabs.addTab(overview_tab, "Overview")
+
+        self.build_manuscript_quote_finder_tab()
+        self.manuscript_tabs.addTab(self.manuscript_quote_finder_tab, "Quote Finder")
+
+        self.build_manuscript_graphics_tab()
+        self.manuscript_tabs.addTab(self.manuscript_graphics_tab, "Quote Graphics")
+
+        self.build_manuscript_shorts_tab()
+        self.manuscript_tabs.addTab(self.manuscript_shorts_tab, "Shorts")
 
         # Status bar
         self.manuscript_status_label = QLabel("")
@@ -6724,6 +6814,192 @@ class GodAI(QWidget):
         layout.addWidget(self.manuscript_status_label)
 
         self.manuscript_panel.hide()
+
+    def build_manuscript_quote_finder_tab(self):
+        self.manuscript_quote_finder_tab = QWidget()
+        layout = QVBoxLayout(self.manuscript_quote_finder_tab)
+        layout.setContentsMargins(8, 8, 8, 8)
+        layout.setSpacing(8)
+
+        layout.addWidget(QLabel("Manuscript text:"))
+        self.quote_finder_text = QTextEdit()
+        self.quote_finder_text.setPlaceholderText(
+            "Paste a chapter or excerpt here, or load a file below…"
+        )
+        self.quote_finder_text.setFixedHeight(140)
+        layout.addWidget(self.quote_finder_text)
+
+        load_row = QHBoxLayout()
+        self.quote_finder_load_btn = QPushButton("📄  Load File…")
+        self.quote_finder_load_btn.clicked.connect(self.quote_finder_load_file)
+        load_row.addWidget(self.quote_finder_load_btn)
+        load_row.addWidget(QLabel("Supports .txt, .pdf, .epub, .mobi"))
+        load_row.addStretch()
+        layout.addLayout(load_row)
+
+        settings_row = QHBoxLayout()
+        settings_row.addWidget(QLabel("Quotes:"))
+        self.quote_finder_count_box = QComboBox()
+        self.quote_finder_count_box.addItems(["5", "10", "15", "20"])
+        self.quote_finder_count_box.setCurrentText("10")
+        settings_row.addWidget(self.quote_finder_count_box)
+
+        settings_row.addWidget(QLabel("Theme:"))
+        self.quote_finder_theme_box = QComboBox()
+        self.quote_finder_theme_box.addItems(["Midnight", "Blush", "Zodiac"])
+        settings_row.addWidget(self.quote_finder_theme_box)
+
+        settings_row.addWidget(QLabel("Voice:"))
+        self.quote_finder_voice_source_box = QComboBox()
+        self.quote_finder_voice_source_box.addItems(["System (Free)", "ElevenLabs"])
+        self.quote_finder_voice_source_box.currentTextChanged.connect(self.quote_finder_load_voices)
+        settings_row.addWidget(self.quote_finder_voice_source_box)
+
+        self.quote_finder_voice_box = QComboBox()
+        settings_row.addWidget(self.quote_finder_voice_box)
+
+        settings_row.addWidget(QLabel("Attribution:"))
+        self.quote_finder_attribution = QLineEdit()
+        self.quote_finder_attribution.setPlaceholderText("You Don't Chase")
+        settings_row.addWidget(self.quote_finder_attribution)
+
+        settings_row.addStretch()
+        layout.addLayout(settings_row)
+
+        self.quote_finder_suggest_btn = QPushButton("🔍  Suggest Quotes")
+        self.quote_finder_suggest_btn.setMinimumHeight(34)
+        self.quote_finder_suggest_btn.clicked.connect(self.quote_finder_suggest)
+        layout.addWidget(self.quote_finder_suggest_btn)
+
+        layout.addWidget(QLabel("Candidates — 🖼 makes a graphic, 🎬 makes a narrated short:"))
+        self.quote_finder_list = QListWidget()
+        layout.addWidget(self.quote_finder_list, 1)
+
+        self._quote_finder_short_buttons: list = []
+        self._quote_finder_busy = False
+        self.quote_finder_load_voices()
+
+    def build_manuscript_graphics_tab(self):
+        self.manuscript_graphics_tab = QWidget()
+        row = QHBoxLayout(self.manuscript_graphics_tab)
+        row.setContentsMargins(8, 8, 8, 8)
+        row.setSpacing(12)
+
+        # Left: controls
+        controls = QWidget()
+        cl = QVBoxLayout(controls)
+        cl.setContentsMargins(0, 0, 0, 0)
+        cl.setSpacing(6)
+        controls.setMaximumWidth(280)
+
+        cl.addWidget(QLabel("Quote:"))
+        self.quote_graphic_text = QTextEdit()
+        self.quote_graphic_text.setPlaceholderText("You over-text. You explain yourself. You wait.")
+        self.quote_graphic_text.setFixedHeight(90)
+        cl.addWidget(self.quote_graphic_text)
+
+        cl.addWidget(QLabel("Attribution (optional):"))
+        self.quote_graphic_attribution = QLineEdit()
+        self.quote_graphic_attribution.setPlaceholderText("You Don't Chase")
+        cl.addWidget(self.quote_graphic_attribution)
+
+        cl.addWidget(QLabel("Theme:"))
+        self.quote_graphic_theme_box = QComboBox()
+        self.quote_graphic_theme_box.addItems(["Midnight", "Blush", "Zodiac"])
+        cl.addWidget(self.quote_graphic_theme_box)
+
+        cl.addWidget(QLabel("Size:"))
+        self.quote_graphic_size_box = QComboBox()
+        self.quote_graphic_size_box.addItems(["Square (1080×1080)", "Story / Reel / Pin (1080×1920)"])
+        cl.addWidget(self.quote_graphic_size_box)
+
+        self.quote_graphic_generate_btn = QPushButton("✨  Generate Graphic")
+        self.quote_graphic_generate_btn.setMinimumHeight(34)
+        self.quote_graphic_generate_btn.clicked.connect(self.manuscript_generate_quote_graphic)
+        cl.addWidget(self.quote_graphic_generate_btn)
+
+        self.quote_graphic_open_folder_btn = QPushButton("📂  Open Folder")
+        self.quote_graphic_open_folder_btn.clicked.connect(self.manuscript_open_graphics_folder)
+        cl.addWidget(self.quote_graphic_open_folder_btn)
+
+        cl.addStretch()
+        row.addWidget(controls)
+
+        # Right: preview
+        self.quote_graphic_preview = QLabel("Preview will appear here.")
+        self.quote_graphic_preview.setAlignment(Qt.AlignCenter)
+        self.quote_graphic_preview.setStyleSheet(
+            "background: #1a1a1a; border: 1px solid #333; color: #666;"
+        )
+        self.quote_graphic_preview.setMinimumSize(320, 320)
+        row.addWidget(self.quote_graphic_preview, 1)
+
+    def build_manuscript_shorts_tab(self):
+        self.manuscript_shorts_tab = QWidget()
+        row = QHBoxLayout(self.manuscript_shorts_tab)
+        row.setContentsMargins(8, 8, 8, 8)
+        row.setSpacing(12)
+
+        # Left: controls
+        controls = QWidget()
+        cl = QVBoxLayout(controls)
+        cl.setContentsMargins(0, 0, 0, 0)
+        cl.setSpacing(6)
+        controls.setMaximumWidth(280)
+
+        cl.addWidget(QLabel("Quote (also narrated):"))
+        self.shorts_quote_text = QTextEdit()
+        self.shorts_quote_text.setPlaceholderText("You over-text. You explain yourself. You wait.")
+        self.shorts_quote_text.setFixedHeight(90)
+        cl.addWidget(self.shorts_quote_text)
+
+        cl.addWidget(QLabel("Attribution (optional):"))
+        self.shorts_attribution = QLineEdit()
+        self.shorts_attribution.setPlaceholderText("You Don't Chase")
+        cl.addWidget(self.shorts_attribution)
+
+        cl.addWidget(QLabel("Theme:"))
+        self.shorts_theme_box = QComboBox()
+        self.shorts_theme_box.addItems(["Midnight", "Blush", "Zodiac"])
+        cl.addWidget(self.shorts_theme_box)
+
+        cl.addWidget(QLabel("Voice source:"))
+        self.shorts_voice_source_box = QComboBox()
+        self.shorts_voice_source_box.addItems(["System (Free)", "ElevenLabs"])
+        self.shorts_voice_source_box.currentTextChanged.connect(self.shorts_load_voices)
+        cl.addWidget(self.shorts_voice_source_box)
+
+        self.shorts_voice_box = QComboBox()
+        cl.addWidget(self.shorts_voice_box)
+
+        self.shorts_generate_btn = QPushButton("🎬  Generate Short")
+        self.shorts_generate_btn.setMinimumHeight(34)
+        self.shorts_generate_btn.clicked.connect(self.manuscript_generate_short)
+        cl.addWidget(self.shorts_generate_btn)
+
+        btn_row = QHBoxLayout()
+        self.shorts_play_btn = QPushButton("▶  Play")
+        self.shorts_play_btn.setEnabled(False)
+        self.shorts_play_btn.clicked.connect(self.manuscript_play_short)
+        self.shorts_open_folder_btn = QPushButton("📂  Folder")
+        self.shorts_open_folder_btn.clicked.connect(self.manuscript_open_shorts_folder)
+        btn_row.addWidget(self.shorts_play_btn)
+        btn_row.addWidget(self.shorts_open_folder_btn)
+        cl.addLayout(btn_row)
+
+        cl.addStretch()
+        row.addWidget(controls)
+
+        # Right: preview (static frame of the short — no inline video player)
+        self.shorts_preview = QLabel("Preview will appear here.")
+        self.shorts_preview.setAlignment(Qt.AlignCenter)
+        self.shorts_preview.setStyleSheet(
+            "background: #1a1a1a; border: 1px solid #333; color: #666;"
+        )
+        self.shorts_preview.setMinimumSize(320, 320)
+        row.addWidget(self.shorts_preview, 1)
+
+        self.shorts_load_voices()
 
     # ── Manuscript handlers ───────────────────────────────────────────────────
     def manuscript_load_models(self):
@@ -6736,6 +7012,8 @@ class GodAI(QWidget):
                 models = self.openai.list_models()
             elif provider == "deepseek":
                 models = self.deepseek.list_models()
+            elif provider == "kimi":
+                models = self.kimi.list_models()
             elif provider == "gemini":
                 models = self.gemini.list_models()
             else:
@@ -6850,6 +7128,290 @@ class GodAI(QWidget):
             item.setData(Qt.UserRole, row_id)
             self.manuscript_todo_list.addItem(item)
 
+    def manuscript_generate_quote_graphic(self):
+        quote = self.quote_graphic_text.toPlainText().strip()
+        if not quote:
+            QMessageBox.warning(self, "Missing Quote", "Please enter a quote.")
+            return
+        from PySide6.QtGui import QPixmap
+        from services.quote_graphics import render_quote_graphic, GRAPHICS_DIR
+        import time
+
+        attribution = self.quote_graphic_attribution.text().strip()
+        theme = self.quote_graphic_theme_box.currentText().lower()
+        size_name = "square" if "Square" in self.quote_graphic_size_box.currentText() else "vertical"
+        output_path = GRAPHICS_DIR / f"quote_{int(time.time())}.png"
+        try:
+            render_quote_graphic(quote, output_path, theme=theme, size_name=size_name, attribution=attribution)
+            pixmap = QPixmap(str(output_path))
+            scaled = pixmap.scaled(320, 480, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+            self.quote_graphic_preview.setPixmap(scaled)
+            self.manuscript_status_label.setText(f"[Done] Saved {output_path.name}")
+        except Exception as e:
+            self.manuscript_status_label.setText(f"[Error] {e}")
+
+    def manuscript_open_graphics_folder(self):
+        from services.quote_graphics import GRAPHICS_DIR
+        QDesktopServices.openUrl(QUrl.fromLocalFile(str(GRAPHICS_DIR)))
+
+    def shorts_load_voices(self):
+        self.shorts_voice_box.clear()
+        source = self.shorts_voice_source_box.currentText()
+        try:
+            if source == "ElevenLabs":
+                from providers.voice.elevenlabs import ElevenLabsProvider
+                voices = ElevenLabsProvider().list_voices()
+            else:
+                from providers.voice.mock import MockVoiceProvider
+                voices = MockVoiceProvider().list_voices()
+            for v in voices:
+                self.shorts_voice_box.addItem(v["name"], v["id"])
+        except Exception:
+            self.shorts_voice_box.addItem("(ElevenLabs key not set)", "default")
+
+    def manuscript_generate_short(self):
+        quote = self.shorts_quote_text.toPlainText().strip()
+        if not quote:
+            QMessageBox.warning(self, "Missing Quote", "Please enter a quote.")
+            return
+        from PySide6.QtGui import QPixmap
+        from services.quote_graphics import render_quote_graphic
+        from services.shorts_generator import SHORTS_DIR
+        import time
+
+        attribution = self.shorts_attribution.text().strip()
+        theme = self.shorts_theme_box.currentText().lower()
+        use_elevenlabs = self.shorts_voice_source_box.currentText() == "ElevenLabs"
+        voice_id = self.shorts_voice_box.currentData() or "default"
+
+        ts = int(time.time())
+        image_path = SHORTS_DIR / f"short_{ts}.png"
+        output_path = SHORTS_DIR / f"short_{ts}.mp4"
+
+        try:
+            render_quote_graphic(quote, image_path, theme=theme, size_name="vertical", attribution=attribution)
+            pixmap = QPixmap(str(image_path))
+            scaled = pixmap.scaled(320, 480, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+            self.shorts_preview.setPixmap(scaled)
+        except Exception as e:
+            self.manuscript_status_label.setText(f"[Error] {e}")
+            return
+
+        self.shorts_generate_btn.setEnabled(False)
+        self.shorts_play_btn.setEnabled(False)
+        self._last_short_path = ""
+        self.manuscript_status_label.setText("[Narrating…]")
+
+        self.shorts_worker = ShortsWorker(quote, image_path, output_path, use_elevenlabs, voice_id)
+        self.shorts_worker.status_signal.connect(self.manuscript_status_label.setText)
+        self.shorts_worker.done_signal.connect(self._shorts_on_done)
+        self.shorts_worker.error_signal.connect(self._shorts_on_error)
+        self.shorts_worker.start()
+
+    def _shorts_on_done(self, output_path: str):
+        self._last_short_path = output_path
+        self.manuscript_status_label.setText(f"[Done] Saved {Path(output_path).name}")
+        self.shorts_generate_btn.setEnabled(True)
+        self.shorts_play_btn.setEnabled(True)
+
+    def _shorts_on_error(self, error: str):
+        self.manuscript_status_label.setText(f"[Error] {error}")
+        self.shorts_generate_btn.setEnabled(True)
+
+    def manuscript_play_short(self):
+        if self._last_short_path:
+            QDesktopServices.openUrl(QUrl.fromLocalFile(self._last_short_path))
+
+    def manuscript_open_shorts_folder(self):
+        from services.shorts_generator import SHORTS_DIR
+        QDesktopServices.openUrl(QUrl.fromLocalFile(str(SHORTS_DIR)))
+
+    # ── Quote Finder handlers ─────────────────────────────────────────────────
+    def quote_finder_load_voices(self):
+        self.quote_finder_voice_box.clear()
+        source = self.quote_finder_voice_source_box.currentText()
+        try:
+            if source == "ElevenLabs":
+                from providers.voice.elevenlabs import ElevenLabsProvider
+                voices = ElevenLabsProvider().list_voices()
+            else:
+                from providers.voice.mock import MockVoiceProvider
+                voices = MockVoiceProvider().list_voices()
+            for v in voices:
+                self.quote_finder_voice_box.addItem(v["name"], v["id"])
+        except Exception:
+            self.quote_finder_voice_box.addItem("(ElevenLabs key not set)", "default")
+
+    def quote_finder_load_file(self):
+        path, _ = QFileDialog.getOpenFileName(
+            self, "Load Manuscript File", "",
+            "Text / Ebook Files (*.txt *.pdf *.epub *.mobi)"
+        )
+        if not path:
+            return
+        from services.narrator.converter import load_text
+        try:
+            text = load_text(Path(path))
+            self.quote_finder_text.setPlainText(text)
+            self.manuscript_status_label.setText(f"[Loaded] {Path(path).name} ({len(text):,} chars)")
+        except Exception as e:
+            self.manuscript_status_label.setText(f"[Error] {e}")
+
+    def quote_finder_suggest(self):
+        text = self.quote_finder_text.toPlainText().strip()
+        if not text:
+            QMessageBox.warning(self, "Missing Text", "Paste or load manuscript text first.")
+            return
+        provider = self.manuscript_provider_box.currentText()
+        model = self.manuscript_model_box.currentText()
+        if not model:
+            self.manuscript_status_label.setText("[Error] Select a model on the Overview tab.")
+            return
+        count = int(self.quote_finder_count_box.currentText())
+        # Cap input to keep cost bounded — plenty of text to find a strong batch of quotes.
+        truncated = text[:30000]
+
+        agent = self.agent_instances["manuscript"]
+        messages = agent.build_quote_suggestions_messages(truncated, count=count)
+        self.manuscript_status_label.setText("[Finding quotes…]")
+        self.quote_finder_suggest_btn.setEnabled(False)
+        self.quote_finder_worker = ChatWorker(self.run_backend, provider, model, messages, truncated)
+        self.quote_finder_worker.finished_signal.connect(self._quote_finder_on_finished)
+        self.quote_finder_worker.error_signal.connect(self._quote_finder_on_error)
+        self.quote_finder_worker.start()
+
+    def _quote_finder_on_finished(self, full_response: str):
+        self.quote_finder_suggest_btn.setEnabled(True)
+        quotes = self._parse_quote_list(full_response)
+        self.quote_finder_list.clear()
+        self._quote_finder_short_buttons = []
+        if not quotes:
+            self.manuscript_status_label.setText("[Error] Could not parse quotes from response.")
+            return
+        for q in quotes:
+            item = QListWidgetItem()
+            row = self._build_quote_suggestion_row(q)
+            item.setSizeHint(row.sizeHint())
+            self.quote_finder_list.addItem(item)
+            self.quote_finder_list.setItemWidget(item, row)
+        self.manuscript_status_label.setText(f"[Done] Found {len(quotes)} quotes.")
+
+    def _quote_finder_on_error(self, error: str):
+        self.quote_finder_suggest_btn.setEnabled(True)
+        self.manuscript_status_label.setText(f"[Error] {error}")
+
+    def _parse_quote_list(self, text: str) -> list:
+        text = text.strip()
+        text = re.sub(r"^```(json)?|```$", "", text, flags=re.MULTILINE).strip()
+        try:
+            data = json.loads(text)
+            if isinstance(data, list):
+                return [str(q).strip() for q in data if str(q).strip()]
+        except Exception:
+            pass
+        m = re.search(r"\[.*\]", text, re.DOTALL)
+        if m:
+            try:
+                data = json.loads(m.group(0))
+                if isinstance(data, list):
+                    return [str(q).strip() for q in data if str(q).strip()]
+            except Exception:
+                pass
+        lines = []
+        for line in text.splitlines():
+            line = line.strip().strip("-•* ").strip()
+            line = re.sub(r"^\d+[\.\)]\s*", "", line)
+            line = line.strip("\"“”")
+            if line:
+                lines.append(line)
+        return lines
+
+    def _build_quote_suggestion_row(self, quote: str) -> QWidget:
+        row = QWidget()
+        h = QHBoxLayout(row)
+        h.setContentsMargins(4, 4, 4, 4)
+        h.setSpacing(6)
+
+        label = QLabel(quote)
+        label.setWordWrap(True)
+        h.addWidget(label, 1)
+
+        graphic_btn = QPushButton("🖼")
+        graphic_btn.setFixedWidth(36)
+        graphic_btn.setToolTip("Generate quote graphic")
+        graphic_btn.clicked.connect(lambda checked=False, q=quote: self.quote_finder_generate_graphic(q))
+        h.addWidget(graphic_btn)
+
+        short_btn = QPushButton("🎬")
+        short_btn.setFixedWidth(36)
+        short_btn.setToolTip("Generate narrated short")
+        short_btn.clicked.connect(lambda checked=False, q=quote, b=short_btn: self.quote_finder_generate_short(q, b))
+        h.addWidget(short_btn)
+        self._quote_finder_short_buttons.append(short_btn)
+
+        return row
+
+    def quote_finder_generate_graphic(self, quote: str):
+        from services.quote_graphics import render_quote_graphic, GRAPHICS_DIR
+        import time
+        theme = self.quote_finder_theme_box.currentText().lower()
+        attribution = self.quote_finder_attribution.text().strip()
+        output_path = GRAPHICS_DIR / f"quote_{int(time.time() * 1000)}.png"
+        try:
+            render_quote_graphic(quote, output_path, theme=theme, size_name="square", attribution=attribution)
+            self.manuscript_status_label.setText(f"[Done] Saved {output_path.name}")
+        except Exception as e:
+            self.manuscript_status_label.setText(f"[Error] {e}")
+
+    def quote_finder_generate_short(self, quote: str, button: QPushButton):
+        if self._quote_finder_busy:
+            QMessageBox.information(self, "Busy", "A short is already generating — please wait for it to finish.")
+            return
+        from services.quote_graphics import render_quote_graphic
+        from services.shorts_generator import SHORTS_DIR
+        import time
+
+        theme = self.quote_finder_theme_box.currentText().lower()
+        attribution = self.quote_finder_attribution.text().strip()
+        use_elevenlabs = self.quote_finder_voice_source_box.currentText() == "ElevenLabs"
+        voice_id = self.quote_finder_voice_box.currentData() or "default"
+
+        ts = int(time.time() * 1000)
+        image_path = SHORTS_DIR / f"short_{ts}.png"
+        output_path = SHORTS_DIR / f"short_{ts}.mp4"
+        try:
+            render_quote_graphic(quote, image_path, theme=theme, size_name="vertical", attribution=attribution)
+        except Exception as e:
+            self.manuscript_status_label.setText(f"[Error] {e}")
+            return
+
+        self._quote_finder_busy = True
+        for b in self._quote_finder_short_buttons:
+            b.setEnabled(False)
+        button.setText("…")
+        self.manuscript_status_label.setText("[Narrating…]")
+
+        self.shorts_worker = ShortsWorker(quote, image_path, output_path, use_elevenlabs, voice_id)
+        self.shorts_worker.status_signal.connect(self.manuscript_status_label.setText)
+        self.shorts_worker.done_signal.connect(lambda path, b=button: self._quote_finder_short_done(path, b))
+        self.shorts_worker.error_signal.connect(lambda err, b=button: self._quote_finder_short_error(err, b))
+        self.shorts_worker.start()
+
+    def _quote_finder_short_done(self, output_path: str, button: QPushButton):
+        self._last_short_path = output_path
+        self.manuscript_status_label.setText(f"[Done] Saved {Path(output_path).name}")
+        button.setText("🎬")
+        self._quote_finder_busy = False
+        for b in self._quote_finder_short_buttons:
+            b.setEnabled(True)
+
+    def _quote_finder_short_error(self, error: str, button: QPushButton):
+        self.manuscript_status_label.setText(f"[Error] {error}")
+        button.setText("⚠")
+        self._quote_finder_busy = False
+        for b in self._quote_finder_short_buttons:
+            b.setEnabled(True)
+
     # ── Music handlers ────────────────────────────────────────────────────────
     def music_load_models(self):
         provider = self.music_provider_box.currentText()
@@ -6861,6 +7423,8 @@ class GodAI(QWidget):
                 models = self.openai.list_models()
             elif provider == "deepseek":
                 models = self.deepseek.list_models()
+            elif provider == "kimi":
+                models = self.kimi.list_models()
             elif provider == "gemini":
                 models = self.gemini.list_models()
             elif provider == "anthropic":
@@ -7166,6 +7730,9 @@ class GodAI(QWidget):
         self.deepseek_key_label = QLabel(f"DeepSeek: {self.safe_key_status(DeepSeekClientWrapper)}")
         keys_layout.addWidget(self.deepseek_key_label)
 
+        self.kimi_key_label = QLabel(f"Kimi: {self.safe_key_status(KimiClientWrapper)}")
+        keys_layout.addWidget(self.kimi_key_label)
+
         self.gemini_key_label = QLabel(f"Gemini: {self.safe_key_status(GeminiClientWrapper)}")
         keys_layout.addWidget(self.gemini_key_label)
 
@@ -7338,6 +7905,20 @@ class GodAI(QWidget):
                         "deepseek-v4-pro",
                         "deepseek-v4-flash",
                     ]
+
+            elif provider == "kimi":
+                # Try API model list if available. Fallback to known/common names.
+                try:
+                    if self.kimi.client:
+                        result = self.kimi.client.models.list()
+                        models = sorted(m.id for m in result.data)
+                    else:
+                        models = []
+                except Exception:
+                    models = []
+
+                if not models:
+                    models = self.kimi.KNOWN_MODELS
 
             elif provider == "gemini":
                 try:
@@ -7714,6 +8295,8 @@ class GodAI(QWidget):
                 models = self.openai.list_models()
             elif provider == "deepseek":
                 models = self.deepseek.list_models()
+            elif provider == "kimi":
+                models = self.kimi.list_models()
             elif provider == "gemini":
                 models = self.gemini.list_models()
             elif provider == "anthropic":
@@ -7987,7 +8570,7 @@ class GodAI(QWidget):
         provider_row = QHBoxLayout()
         provider_row.addWidget(QLabel("Provider:"))
         self.bb_provider_box = QComboBox()
-        self.bb_provider_box.addItems(["ollama", "openai", "deepseek", "gemini", "anthropic"])
+        self.bb_provider_box.addItems(["ollama", "openai", "deepseek", "kimi", "gemini", "anthropic"])
         self.bb_provider_box.setCurrentText("anthropic")
         provider_row.addWidget(self.bb_provider_box)
         provider_row.addWidget(QLabel("Model:"))
@@ -8304,6 +8887,8 @@ class GodAI(QWidget):
             self.manager_model_box.addItems(["gpt-4o-mini", "gpt-4.1-mini", "gpt-4.1"])
         elif provider == "deepseek":
             self.manager_model_box.addItems(["deepseek-chat", "deepseek-reasoner"])
+        elif provider == "kimi":
+            self.manager_model_box.addItems(["kimi-k2.7-code", "kimi-k3"])
         elif provider == "gemini":
             self.manager_model_box.addItems(["gemini-1.5-flash", "gemini-1.5-pro"])
         elif provider == "anthropic":
@@ -9324,6 +9909,7 @@ class GodAI(QWidget):
         allowed_apis = {
             "openai": self.allow_openai_checkbox.isChecked(),
             "deepseek": self.allow_deepseek_checkbox.isChecked(),
+            "kimi": self.allow_kimi_checkbox.isChecked(),
             "gemini": self.allow_gemini_checkbox.isChecked(),
             "anthropic": self.allow_anthropic_checkbox.isChecked(),
         }
@@ -9386,6 +9972,7 @@ class GodAI(QWidget):
         api_permissions = {
             "allow_openai": self.allow_openai_checkbox.isChecked(),
             "allow_deepseek": self.allow_deepseek_checkbox.isChecked(),
+            "allow_kimi": self.allow_kimi_checkbox.isChecked(),
             "allow_gemini": self.allow_gemini_checkbox.isChecked(),
             "allow_anthropic": self.allow_anthropic_checkbox.isChecked(),
         }
@@ -9512,6 +10099,14 @@ class GodAI(QWidget):
                 return self.deepseek.chat(messages=messages, model=model)
             if hasattr(self.deepseek, "generate"):
                 return self.deepseek.generate(prompt, model=model)
+
+        if backend == "kimi":
+            if hasattr(self.kimi, "stream_chat"):
+                return self.kimi.stream_chat(messages=messages, model=model)
+            if hasattr(self.kimi, "chat"):
+                return self.kimi.chat(messages=messages, model=model)
+            if hasattr(self.kimi, "generate"):
+                return self.kimi.generate(prompt, model=model)
 
         if backend == "gemini":
             if hasattr(self.gemini, "stream_chat"):
@@ -10060,6 +10655,7 @@ class GodAI(QWidget):
 
         openai_status = "✅ Available" if OpenAIClientWrapper.key_available() else "❌ Not set"
         deepseek_status = "✅ Available" if DeepSeekClientWrapper.key_available() else "❌ Not set"
+        kimi_status = "✅ Available" if KimiClientWrapper.key_available() else "❌ Not set"
         gemini_status = "✅ Available" if GeminiClientWrapper.key_available() else "❌ Not set"
         anthropic_status = "✅ Available" if AnthropicClientWrapper.key_available() else "❌ Not set"
 
@@ -10141,6 +10737,18 @@ class GodAI(QWidget):
             <li><b>deepseek-coder</b> — Specialised for code generation and debugging.</li>
         </ul>
         <p><b>Use when:</b> you want strong analysis and coding at potentially lower cost than OpenAI.</p>
+
+        <h3>Kimi API (Moonshot AI)</h3>
+        <p><b>Best for:</b> coding and long-context agentic/tool-use tasks (OSINT-style multi-step work).</p>
+        <p><b>Key:</b> KIMI_API_KEY — get it at platform.kimi.ai</p>
+        <p><b>Models:</b></p>
+        <ul>
+            <li><b>kimi-k2.7-code</b> — Dedicated coding model, 256k context. Default Kimi model here.</li>
+            <li><b>kimi-k2.7-code-highspeed</b> — Same model, faster output.</li>
+            <li><b>kimi-k2.6</b> — General dialogue/agent model, visual + text input, 256k context.</li>
+            <li><b>kimi-k3</b> — Flagship model, 1M token context, strongest reasoning.</li>
+        </ul>
+        <p><b>Use when:</b> the task is coding-heavy or involves many chained tool calls / long context.</p>
 
         <h3>Gemini API</h3>
         <p><b>Best for:</b> general fallback, broad summaries, mixed tasks, long-context tasks.</p>
@@ -10236,6 +10844,7 @@ class GodAI(QWidget):
         <h3>API Key Status</h3>
         <p><b>OpenAI:</b> {openai_status}</p>
         <p><b>DeepSeek:</b> {deepseek_status}</p>
+        <p><b>Kimi:</b> {kimi_status}</p>
         <p><b>Gemini:</b> {gemini_status}</p>
         <p><b>Anthropic:</b> {anthropic_status}</p>
 

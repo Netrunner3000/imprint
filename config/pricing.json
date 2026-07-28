@@ -35,6 +35,29 @@
     }
   },
 
+  "kimi": {
+    "default": {
+      "input_per_1m_usd": 0.95,
+      "output_per_1m_usd": 4.00
+    },
+    "kimi-k2.7-code": {
+      "input_per_1m_usd": 0.95,
+      "output_per_1m_usd": 4.00
+    },
+    "kimi-k2.7-code-highspeed": {
+      "input_per_1m_usd": 1.90,
+      "output_per_1m_usd": 8.00
+    },
+    "kimi-k2.6": {
+      "input_per_1m_usd": 0.95,
+      "output_per_1m_usd": 4.00
+    },
+    "kimi-k3": {
+      "input_per_1m_usd": 3.00,
+      "output_per_1m_usd": 15.00
+    }
+  },
+
   "gemini": {
     "default": {
       "input_per_1m_usd": 0.00,

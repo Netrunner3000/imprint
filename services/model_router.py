@@ -54,20 +54,30 @@ class ModelRouter:
     def choose_cloud_backend(self, agent_name: str, complexity: str, settings: dict) -> tuple[str, str]:
         openai_allowed = settings.get("hybrid_openai", True)  # whether OpenAI is allowed in hybrid mode
         deepseek_allowed = settings.get("hybrid_deepseek", False)  # whether DeepSeek is allowed in hybrid mode
+        kimi_allowed = settings.get("hybrid_kimi", False)  # whether Kimi is allowed in hybrid mode
+        kimi_model = settings.get("kimi_model", "kimi-k2.7-code")
 
-        if openai_allowed and not deepseek_allowed:
-            return ("openai", settings["cloud_model"])  # OpenAI-only hybrid mode
+        # if only one cloud provider is enabled, use it directly
+        enabled = [p for p, ok in (("openai", openai_allowed), ("deepseek", deepseek_allowed), ("kimi", kimi_allowed)) if ok]
+        if len(enabled) == 1:
+            only = enabled[0]
+            if only == "openai":
+                return ("openai", settings["cloud_model"])
+            if only == "deepseek":
+                return ("deepseek", settings["deepseek_model"])
+            return ("kimi", kimi_model)
 
-        if deepseek_allowed and not openai_allowed:
-            return ("deepseek", settings["deepseek_model"])  # DeepSeek-only hybrid mode
-
-        # if both are enabled, choose intelligently
+        # if multiple are enabled, choose intelligently
         if agent_name == "coding":
-            return ("openai", settings["cloud_model"])  # strongest coding backend
+            if kimi_allowed:
+                return ("kimi", kimi_model)  # Kimi K2.7 Code is purpose-built for coding/tool use
+            return ("openai", settings["cloud_model"])  # strongest general coding backend
 
         if agent_name == "osint":
             if complexity == "very_heavy":
                 return ("openai", settings["cloud_model"])  # strongest synthesis
+            if kimi_allowed:
+                return ("kimi", kimi_model)  # strong agentic/tool-use option for multi-step investigation
             return ("deepseek", settings["deepseek_model"])  # cheaper OSINT cloud option
 
         if agent_name == "writing":
@@ -95,6 +105,9 @@ class ModelRouter:
 
         if backend_override == "deepseek":
             return ("deepseek", settings["deepseek_model"])  # force DeepSeek
+
+        if backend_override == "kimi":
+            return ("kimi", settings.get("kimi_model", "kimi-k2.7-code"))  # force Kimi
 
         if backend_override == "gemini":
             return ("gemini", settings["gemini_model"])  # force Gemini
@@ -139,6 +152,9 @@ class ModelRouter:
 
         if backend == "deepseek":
             return ("Cloud / paid, usually lower cost than OpenAI", "yellow")  # DeepSeek cost hint
+
+        if backend == "kimi":
+            return ("Cloud / paid, mid-cost, strong for coding/agentic tasks", "yellow")  # Kimi cost hint
 
         if backend == "openai":
             if agent_name in {"coding", "writing"} or complexity in {"heavy", "very_heavy"}:

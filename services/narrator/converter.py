@@ -194,7 +194,7 @@ def extract_epub(path: Path) -> str:
     sections = []
 
     for item in book.get_items():
-        if item.get_type() == epub.EpubHtml:
+        if isinstance(item, epub.EpubHtml) and not isinstance(item, epub.EpubNav):
             soup = BeautifulSoup(item.get_body_content(), "html.parser")
 
             for tag in soup(["script", "style", "header", "footer", "noscript"]):
