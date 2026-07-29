@@ -2,6 +2,13 @@
 **Sentinel AI · lab/sentinel_ai**
 _Written: 2026-06-08_
 
+> **Status: implemented and extended beyond this spec.** This document is the original build plan —
+> kept as historical context. For the current, accurate picture of what exists, see
+> [docs/agents/manuscript.md](agents/manuscript.md) and README.md §5.16. Notably added since this
+> handover: a Quote Finder tab (LLM-assisted verbatim quote extraction from the manuscript file),
+> a Quote Graphics generator (Pillow, free), and a Shorts generator (TTS + ffmpeg, free by default).
+> The price-sync UI, scheduled auto-refresh, and multi-book support described below are still open.
+
 ---
 
 ## 1. What This Is

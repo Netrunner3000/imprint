@@ -1,6 +1,8 @@
 # MANUSCRIPT — Long-form writing studio
 
-`key: author` · class: `agents/author_agent.py → AuthorAgent` (+ `agents/manuscript_agent.py`) · panel: `build_author_panel()` · handlers: `author_write()`, `author_continue()`, `author_pub_generate()`, `author_mkt_generate()`
+`key: author` · class: `agents/author_agent.py → AuthorAgent` · panel: `build_author_panel()` · handlers: `author_write()`, `author_continue()`, `author_pub_generate()`, `author_mkt_generate()`
+
+> Handles off where this agent's Publish/Market modes stop short (real sales data, quote content, launch checklist): see the **Publisher** agent, `key: manuscript` — [manuscript.md](manuscript.md).
 
 ## What it does
 A three-mode writing workspace for novelists:

@@ -10486,6 +10486,7 @@ class GodAI(QWidget):
             "health": "health", "author": "author", "music": "music",
             "webdesign": "webdesign", "audiobook": "audiobook",
             "manager": "manager", "ops_identity": "ops_identity",
+            "manuscript": "manuscript",
         }
         doc_key = doc_file_map.get(agent_name, agent_name)
 

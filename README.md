@@ -34,6 +34,7 @@
    - 5.13 [Site Builder Agent](#513-site-builder-agent)
    - 5.14 [Narrator Agent](#514-narrator-agent)
    - 5.15 [Forge Agent](#515-forge-agent)
+   - 5.16 [Publisher Agent](#516-publisher-agent)
 6. [Tools](#6-tools)
 7. [Providers & Models](#7-providers--models)
    - 7.1 [Ollama (Local)](#71-ollama-local)
@@ -1989,6 +1990,139 @@ The LLM must return a single JSON object with these fields:
 | Label | Forge |
 | Default provider | DeepSeek (in panel) |
 | System prompt | Software-architect assistant; returns a single JSON object matching the agent schema; no markdown fences |
+
+---
+
+### 5.16 Publisher Agent
+
+**Left-panel button:** 📚 Publisher  (category: **Creative**)
+
+Picks up where the Manuscript (writing studio) agent stops: real sales data, launch-content generation, and a publishing checklist. Four tabs: **Overview**, **Quote Finder**, **Quote Graphics**, **Shorts**.
+
+---
+
+#### What the Publisher Agent Does
+
+**Overview tab:**
+- Pulls PublishDrive sales/royalty data for a selected period (Last 30 days / This month / Last 7 days / All time).
+- Ingests KDP sales CSVs dropped into `data/kdp_reports/`, deduplicated by filename.
+- A chat sidebar answers questions grounded in the last-fetched sales JSON (`ManuscriptAgent.build_messages()` injects it as system-prompt context — the agent is instructed not to fabricate figures).
+- A publishing todo checklist, auto-seeded on first use with a standard launch list (KDP upload, Draft2Digital, IngramSpark, cover files, description, categories, pricing, ARC requests, BookBub, influencer outreach).
+
+**Quote Finder tab:**
+- Load the manuscript directly (`.txt` / `.pdf` / `.epub` / `.mobi` via `services/narrator/converter.py: load_text()`) or paste an excerpt.
+- **Suggest Quotes** sends the text to the LLM with a prompt that requires every returned quote to be an exact, verbatim substring of the source — no paraphrasing. Returned as a JSON array, parsed with a markdown-fence-aware parser and a line-based fallback.
+- Each candidate quote appears as a row with two inline one-click buttons: **🖼** generates a graphic immediately, **🎬** generates a narrated short — no retyping, no switching tabs.
+
+**Quote Graphics tab:**
+- Renders a single quote as a styled PNG: 3 themes (Midnight / Blush / Zodiac), 2 sizes (1080×1080 square, 1080×1920 vertical).
+- Pure Pillow — gradient background + wrapped serif text + optional attribution line. No API call, no cost.
+
+**Shorts tab:**
+- Narrates a quote via TTS (macOS `say` by default — free, no API key; ElevenLabs optional for higher-quality voices) and combines it with a quote-graphic PNG into a vertical MP4 via a single `ffmpeg -loop 1 -i image -i audio` call — runs on a background thread (`ShortsWorker`) so the UI stays responsive.
+
+---
+
+#### Panel Layout
+
+##### Overview Tab
+
+| Control | Description |
+|---------|-------------|
+| **Period** | Last 30 days / This month / Last 7 days / All time. |
+| **⟳ Refresh Data** | Fetches PublishDrive sales for the selected period. |
+| **📥 Ingest KDP CSV** | Parses any new CSVs in `data/kdp_reports/`. |
+| **Ask box + Provider/Model** | Chat Q&A grounded in the last-fetched sales JSON. |
+| **Publishing Todos** | List + Add/Done — persisted in the `manuscript_todos` table. |
+
+##### Quote Finder Tab
+
+| Control | Description |
+|---------|-------------|
+| **Manuscript text** | Paste an excerpt directly. |
+| **📄 Load File…** | `.txt` / `.pdf` / `.epub` / `.mobi` — extracts full text via the Narrator converter. |
+| **Quotes** | How many candidates to request (5 / 10 / 15 / 20). |
+| **Theme / Voice / Attribution** | Applied to every graphic/short generated from this tab's candidates. |
+| **🔍 Suggest Quotes** | Runs the extraction prompt; populates the candidate list. |
+| **🖼 / 🎬 per row** | One-click graphic or narrated short for that specific quote. |
+
+##### Quote Graphics Tab
+
+| Control | Description |
+|---------|-------------|
+| **Quote / Attribution** | Text to render. |
+| **Theme** | Midnight / Blush / Zodiac. |
+| **Size** | Square (1080×1080) / Story-Reel-Pin (1080×1920). |
+| **✨ Generate Graphic** | Renders and previews the PNG; saved to `data/quote_graphics/`. |
+| **📂 Open Folder** | Reveals the output folder. |
+
+##### Shorts Tab
+
+| Control | Description |
+|---------|-------------|
+| **Quote / Attribution** | Also used verbatim as the narration script. |
+| **Theme** | Same 3 themes as Quote Graphics. |
+| **Voice source** | System (Free) or ElevenLabs. |
+| **Voice** | Populated from the selected source. |
+| **🎬 Generate Short** | Narrates + renders on a background thread; saved to `data/shorts/`. |
+| **▶ Play / 📂 Folder** | Open the last-generated short or its folder. |
+
+---
+
+#### How to Use — Step by Step
+
+**Checking sales and staying on top of launch tasks:**
+
+1. Click **📚 Publisher** in the left panel.
+2. Set `PUBLISHDRIVE_API_KEY` in `.env` (once) to enable live sales data.
+3. Click **⟳ Refresh Data** for the current period, or **📥 Ingest KDP CSV** after dropping a report into `data/kdp_reports/`.
+4. Ask a question in the sidebar ("What did I earn this month?") — answered from the fetched data, not guessed.
+5. Work through the **Publishing Todos** checklist; add your own items as they come up.
+
+**Turning a manuscript into a batch of social content:**
+
+1. Switch to **Quote Finder**.
+2. Click **📄 Load File…** and select the finished manuscript (or paste a chapter).
+3. Set quote count, theme, voice, and attribution.
+4. Click **🔍 Suggest Quotes** — candidates appear as a list.
+5. Click **🖼** on any quote for an instant graphic, or **🎬** for a narrated vertical short.
+6. Repeat across candidates to build a week's batch in minutes — upload manually to TikTok/Instagram/Pinterest (see Tips below on why posting isn't automated).
+
+---
+
+#### External Requirements
+
+- **PublishDrive API key** (`PUBLISHDRIVE_API_KEY` in `.env`) for live sales data — optional, the rest of the panel works without it.
+- **ElevenLabs API key** (`ELEVENLABS_API_KEY`) for higher-quality short narration — optional, macOS `say` is the free default.
+- **ffmpeg** (already required elsewhere in the project, e.g. Narrator/course video) for Shorts.
+- LLM provider key for Quote Finder's extraction step and the Overview Q&A sidebar.
+
+---
+
+#### Tips & Limitations
+
+> Quote Finder truncates very long manuscripts to the first ~30,000 characters per request to keep cost bounded — paste or load a specific chapter for more targeted picks on a long book.
+
+> The agent does not post to social platforms itself, and does not create social media accounts — both are either against platform terms for automated tools or require an app-review process (Meta, TikTok) that isn't worth building for a single-author use case. Graphics/shorts are generated locally; posting is a manual step, or route through a scheduler like Buffer/Metricool if you want that automated.
+
+> Shorts generation blocks the Generate button and disables all Quote Finder row 🎬 buttons while one short is rendering — only one narration/encode runs at a time.
+
+> Nothing on this panel writes back into the manuscript — it only consumes a finished or in-progress draft. Editing and exporting the book itself is not yet handled by this agent (see the Manuscript writing-studio agent, §5.11, for drafting).
+
+---
+
+#### Agent Class Reference
+
+| Property | Value |
+|----------|-------|
+| Agent class | `agents/manuscript_agent.py` — `ManuscriptAgent` |
+| Agent name (DB) | `manuscript` |
+| Label | Publisher |
+| Default provider | Anthropic (Overview tab; shared by Quote Finder) |
+| System prompts | Sales Q&A grounding prompt · PublishDrive/KDP JSON-extraction prompts · verbatim quote-suggestion prompt |
+| Methods | `build_messages()` · `build_publishdrive_parse_messages()` · `build_kdp_parse_messages()` · `build_quote_suggestions_messages()` |
+| Supporting services | `services/publishdrive_client.py` · `services/kdp_csv_parser.py` · `services/quote_graphics.py` · `services/shorts_generator.py` |
+| DB tables | `manuscript_metrics` · `manuscript_kdp_ingested` · `manuscript_todos` |
 
 ---
 
