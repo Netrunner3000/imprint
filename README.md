@@ -1354,9 +1354,9 @@ A full creative writing suite for novelists, screenwriters, short-story writers,
 
 #### What the Manuscript Agent Does
 
-The agent operates through three dedicated system prompts — one per mode:
+The agent operates through system prompts that vary by mode — Write mode additionally switches between a fiction and a non-fiction prompt based on the **Type** field:
 
-**Write mode** (creative writing specialist):
+**Write mode** — fiction (creative writing specialist):
 - **[DRAFT]** — Prose in the specified POV, tone, and genre.
 - **[OUTLINE]** — Act/chapter/scene-beat breakdown with purpose for each beat.
 - **[CHARACTER]** — Name, role, backstory, motivation, arc, voice, relationships.
@@ -1364,13 +1364,24 @@ The agent operates through three dedicated system prompts — one per mode:
 
 Writing principles baked in: show-don't-tell, scene-level tension/change/revelation, dialogue with subtext, prose rhythm matched to genre, consistent POV/tense, hooky scene endings.
 
+**Write mode** — non-fiction (argument-driven writing specialist, for self-help/memoir/business/narrative non-fiction):
+- **[DRAFT]** — Chapter prose in the established voice and register.
+- **[OUTLINE]** — Part/chapter breakdown with the argument or takeaway each chapter delivers.
+- **Free-form** — Strengthening an argument, structural notes, revision, cutting for length.
+
+Writing principles baked in: one clear takeaway per chapter, concrete examples over abstract claims, consistent voice across chapters, address the obvious counterargument, cut ruthlessly.
+
+Switching **Type** also swaps the **Task** dropdown: fiction gets Write Scene / Develop Characters / Build World / Write Dialogue; non-fiction gets Write Chapter / Strengthen Argument / Add Case Study / Tighten Structure. Both share Continue Draft, Generate Outline, and Revise / Improve.
+
 **Publish mode** (publishing specialist):
 - Produces professional-grade publishing documents: synopses, query letters, book proposals, back-cover blurbs, author bios, chapter breakdowns.
 - Each document type has specific word-count targets and structural conventions enforced by the system prompt (e.g. 1-page synopsis = 400–500 words, always reveals the ending; back-cover blurb = 100–150 words, never reveals the ending).
 
 **Market mode** (book marketing copywriter):
-- Produces platform-native marketing copy for 11 platforms, each with different tone and format rules built into the prompt.
-- Platforms: Amazon Description, Goodreads Blurb, Instagram Post, Twitter/X Thread, TikTok Caption, Newsletter, Press Release, Book Club Questions, ARC Outreach Email, Podcast Pitch, Author Website Bio.
+- Produces platform-native marketing copy for 15 platforms, each with different tone and format rules built into the prompt.
+- Platforms: Amazon Description, KDP Listing, Goodreads Blurb, Instagram Post, Twitter/X Thread, TikTok Caption, Pinterest Pin Description, YouTube Description, Newsletter, Press Release, Book Club Questions, ARC Outreach Email, Launch Team Email, Podcast Pitch, Author Website Bio.
+
+**All three modes** read from one **Book Profile** — see below — so Title, Author, Hook, Target Reader, Comp Titles, and Publishing Path don't need re-entering per mode or per request.
 
 ---
 
@@ -1381,9 +1392,23 @@ Writing principles baked in: show-don't-tell, scene-level tension/change/revelat
 | Field | Description |
 |-------|-------------|
 | **Title** | Project title — used in all generated documents. |
+| **Author** | Pen name / author name — used in exports and injected into every mode's context. |
+| **Type** | Fiction / Non-Fiction — switches Write mode's system prompt and Task list. |
 | **Genre** | Literary Fiction / Thriller / Fantasy / Sci-Fi / Horror / Romance / Historical / Mystery / Short Story / Screenplay / Poetry / Blog / Essay / Other. |
 | **Tone** | Neutral / Dark / Humorous / Lyrical / Tense / Romantic / Gritty / Whimsical / Philosophical / Commercial. |
 | **POV** | Third Person Limited / First Person / Third Person Omniscient / Second Person. |
+
+##### 📖 Book Profile (collapsible, below the Project Bar)
+
+| Field | Description |
+|-------|-------------|
+| **Hook** | One-sentence pitch — the core promise of the book. |
+| **Target reader** | Who the book is for, specifically. |
+| **Comp titles** | Comparable published titles. |
+| **Publishing path** | Undecided / Self-Publishing (KDP) / Traditional. |
+| **💾 Save Profile** | Persists the whole profile (including Title/Author/Type from the Project Bar) to the settings DB — auto-loads on next launch. |
+
+This is injected as a "BOOK CONTEXT" block into every Write, Publish, and Market request. Collapsed by default; expand once, fill it in, save — it carries forward automatically after that.
 
 ##### Mode Toggle
 
@@ -1396,14 +1421,15 @@ Writing principles baked in: show-don't-tell, scene-level tension/change/revelat
 
 ##### ✍️ Write Mode
 
-###### Workspace Tabs (editable)
+###### Workspace Tabs
 
 | Tab | Purpose |
 |-----|---------|
 | **✍️ Draft** | Your manuscript draft. Editable. Word and scene counts update live. |
-| **📋 Outline** | Chapter and scene outline. |
-| **👤 Characters** | Character profiles, arcs, relationships. |
-| **🌍 World Notes** | World-building, lore, setting rules. |
+| **📋 Outline** | Chapter and scene outline. Editable. |
+| **👤 Characters** | Character profiles, arcs, relationships. Editable — automatically fed into every Write/Continue request so generated scenes stay consistent with what's already established. |
+| **🌍 World Notes** | World-building, lore, setting rules. Editable — same auto-injection as Characters. |
+| **📑 Chapters** | Read-only. Parses the Draft live (on tab switch) into a numbered chapter list with per-chapter word counts, detected from `Chapter N` / `Part N` / `Prologue` / `Epilogue` headings. Double-click a chapter to jump the Draft cursor there. |
 
 ###### Sidebar (right)
 
@@ -1418,6 +1444,8 @@ Writing principles baked in: show-don't-tell, scene-level tension/change/revelat
 | **Words** | Live word count of the Draft tab (large, prominent, updates on every token). |
 | **Scenes / Chapters** | Live scene count parsed from chapter/scene headings and scene breaks. |
 | **💾 Save Draft** | Saves the current Draft tab to `.txt` or `.md`. |
+| **Author name** | Name printed on the export title page (not the same as the Project Bar title). |
+| **Format + 📤 Export Book** | Renders the Draft tab to **EPUB**, **DOCX**, or **PDF** — title page + auto-detected chapter breaks. No external tools required (EbookLib / python-docx / reportlab). |
 | **Clear All** | Clears all four tabs and resets the project bar. |
 
 ---
@@ -1456,7 +1484,7 @@ Document standards enforced by the Publish system prompt:
 
 | Control | Options / Description |
 |---------|-----------------------|
-| **Platform** | Amazon Description · Goodreads Blurb · Instagram Post · Twitter/X Thread · TikTok Caption · Newsletter · Press Release · Book Club Questions · ARC Outreach Email · Podcast Pitch · Author Website Bio. |
+| **Platform** | Amazon Description · KDP Listing · Goodreads Blurb · Instagram Post · Twitter/X Thread · TikTok Caption · Pinterest Pin Description · YouTube Description · Newsletter · Press Release · Book Club Questions · ARC Outreach Email · Launch Team Email · Podcast Pitch · Author Website Bio. |
 | **Hook / Logline** | One sentence that captures the book's core appeal. |
 | **Comp Titles** | Comparable titles used for audience targeting. |
 | **Tone** | Punchy · Literary · Warm · Hype · Mysterious. |
@@ -1471,14 +1499,18 @@ Platform format rules enforced by the Market system prompt:
 | Platform | Format |
 |----------|--------|
 | Amazon Description | 150–300 words. Short paragraphs. CTA at end. No markdown headers. |
+| KDP Listing | Full package: title+subtitle, 2 BISAC categories, 7 backend keywords (real search phrases, not hashtags, ≤50 chars each), pricing guidance with reasoning, plus the Amazon Description. |
 | Goodreads Blurb | 100–200 words. Slightly more literary tone than Amazon. |
 | Instagram Post | 100–200 words + 3–5 hashtags. Emoji-friendly. |
 | Twitter/X Thread | 5–8 tweets, each ≤ 280 chars. Hook tweet first, numbered. |
 | TikTok Caption | 50–80 words. Conversational. 3–5 #BookTok hashtags. |
+| Pinterest Pin Description | 100–150 words. Keyword-rich for search. No hashtags. Soft CTA. |
+| YouTube Description | 150–250 words. Hook above the fold. Searchable keywords + links. |
 | Newsletter | 200–350 words. Personal tone. Soft CTA. |
 | Press Release | 300–450 words. Headline + dateline + 3–4 paragraphs + boilerplate. |
 | Book Club Questions | 8–12 open-ended discussion questions on theme and character. |
 | ARC Outreach Email | 150–200 words. Professional pitch to reviewers/bloggers. |
+| Launch Team Email | 150–200 words. Recruits early reviewers/ambassadors — what they get, what you're asking in return. |
 | Podcast Pitch | 150–200 words. Why this book, why this author, why now. |
 | Author Website Bio | 150–250 words. SEO-friendly. First or third person. |
 
@@ -1489,15 +1521,16 @@ Platform format rules enforced by the Market system prompt:
 **Writing a new book:**
 
 1. Click **✍️ Manuscript** in the left panel.
-2. Fill in the **Project Bar**: Title, Genre, Tone, POV.
-3. In the **Write** sidebar, pick Task: `Generate Outline`. Write a brief in Direction.
-4. Select **Provider / Model** (Claude Opus or GPT-4o for best prose).
-5. Click **✍️ Write** — the outline streams into the Outline tab.
-6. Switch Task to `Write Scene`. Write the scene brief in Direction.
-7. Click **✍️ Write** — draft appears in the Draft tab.
-8. Click **▶ Continue** to extend from where the draft ends.
-9. Edit directly in any tab — they are all fully editable.
-10. Click **💾 Save Draft** when ready to export.
+2. Fill in the **Project Bar**: Title, Author, Type (Fiction/Non-Fiction — this sets the Task list below), Genre, Tone, POV.
+3. Expand **📖 Book Profile** and fill in Hook, Target Reader, Comp Titles, Publishing Path — then click **💾 Save Profile**. Do this once; it persists across restarts and feeds Write, Publish, and Market automatically from here on.
+4. In the **Write** sidebar, pick Task: `Generate Outline`. Write a brief in Direction.
+5. Select **Provider / Model** (Claude Opus or GPT-4o for best prose).
+6. Click **✍️ Write** — the outline streams into the Outline tab.
+7. Switch Task to `Write Scene` (or `Write Chapter` for non-fiction). Write the scene/chapter brief in Direction.
+8. Click **✍️ Write** — draft appears in the Draft tab.
+9. Click **▶ Continue** to extend from where the draft ends.
+10. Edit directly in any tab — they are all fully editable. Check **📑 Chapters** any time for a live word-count breakdown.
+11. Click **💾 Save Draft** for a plain-text backup, or pick a **Format** and click **📤 Export Book** for a submittable EPUB/DOCX/PDF. Add `Chapter 1`, `Chapter 2`, etc. as line headings in the Draft to get real chapter breaks in the export — without them, the whole draft exports as one chapter.
 
 **Preparing to publish:**
 
@@ -1508,25 +1541,26 @@ Platform format rules enforced by the Market system prompt:
 5. Select **Pitch Tone** (Professional for query submissions; High-Concept for pitching agents cold).
 6. Click **Generate**. Edit the output directly in the output area.
 7. Click **Copy to Clipboard** or **Save as File**.
-8. Repeat for `Query Letter`, `Synopsis — 1 Page`, `Author Bio` as needed.
+8. Repeat for `Query Letter`, `Synopsis — 1 Page`, `Author Bio` as needed. If you've saved a **Book Profile**, its Hook/Target Reader/Comp Titles are already grounding every generation — the per-request **Comp Titles** field here is for overriding, not required.
 
 **Creating marketing copy:**
 
 1. Still in **📣 Publish & Market**, click **📢 Market** (sub-toggle).
-2. Choose **Platform** — start with `Amazon Description`.
-3. Enter your **Hook / Logline** and **Comp Titles**.
+2. Choose **Platform** — start with `Amazon Description`, or `KDP Listing` for the full categories/keywords/pricing package.
+3. Enter your **Hook / Logline** and **Comp Titles** (optional if a Book Profile is saved — see above).
 4. Select **Tone** and add any **Extra Notes**.
 5. Click **Generate**. The copy streams in platform-native format.
 6. Edit, copy, or save as needed.
-7. Repeat for each platform: Goodreads, Instagram, Newsletter, etc.
+7. Repeat for each platform: Goodreads, Instagram, Pinterest, Newsletter, etc.
 
 ---
 
 #### External Requirements
 
 - LLM provider API key. Claude Opus or GPT-4o produce the highest-quality long-form prose and publishing documents.
+- Export needs no external tools or paid software — EPUB/DOCX/PDF generation is fully local (`EbookLib` / `python-docx` / `reportlab`).
 - Optional: **Scrivener** or **Ulysses** to import saved drafts into a full manuscript workflow.
-- Optional: **Reedsy Studio** (free) or **Vellum** (Mac, $249) for final manuscript formatting before KDP upload.
+- Optional: **Reedsy Studio** (free) or **Vellum** (Mac, $249) for cover design and more elaborate print-ready typesetting than the built-in export provides.
 
 ---
 
@@ -1544,6 +1578,16 @@ Platform format rules enforced by the Market system prompt:
 
 > The agent makes creative choices rather than asking clarifying questions — "prefer action over paralysis." You can always redirect with a follow-up call.
 
+> **Export** detects chapters from heading lines (`Chapter 1`, `Part II`, `Prologue`, `Epilogue` — plain or markdown-prefixed). A draft with no such headings still exports fine, just as a single chapter — add headings before exporting if you want real chapter breaks in the EPUB/PDF table of contents.
+
+> **Chapters** uses the same heading detection as Export — the same "add headings for structure" rule applies. It's a live view, not a stored model: nothing is lost or duplicated if you edit the Draft directly, it just re-parses next time you open the tab.
+
+> **Consistency memory** only sends what's actually in the Characters/World tabs — an empty project sends nothing extra. For a long draft, the recent-draft excerpt sent on fresh Write calls is capped at the last ~3,000 characters to keep cost bounded; Continue instead sends the full existing draft (unchanged prior behavior), so the two aren't stacked on top of each other.
+
+> **Type** (Fiction/Non-Fiction) only affects the Write-mode system prompt and Task list — Publish and Market already handled both from the start (see the fiction-vs-non-fiction split baked into `PUBLISH_SYSTEM_PROMPT`). Switching Type mid-project is safe; it doesn't touch anything you've already written.
+
+> **Book Profile** fields are independent of the Publish/Market pages' own per-request Hook/Comp Titles fields — the profile grounds the system prompt, the per-request fields are still there for overriding on a specific document. Leave the per-request fields blank to rely entirely on the saved profile.
+
 ---
 
 #### Agent Class Reference
@@ -1554,10 +1598,14 @@ Platform format rules enforced by the Market system prompt:
 | Agent name (DB) | `author` |
 | Label | Manuscript |
 | Default provider | Anthropic |
-| Write system prompt | Long-form fiction specialist; mode markers `[DRAFT] / [OUTLINE] / [CHARACTER] / [WORLD]`; writing-craft principles |
+| Write system prompt | `SYSTEM_PROMPT` (fiction) or `SYSTEM_PROMPT_NONFICTION`, selected by `content_type`; fiction markers `[DRAFT] / [OUTLINE] / [CHARACTER] / [WORLD]`, non-fiction uses `[DRAFT] / [OUTLINE]` only |
 | Publish system prompt | Document-by-document standards; word-count targets; pitch tone rules |
-| Market system prompt | Platform-by-platform format rules; 11 platforms; copy principles |
-| Methods | `build_messages()` · `build_publish_messages()` · `build_market_messages()` |
+| Market system prompt | Platform-by-platform format rules; 15 platforms incl. KDP Listing; copy principles |
+| Methods | `build_messages()` · `build_publish_messages()` · `build_market_messages()` — all three accept `book_profile_context`; `build_messages()` also takes `content_type` |
+| Export | `services/book_exporter.py` — `export_book()` (EPUB/DOCX/PDF), called by `main.py: author_export_book()` |
+| Book Profile | `main.py: _author_get_book_profile()/_author_build_book_profile_block()`, persisted via `author_save_profile()`/`_author_load_profile()` (settings DB, key `author_book_profile`) |
+| Consistency memory | `main.py: _author_build_consistency_context()` — auto-injects Characters/World + recent draft into `build_messages()`'s `consistency_context` param |
+| Chapters navigator | `services/book_exporter.py: find_chapter_offsets()`, `main.py: _author_refresh_chapters()/_author_jump_to_chapter()` |
 
 ---
 
@@ -1997,7 +2045,7 @@ The LLM must return a single JSON object with these fields:
 
 **Left-panel button:** 📚 Publisher  (category: **Creative**)
 
-Picks up where the Manuscript (writing studio) agent stops: real sales data, launch-content generation, and a publishing checklist. Four tabs: **Overview**, **Quote Finder**, **Quote Graphics**, **Shorts**.
+Picks up where the Manuscript (writing studio) agent stops: real sales data, launch-content generation, and a publishing checklist. Five tabs: **Overview**, **Quote Finder**, **Quote Graphics**, **Shorts**, **Calendar**.
 
 ---
 
@@ -2020,6 +2068,12 @@ Picks up where the Manuscript (writing studio) agent stops: real sales data, lau
 
 **Shorts tab:**
 - Narrates a quote via TTS (macOS `say` by default — free, no API key; ElevenLabs optional for higher-quality voices) and combines it with a quote-graphic PNG into a vertical MP4 via a single `ffmpeg -loop 1 -i image -i audio` call — runs on a background thread (`ShortsWorker`) so the UI stays responsive.
+
+**Calendar tab:**
+- Distributes the Quote Finder candidates across a posting schedule — TikTok 4×/week (short), Instagram 3×/week (alternating graphic/short), Pinterest 7×/week (graphic) — cycling quotes if there are more slots than quotes. Pure scheduling, no LLM call, deterministic.
+- One batched LLM call writes a platform-native caption per post (all at once, not one call per row) — TikTok casual with hashtags, Instagram warmer, Pinterest keyword-rich with no hashtags.
+- Every row has a one-click 🖼/🎬 button using the exact same generation code as Quote Finder/Shorts.
+- **Export Calendar (CSV)** writes the full schedule — date, platform, format, quote, caption — for manual posting.
 
 ---
 
@@ -2067,6 +2121,18 @@ Picks up where the Manuscript (writing studio) agent stops: real sales data, lau
 | **🎬 Generate Short** | Narrates + renders on a background thread; saved to `data/shorts/`. |
 | **▶ Play / 📂 Folder** | Open the last-generated short or its folder. |
 
+##### Calendar Tab
+
+| Control | Description |
+|---------|-------------|
+| **Weeks** | 1 / 2 / 4 — length of the schedule. |
+| **Start** | Calendar-picker start date. |
+| **TikTok / Instagram / Pinterest** | Checkboxes — which platforms to schedule. |
+| **Theme / Voice / Attribution** | Applied to every asset generated from this tab. |
+| **📅 Generate Calendar** | Builds the schedule (instant), then writes all captions in one LLM call. |
+| **Table rows** | Date, Platform, Format, Quote, Caption, and a 🖼/🎬 action button per row. |
+| **📤 Export Calendar (CSV)** | Saves the full schedule + captions to a CSV file. |
+
 ---
 
 #### How to Use — Step by Step
@@ -2088,6 +2154,14 @@ Picks up where the Manuscript (writing studio) agent stops: real sales data, lau
 5. Click **🖼** on any quote for an instant graphic, or **🎬** for a narrated vertical short.
 6. Repeat across candidates to build a week's batch in minutes — upload manually to TikTok/Instagram/Pinterest (see Tips below on why posting isn't automated).
 
+**Scheduling a full week/month in one pass:**
+
+1. Run **Suggest Quotes** on Quote Finder first — Calendar reads its candidate list.
+2. Switch to **Calendar**, pick weeks, start date, and platforms.
+3. Click **📅 Generate Calendar** — the schedule appears instantly, captions stream in a few seconds later.
+4. Click 🖼/🎬 on any row to produce that asset immediately, or work through the table at your own pace.
+5. Click **📤 Export Calendar (CSV)** for a day-by-day file to post from manually (or hand to whoever manages your socials).
+
 ---
 
 #### External Requirements
@@ -2105,9 +2179,11 @@ Picks up where the Manuscript (writing studio) agent stops: real sales data, lau
 
 > The agent does not post to social platforms itself, and does not create social media accounts — both are either against platform terms for automated tools or require an app-review process (Meta, TikTok) that isn't worth building for a single-author use case. Graphics/shorts are generated locally; posting is a manual step, or route through a scheduler like Buffer/Metricool if you want that automated.
 
-> Shorts generation blocks the Generate button and disables all Quote Finder row 🎬 buttons while one short is rendering — only one narration/encode runs at a time.
+> Shorts generation blocks the Generate button and disables all Quote Finder row 🎬 buttons while one short is rendering — Calendar rows share the same lock, since both use the same background worker slot. Only one narration/encode runs at a time across the whole panel.
 
-> Nothing on this panel writes back into the manuscript — it only consumes a finished or in-progress draft. Editing and exporting the book itself is not yet handled by this agent (see the Manuscript writing-studio agent, §5.11, for drafting).
+> Nothing on this panel writes back into the manuscript — it only consumes a finished or in-progress draft. Drafting, editing, and EPUB/DOCX/PDF export live on the Manuscript writing-studio agent (§5.11), not here.
+
+> Calendar's captions are a single batched LLM call covering every scheduled post at once — if that call fails, the schedule still populates with blank captions rather than losing the whole batch; regenerate to retry.
 
 ---
 
@@ -2119,9 +2195,9 @@ Picks up where the Manuscript (writing studio) agent stops: real sales data, lau
 | Agent name (DB) | `manuscript` |
 | Label | Publisher |
 | Default provider | Anthropic (Overview tab; shared by Quote Finder) |
-| System prompts | Sales Q&A grounding prompt · PublishDrive/KDP JSON-extraction prompts · verbatim quote-suggestion prompt |
-| Methods | `build_messages()` · `build_publishdrive_parse_messages()` · `build_kdp_parse_messages()` · `build_quote_suggestions_messages()` |
-| Supporting services | `services/publishdrive_client.py` · `services/kdp_csv_parser.py` · `services/quote_graphics.py` · `services/shorts_generator.py` |
+| System prompts | Sales Q&A grounding prompt · PublishDrive/KDP JSON-extraction prompts · verbatim quote-suggestion prompt · calendar-caption prompt |
+| Methods | `build_messages()` · `build_publishdrive_parse_messages()` · `build_kdp_parse_messages()` · `build_quote_suggestions_messages()` · `build_calendar_caption_messages()` |
+| Supporting services | `services/publishdrive_client.py` · `services/kdp_csv_parser.py` · `services/quote_graphics.py` · `services/shorts_generator.py` · `services/content_calendar.py` |
 | DB tables | `manuscript_metrics` · `manuscript_kdp_ingested` · `manuscript_todos` |
 
 ---

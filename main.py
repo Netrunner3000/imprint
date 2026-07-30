@@ -391,6 +391,8 @@ class GodAI(QWidget):
         self.shorts_worker: Optional[ShortsWorker] = None
         self._last_short_path: str = ""
         self.quote_finder_worker: Optional[ChatWorker] = None
+        self.calendar_worker: Optional[ChatWorker] = None
+        self._calendar_slots: list = []
         self.music_worker: Optional[ChatWorker] = None
         self._last_music_response: str = ""
         self.nfl_bet_worker: Optional[ChatWorker] = None
@@ -2819,6 +2821,17 @@ class GodAI(QWidget):
         self.author_title_input.setMinimumWidth(160)
         pb_layout.addWidget(self.author_title_input)
 
+        pb_layout.addWidget(QLabel("Author:"))
+        self.author_name_input = QLineEdit()
+        self.author_name_input.setPlaceholderText("Pen name…")
+        pb_layout.addWidget(self.author_name_input)
+
+        pb_layout.addWidget(QLabel("Type:"))
+        self.author_content_type_box = QComboBox()
+        self.author_content_type_box.addItems(["Fiction", "Non-Fiction"])
+        self.author_content_type_box.currentTextChanged.connect(self._author_on_content_type_changed)
+        pb_layout.addWidget(self.author_content_type_box)
+
         pb_layout.addWidget(QLabel("Genre:"))
         self.author_genre_box = QComboBox()
         self.author_genre_box.addItems([
@@ -2853,6 +2866,55 @@ class GodAI(QWidget):
         divider.setStyleSheet("color: #444;")
         layout.addWidget(divider)
 
+        # ── Book Profile (collapsed by default — persisted, injected into every mode) ──
+        profile_section = CollapsibleSection("📖  Book Profile", expanded=False)
+
+        profile_row1 = QWidget()
+        pr1 = QHBoxLayout(profile_row1)
+        pr1.setContentsMargins(4, 0, 4, 0)
+        pr1.setSpacing(8)
+        pr1.addWidget(QLabel("Hook:"))
+        self.author_profile_hook_input = QLineEdit()
+        self.author_profile_hook_input.setPlaceholderText("One-sentence pitch — the core promise of the book…")
+        pr1.addWidget(self.author_profile_hook_input)
+        profile_section.addWidget(profile_row1)
+
+        profile_row2 = QWidget()
+        pr2 = QHBoxLayout(profile_row2)
+        pr2.setContentsMargins(4, 0, 4, 0)
+        pr2.setSpacing(8)
+        pr2.addWidget(QLabel("Target reader:"))
+        self.author_profile_reader_input = QLineEdit()
+        self.author_profile_reader_input.setPlaceholderText("e.g. Women 25-40 navigating modern dating apps")
+        pr2.addWidget(self.author_profile_reader_input)
+        profile_section.addWidget(profile_row2)
+
+        profile_row3 = QWidget()
+        pr3 = QHBoxLayout(profile_row3)
+        pr3.setContentsMargins(4, 0, 4, 0)
+        pr3.setSpacing(8)
+        pr3.addWidget(QLabel("Comp titles:"))
+        self.author_profile_comps_input = QLineEdit()
+        self.author_profile_comps_input.setPlaceholderText("e.g. For readers of [Title A] and [Title B]")
+        pr3.addWidget(self.author_profile_comps_input)
+        profile_section.addWidget(profile_row3)
+
+        profile_row4 = QWidget()
+        pr4 = QHBoxLayout(profile_row4)
+        pr4.setContentsMargins(4, 0, 4, 0)
+        pr4.setSpacing(8)
+        pr4.addWidget(QLabel("Publishing path:"))
+        self.author_profile_path_box = QComboBox()
+        self.author_profile_path_box.addItems(["Undecided", "Self-Publishing (KDP)", "Traditional"])
+        pr4.addWidget(self.author_profile_path_box)
+        pr4.addStretch()
+        self.author_profile_save_btn = QPushButton("💾  Save Profile")
+        self.author_profile_save_btn.clicked.connect(self.author_save_profile)
+        pr4.addWidget(self.author_profile_save_btn)
+        profile_section.addWidget(profile_row4)
+
+        layout.addWidget(profile_section)
+
         # ── Main workspace ────────────────────────────────────────────────────
         workspace_splitter = QSplitter(Qt.Horizontal)
 
@@ -2877,6 +2939,27 @@ class GodAI(QWidget):
         self.author_world_box.setPlaceholderText("World-building notes, lore, setting, rules…")
         self.author_tabs.addTab(self.author_world_box, "🌍  World Notes")
 
+        self.author_chapters_tab = QWidget()
+        ct_layout = QVBoxLayout(self.author_chapters_tab)
+        ct_layout.setContentsMargins(6, 6, 6, 6)
+        ct_layout.setSpacing(6)
+
+        self.author_chapters_stats_label = QLabel("No chapters detected yet.")
+        self.author_chapters_stats_label.setStyleSheet("font-size: 12px; color: #888;")
+        ct_layout.addWidget(self.author_chapters_stats_label)
+
+        self.author_chapters_list = QListWidget()
+        self.author_chapters_list.itemDoubleClicked.connect(self._author_jump_to_chapter)
+        ct_layout.addWidget(self.author_chapters_list, 1)
+
+        author_chapters_refresh_btn = QPushButton("🔄  Refresh Chapters")
+        author_chapters_refresh_btn.clicked.connect(self._author_refresh_chapters)
+        ct_layout.addWidget(author_chapters_refresh_btn)
+
+        self._author_chapter_offsets: list = []
+        self.author_tabs.addTab(self.author_chapters_tab, "📑  Chapters")
+        self.author_tabs.currentChanged.connect(self._author_on_tab_changed)
+
         workspace_splitter.addWidget(self.author_tabs)
 
         # Right: control sidebar
@@ -2898,10 +2981,8 @@ class GodAI(QWidget):
 
         sb.addWidget(QLabel("Task:"))
         self.author_task_box = QComboBox()
-        self.author_task_box.addItems([
-            "Write Scene", "Continue Draft", "Generate Outline",
-            "Develop Characters", "Build World", "Write Dialogue", "Revise / Improve",
-        ])
+        # Populated by _author_on_content_type_changed() once the panel finishes building —
+        # the task list depends on the Type combo (Fiction/Non-Fiction) in the Project Bar.
         sb.addWidget(self.author_task_box)
 
         sb.addWidget(QLabel("Provider:"))
@@ -2985,6 +3066,20 @@ class GodAI(QWidget):
         self.author_save_btn.setEnabled(False)
         self.author_save_btn.clicked.connect(self.author_save)
         sb.addWidget(self.author_save_btn)
+
+        sb.addWidget(QLabel("Author name (for export):"))
+        self.author_export_author_input = QLineEdit()
+        self.author_export_author_input.setPlaceholderText("e.g. Celeste Morgan")
+        sb.addWidget(self.author_export_author_input)
+
+        export_row = QHBoxLayout()
+        self.author_export_format_box = QComboBox()
+        self.author_export_format_box.addItems(["EPUB", "DOCX", "PDF"])
+        export_row.addWidget(self.author_export_format_box)
+        self.author_export_btn = QPushButton("📤  Export Book")
+        self.author_export_btn.clicked.connect(self.author_export_book)
+        export_row.addWidget(self.author_export_btn)
+        sb.addLayout(export_row)
 
         self.author_clear_btn = QPushButton("Clear All")
         self.author_clear_btn.clicked.connect(self.author_clear)
@@ -3173,10 +3268,10 @@ class GodAI(QWidget):
         mc.addWidget(QLabel("Platform:"))
         self.author_mkt_platform_box = QComboBox()
         self.author_mkt_platform_box.addItems([
-            "Amazon Description", "Goodreads Blurb", "Instagram Post",
-            "Twitter / X Thread", "TikTok Caption", "Newsletter",
-            "Press Release", "Book Club Questions", "ARC Outreach Email",
-            "Podcast Pitch", "Author Website Bio",
+            "Amazon Description", "KDP Listing", "Goodreads Blurb", "Instagram Post",
+            "Twitter / X Thread", "TikTok Caption", "Pinterest Pin Description",
+            "YouTube Description", "Newsletter", "Press Release", "Book Club Questions",
+            "ARC Outreach Email", "Launch Team Email", "Podcast Pitch", "Author Website Bio",
         ])
         mc.addWidget(self.author_mkt_platform_box)
 
@@ -3250,6 +3345,9 @@ class GodAI(QWidget):
 
         self.author_provider_box.currentTextChanged.connect(self.author_load_models)
         self.author_load_models()
+
+        self._author_on_content_type_changed(self.author_content_type_box.currentText())
+        self._author_load_profile()
 
     # ── Music Agent Panel ─────────────────────────────────────────────────────
     def build_music_panel(self):
@@ -6325,6 +6423,93 @@ class GodAI(QWidget):
         except Exception:
             pass
 
+    def _author_on_content_type_changed(self, content_type: str):
+        fiction_tasks = [
+            "Write Scene", "Continue Draft", "Generate Outline",
+            "Develop Characters", "Build World", "Write Dialogue", "Revise / Improve",
+        ]
+        nonfiction_tasks = [
+            "Write Chapter", "Continue Draft", "Generate Outline",
+            "Strengthen Argument", "Add Case Study / Example", "Tighten Structure", "Revise / Improve",
+        ]
+        tasks = nonfiction_tasks if content_type == "Non-Fiction" else fiction_tasks
+        current = self.author_task_box.currentText()
+        self.author_task_box.blockSignals(True)
+        self.author_task_box.clear()
+        self.author_task_box.addItems(tasks)
+        if current in tasks:
+            self.author_task_box.setCurrentText(current)
+        self.author_task_box.blockSignals(False)
+
+    def _author_get_book_profile(self) -> dict:
+        return {
+            "title": self.author_title_input.text().strip(),
+            "author": self.author_name_input.text().strip(),
+            "content_type": self.author_content_type_box.currentText(),
+            "genre": self.author_genre_box.currentText(),
+            "hook": self.author_profile_hook_input.text().strip(),
+            "target_reader": self.author_profile_reader_input.text().strip(),
+            "comp_titles": self.author_profile_comps_input.text().strip(),
+            "publishing_path": self.author_profile_path_box.currentText(),
+        }
+
+    def _author_build_book_profile_block(self) -> str:
+        """Formats the Book Profile into a system-prompt block shared by Write/Publish/Market
+        — the point being you set this once and stop re-explaining the book on every request."""
+        p = self._author_get_book_profile()
+        lines = []
+        if p["title"]:
+            lines.append(f"Title: {p['title']}")
+        if p["author"]:
+            lines.append(f"Author: {p['author']}")
+        lines.append(f"Content type: {p['content_type']}")
+        if p["genre"]:
+            lines.append(f"Genre: {p['genre']}")
+        if p["hook"]:
+            lines.append(f"Hook: {p['hook']}")
+        if p["target_reader"]:
+            lines.append(f"Target reader: {p['target_reader']}")
+        if p["comp_titles"]:
+            lines.append(f"Comp titles: {p['comp_titles']}")
+        if p["publishing_path"] and p["publishing_path"] != "Undecided":
+            lines.append(f"Publishing path: {p['publishing_path']}")
+        if not lines:
+            return ""
+        return (
+            "BOOK CONTEXT — ground every response in this; don't ask the user to re-explain it.\n\n"
+            + "\n".join(lines)
+        )
+
+    def author_save_profile(self):
+        import json
+        from services.database import save_setting
+        save_setting("author_book_profile", json.dumps(self._author_get_book_profile()))
+        self.author_status_label.setText("[Saved] Book profile.")
+
+    def _author_load_profile(self):
+        import json
+        from services.database import get_setting
+        raw = get_setting("author_book_profile", "")
+        if not raw:
+            return
+        try:
+            profile = json.loads(raw)
+        except Exception:
+            return
+        self.author_title_input.setText(profile.get("title", ""))
+        self.author_name_input.setText(profile.get("author", ""))
+        if profile.get("content_type"):
+            self.author_content_type_box.setCurrentText(profile["content_type"])
+        if profile.get("genre"):
+            idx = self.author_genre_box.findText(profile["genre"])
+            if idx >= 0:
+                self.author_genre_box.setCurrentIndex(idx)
+        self.author_profile_hook_input.setText(profile.get("hook", ""))
+        self.author_profile_reader_input.setText(profile.get("target_reader", ""))
+        self.author_profile_comps_input.setText(profile.get("comp_titles", ""))
+        if profile.get("publishing_path"):
+            self.author_profile_path_box.setCurrentText(profile["publishing_path"])
+
     def _author_build_prompt(self, direction: str) -> str:
         task = self.author_task_box.currentText()
         genre = self.author_genre_box.currentText()
@@ -6339,9 +6524,37 @@ class GodAI(QWidget):
             parts.append(f"Direction:\n{direction}")
         return "\n".join(parts)
 
-    def _author_start_worker(self, provider: str, model: str, prompt: str):
+    def _author_build_consistency_context(self, recent_draft_text: str = "") -> str:
+        """Auto-inject established Characters/World + a recent-draft excerpt so every
+        Write/Continue call stays consistent with the story so far."""
+        characters = self.author_characters_box.toPlainText().strip()
+        world = self.author_world_box.toPlainText().strip()
+        sections = []
+        if characters:
+            sections.append(f"ESTABLISHED CHARACTERS (stay consistent — do not contradict):\n{characters}")
+        if world:
+            sections.append(f"ESTABLISHED WORLD (stay consistent — do not contradict):\n{world}")
+        if recent_draft_text:
+            sections.append(
+                "RECENT STORY TEXT (end of the current draft — continue consistently, don't repeat it):\n"
+                + recent_draft_text[-3000:]
+            )
+        if not sections:
+            return ""
+        return (
+            "CONTINUITY CONTEXT — ground every response in this; do not contradict "
+            "established characters, world rules, or recent events.\n\n" + "\n\n".join(sections)
+        )
+
+    def _author_start_worker(self, provider: str, model: str, prompt: str, recent_draft_text: str = ""):
         agent = self.agent_instances["author"]
-        messages = agent.build_messages(prompt)
+        consistency_context = self._author_build_consistency_context(recent_draft_text)
+        book_profile_context = self._author_build_book_profile_block()
+        content_type = self.author_content_type_box.currentText()
+        messages = agent.build_messages(
+            prompt, consistency_context=consistency_context,
+            book_profile_context=book_profile_context, content_type=content_type,
+        )
         self.author_status_label.setText("[Working…]")
         self.author_write_btn.setEnabled(False)
         self.author_continue_btn.setEnabled(False)
@@ -6363,10 +6576,11 @@ class GodAI(QWidget):
             QMessageBox.warning(self, "No Model", "Please select a model.")
             return
         self._author_is_continuing = False
+        existing = self.author_draft_box.toPlainText().strip()
         self.author_draft_box.clear()
         self._last_author_response = ""
         prompt = self._author_build_prompt(direction)
-        self._author_start_worker(provider, model, prompt)
+        self._author_start_worker(provider, model, prompt, recent_draft_text=existing)
 
     def author_continue(self):
         direction = self.author_direction_input.toPlainText().strip()
@@ -6393,6 +6607,8 @@ class GodAI(QWidget):
             cursor.insertText("\n\n")
             self.author_draft_box.setTextCursor(cursor)
         prompt = self._author_build_prompt(continuation_note)
+        # Recent draft text is already embedded in full inside `continuation_note` above —
+        # don't pass it again here, that would just duplicate it in the prompt.
         self._author_start_worker(provider, model, prompt)
 
     def _author_on_token(self, token: str):
@@ -6449,6 +6665,30 @@ class GodAI(QWidget):
             Path(path).write_text(text, encoding="utf-8")
             self.author_status_label.setText(f"[Saved] {path}")
 
+    def author_export_book(self):
+        text = self.author_draft_box.toPlainText()
+        if not text.strip():
+            QMessageBox.warning(self, "Nothing to Export", "The Draft tab is empty.")
+            return
+        fmt = self.author_export_format_box.currentText().lower()
+        title = self.author_title_input.text().strip() or "Untitled Manuscript"
+        author_name = self.author_export_author_input.text().strip() or "Unknown Author"
+
+        safe = re.sub(r"[^\w\s-]", "", title).strip().replace(" ", "_")
+        filters = {"epub": "EPUB Files (*.epub)", "docx": "DOCX Files (*.docx)", "pdf": "PDF Files (*.pdf)"}
+        path, _ = QFileDialog.getSaveFileName(
+            self, "Export Book", str(BASE_DIR / f"{safe}.{fmt}"), filters[fmt]
+        )
+        if not path:
+            return
+
+        from services.book_exporter import export_book
+        try:
+            export_book(text, title, author_name, fmt, Path(path))
+            self.author_status_label.setText(f"[Done] Exported {fmt.upper()} to {Path(path).name}")
+        except Exception as e:
+            self.author_status_label.setText(f"[Error] {e}")
+
     def author_clear(self):
         self._author_clear_displays()
         self.author_direction_input.clear()
@@ -6497,6 +6737,59 @@ class GodAI(QWidget):
             result[key] = m.group(1).strip() if m else ""
         return result
 
+    def _author_on_tab_changed(self, index: int):
+        if self.author_tabs.widget(index) is self.author_chapters_tab:
+            self._author_refresh_chapters()
+
+    def _author_refresh_chapters(self):
+        """Re-derive the chapter list from the current Draft text — chapters aren't a
+        separate stored model, they're parsed live from Draft using the same heading
+        detection as book export, so there's never a second source of truth to drift."""
+        from services.book_exporter import split_into_chapters, find_chapter_offsets
+
+        text = self.author_draft_box.toPlainText()
+        self.author_chapters_list.clear()
+        self._author_chapter_offsets = []
+
+        if not text.strip():
+            self.author_chapters_stats_label.setText("No chapters detected yet — write something in Draft first.")
+            return
+
+        chapters = split_into_chapters(text)
+        heading_offsets = find_chapter_offsets(text)
+        total_words = len(text.split())
+
+        offsets = []
+        oi = 0
+        for heading, _body in chapters:
+            if heading:
+                offsets.append(heading_offsets[oi] if oi < len(heading_offsets) else 0)
+                oi += 1
+            else:
+                offsets.append(0)
+        self._author_chapter_offsets = offsets
+
+        for i, (heading, body) in enumerate(chapters):
+            label = heading or "(untitled opening — no chapter headings found yet)"
+            words = len(body.split())
+            item = QListWidgetItem(f"{i + 1}. {label}   —   {words:,} words")
+            self.author_chapters_list.addItem(item)
+
+        chapter_word = "chapter" if len(chapters) == 1 else "chapters"
+        self.author_chapters_stats_label.setText(
+            f"{len(chapters)} {chapter_word} · {total_words:,} words total"
+        )
+
+    def _author_jump_to_chapter(self, item):
+        row = self.author_chapters_list.row(item)
+        if row < 0 or row >= len(self._author_chapter_offsets):
+            return
+        cursor = self.author_draft_box.textCursor()
+        cursor.setPosition(self._author_chapter_offsets[row])
+        self.author_draft_box.setTextCursor(cursor)
+        self.author_tabs.setCurrentWidget(self.author_draft_box)
+        self.author_draft_box.ensureCursorVisible()
+
     # ── Author mode / sub-mode switching ─────────────────────────────────────
     def _author_set_mode(self, mode: str):
         is_write = mode == "write"
@@ -6540,7 +6833,7 @@ class GodAI(QWidget):
 
         prompt = "\n".join(parts)
         agent = self.agent_instances["author"]
-        messages = agent.build_publish_messages(prompt)
+        messages = agent.build_publish_messages(prompt, book_profile_context=self._author_build_book_profile_block())
 
         self.author_pub_output.clear()
         self.author_status_label.setText(f"[Working…] Generating {doc_type}…")
@@ -6631,7 +6924,7 @@ class GodAI(QWidget):
 
         prompt = "\n".join(parts)
         agent = self.agent_instances["author"]
-        messages = agent.build_market_messages(prompt)
+        messages = agent.build_market_messages(prompt, book_profile_context=self._author_build_book_profile_block())
 
         self.author_mkt_output.clear()
         self.author_status_label.setText(f"[Working…] Generating {platform} copy…")
@@ -6807,6 +7100,9 @@ class GodAI(QWidget):
 
         self.build_manuscript_shorts_tab()
         self.manuscript_tabs.addTab(self.manuscript_shorts_tab, "Shorts")
+
+        self.build_manuscript_calendar_tab()
+        self.manuscript_tabs.addTab(self.manuscript_calendar_tab, "Calendar")
 
         # Status bar
         self.manuscript_status_label = QLabel("")
@@ -7000,6 +7296,96 @@ class GodAI(QWidget):
         row.addWidget(self.shorts_preview, 1)
 
         self.shorts_load_voices()
+
+    def build_manuscript_calendar_tab(self):
+        self.manuscript_calendar_tab = QWidget()
+        layout = QVBoxLayout(self.manuscript_calendar_tab)
+        layout.setContentsMargins(8, 8, 8, 8)
+        layout.setSpacing(8)
+
+        from PySide6.QtWidgets import QDateEdit
+        from PySide6.QtCore import QDate
+
+        layout.addWidget(QLabel(
+            "Builds a posting schedule from the candidates on the Quote Finder tab — "
+            "run Suggest Quotes there first."
+        ))
+
+        settings_row = QHBoxLayout()
+        settings_row.addWidget(QLabel("Weeks:"))
+        self.calendar_weeks_box = QComboBox()
+        self.calendar_weeks_box.addItems(["1", "2", "4"])
+        settings_row.addWidget(self.calendar_weeks_box)
+
+        settings_row.addWidget(QLabel("Start:"))
+        self.calendar_start_date = QDateEdit()
+        self.calendar_start_date.setDate(QDate.currentDate())
+        self.calendar_start_date.setCalendarPopup(True)
+        settings_row.addWidget(self.calendar_start_date)
+
+        self.calendar_tiktok_check = QCheckBox("TikTok")
+        self.calendar_tiktok_check.setChecked(True)
+        settings_row.addWidget(self.calendar_tiktok_check)
+
+        self.calendar_instagram_check = QCheckBox("Instagram")
+        self.calendar_instagram_check.setChecked(True)
+        settings_row.addWidget(self.calendar_instagram_check)
+
+        self.calendar_pinterest_check = QCheckBox("Pinterest")
+        self.calendar_pinterest_check.setChecked(True)
+        settings_row.addWidget(self.calendar_pinterest_check)
+
+        settings_row.addStretch()
+        layout.addLayout(settings_row)
+
+        settings_row2 = QHBoxLayout()
+        settings_row2.addWidget(QLabel("Theme:"))
+        self.calendar_theme_box = QComboBox()
+        self.calendar_theme_box.addItems(["Midnight", "Blush", "Zodiac"])
+        settings_row2.addWidget(self.calendar_theme_box)
+
+        settings_row2.addWidget(QLabel("Voice:"))
+        self.calendar_voice_source_box = QComboBox()
+        self.calendar_voice_source_box.addItems(["System (Free)", "ElevenLabs"])
+        self.calendar_voice_source_box.currentTextChanged.connect(self.calendar_load_voices)
+        settings_row2.addWidget(self.calendar_voice_source_box)
+
+        self.calendar_voice_box = QComboBox()
+        settings_row2.addWidget(self.calendar_voice_box)
+
+        settings_row2.addWidget(QLabel("Attribution:"))
+        self.calendar_attribution = QLineEdit()
+        self.calendar_attribution.setPlaceholderText("You Don't Chase")
+        settings_row2.addWidget(self.calendar_attribution)
+
+        settings_row2.addStretch()
+        layout.addLayout(settings_row2)
+
+        btn_row = QHBoxLayout()
+        self.calendar_generate_btn = QPushButton("📅  Generate Calendar")
+        self.calendar_generate_btn.setMinimumHeight(34)
+        self.calendar_generate_btn.clicked.connect(self.manuscript_generate_calendar)
+        btn_row.addWidget(self.calendar_generate_btn)
+
+        self.calendar_export_btn = QPushButton("📤  Export Calendar (CSV)")
+        self.calendar_export_btn.clicked.connect(self.manuscript_export_calendar_csv)
+        btn_row.addWidget(self.calendar_export_btn)
+        btn_row.addStretch()
+        layout.addLayout(btn_row)
+
+        from PySide6.QtWidgets import QTableWidget
+        self.calendar_table = QTableWidget(0, 6)
+        self.calendar_table.setHorizontalHeaderLabels(["Date", "Platform", "Format", "Quote", "Caption", ""])
+        self.calendar_table.setColumnWidth(0, 90)
+        self.calendar_table.setColumnWidth(1, 80)
+        self.calendar_table.setColumnWidth(2, 70)
+        self.calendar_table.setColumnWidth(3, 260)
+        self.calendar_table.setColumnWidth(5, 40)
+        self.calendar_table.setEditTriggers(QTableWidget.NoEditTriggers)
+        layout.addWidget(self.calendar_table, 1)
+
+        self._calendar_slots = []
+        self.calendar_load_voices()
 
     # ── Manuscript handlers ───────────────────────────────────────────────────
     def manuscript_load_models(self):
@@ -7411,6 +7797,177 @@ class GodAI(QWidget):
         self._quote_finder_busy = False
         for b in self._quote_finder_short_buttons:
             b.setEnabled(True)
+
+    # ── Calendar handlers ─────────────────────────────────────────────────────
+    def calendar_load_voices(self):
+        self.calendar_voice_box.clear()
+        source = self.calendar_voice_source_box.currentText()
+        try:
+            if source == "ElevenLabs":
+                from providers.voice.elevenlabs import ElevenLabsProvider
+                voices = ElevenLabsProvider().list_voices()
+            else:
+                from providers.voice.mock import MockVoiceProvider
+                voices = MockVoiceProvider().list_voices()
+            for v in voices:
+                self.calendar_voice_box.addItem(v["name"], v["id"])
+        except Exception:
+            self.calendar_voice_box.addItem("(ElevenLabs key not set)", "default")
+
+    def _calendar_quotes_from_finder(self) -> list:
+        quotes = []
+        for i in range(self.quote_finder_list.count()):
+            widget = self.quote_finder_list.itemWidget(self.quote_finder_list.item(i))
+            if widget:
+                label = widget.findChild(QLabel)
+                if label:
+                    quotes.append(label.text())
+        return quotes
+
+    def manuscript_generate_calendar(self):
+        quotes = self._calendar_quotes_from_finder()
+        if not quotes:
+            QMessageBox.warning(self, "No Quotes", "Run 'Suggest Quotes' on the Quote Finder tab first.")
+            return
+
+        platforms = []
+        if self.calendar_tiktok_check.isChecked():
+            platforms.append("TikTok")
+        if self.calendar_instagram_check.isChecked():
+            platforms.append("Instagram")
+        if self.calendar_pinterest_check.isChecked():
+            platforms.append("Pinterest")
+        if not platforms:
+            QMessageBox.warning(self, "No Platforms", "Select at least one platform.")
+            return
+
+        provider = self.manuscript_provider_box.currentText()
+        model = self.manuscript_model_box.currentText()
+        if not model:
+            self.manuscript_status_label.setText("[Error] Select a model on the Overview tab.")
+            return
+
+        weeks = int(self.calendar_weeks_box.currentText())
+        start_date = self.calendar_start_date.date().toPython()
+
+        from services.content_calendar import build_calendar
+        slots = build_calendar(quotes, weeks, start_date, platforms)
+        if not slots:
+            self.manuscript_status_label.setText("[Error] Could not build a calendar.")
+            return
+        self._calendar_slots = slots
+
+        items = [{"quote": s.quote, "platform": s.platform.lower()} for s in slots]
+        items_json = json.dumps(items)
+        agent = self.agent_instances["manuscript"]
+        messages = agent.build_calendar_caption_messages(items_json)
+        self.manuscript_status_label.setText("[Writing captions…]")
+        self.calendar_generate_btn.setEnabled(False)
+        self.calendar_worker = ChatWorker(self.run_backend, provider, model, messages, items_json)
+        self.calendar_worker.finished_signal.connect(self._calendar_on_captions_done)
+        self.calendar_worker.error_signal.connect(self._calendar_on_captions_error)
+        self.calendar_worker.start()
+
+    def _calendar_on_captions_done(self, full_response: str):
+        self.calendar_generate_btn.setEnabled(True)
+        captions = self._parse_quote_list(full_response)
+        for i, slot in enumerate(self._calendar_slots):
+            slot.caption = captions[i] if i < len(captions) else ""
+        self._populate_calendar_table()
+        self.manuscript_status_label.setText(f"[Done] {len(self._calendar_slots)}-post calendar generated.")
+
+    def _calendar_on_captions_error(self, error: str):
+        self.calendar_generate_btn.setEnabled(True)
+        self._populate_calendar_table()
+        self.manuscript_status_label.setText(f"[Error] Captions failed ({error}) — schedule shown, captions blank.")
+
+    def _populate_calendar_table(self):
+        from PySide6.QtWidgets import QTableWidgetItem
+        self.calendar_table.setRowCount(len(self._calendar_slots))
+        for row, slot in enumerate(self._calendar_slots):
+            self.calendar_table.setItem(row, 0, QTableWidgetItem(slot.day.strftime("%Y-%m-%d")))
+            self.calendar_table.setItem(row, 1, QTableWidgetItem(slot.platform))
+            self.calendar_table.setItem(row, 2, QTableWidgetItem(slot.format))
+            self.calendar_table.setItem(row, 3, QTableWidgetItem(slot.quote))
+            self.calendar_table.setItem(row, 4, QTableWidgetItem(slot.caption))
+
+            icon = "🖼" if slot.format == "graphic" else "🎬"
+            btn = QPushButton(icon)
+            btn.setFixedWidth(36)
+            btn.clicked.connect(lambda checked=False, r=row, b=btn: self.calendar_generate_asset(r, b))
+            self.calendar_table.setCellWidget(row, 5, btn)
+
+    def calendar_generate_asset(self, row: int, button: QPushButton):
+        if row >= len(self._calendar_slots):
+            return
+        slot = self._calendar_slots[row]
+        from services.quote_graphics import render_quote_graphic
+        import time
+
+        theme = self.calendar_theme_box.currentText().lower()
+        attribution = self.calendar_attribution.text().strip()
+
+        if slot.format == "graphic":
+            from services.quote_graphics import GRAPHICS_DIR
+            output_path = GRAPHICS_DIR / f"quote_{int(time.time() * 1000)}.png"
+            try:
+                render_quote_graphic(slot.quote, output_path, theme=theme, size_name="square", attribution=attribution)
+                self.manuscript_status_label.setText(f"[Done] Saved {output_path.name}")
+            except Exception as e:
+                self.manuscript_status_label.setText(f"[Error] {e}")
+            return
+
+        if self._quote_finder_busy:
+            QMessageBox.information(self, "Busy", "A short is already generating — please wait for it to finish.")
+            return
+        from services.shorts_generator import SHORTS_DIR
+        use_elevenlabs = self.calendar_voice_source_box.currentText() == "ElevenLabs"
+        voice_id = self.calendar_voice_box.currentData() or "default"
+        ts = int(time.time() * 1000)
+        image_path = SHORTS_DIR / f"short_{ts}.png"
+        output_path = SHORTS_DIR / f"short_{ts}.mp4"
+        try:
+            render_quote_graphic(slot.quote, image_path, theme=theme, size_name="vertical", attribution=attribution)
+        except Exception as e:
+            self.manuscript_status_label.setText(f"[Error] {e}")
+            return
+
+        self._quote_finder_busy = True
+        button.setEnabled(False)
+        self.manuscript_status_label.setText("[Narrating…]")
+        self.shorts_worker = ShortsWorker(slot.quote, image_path, output_path, use_elevenlabs, voice_id)
+        self.shorts_worker.status_signal.connect(self.manuscript_status_label.setText)
+        self.shorts_worker.done_signal.connect(lambda path, b=button: self._calendar_short_done(path, b))
+        self.shorts_worker.error_signal.connect(lambda err, b=button: self._calendar_short_error(err, b))
+        self.shorts_worker.start()
+
+    def _calendar_short_done(self, output_path: str, button: QPushButton):
+        self._last_short_path = output_path
+        self.manuscript_status_label.setText(f"[Done] Saved {Path(output_path).name}")
+        button.setEnabled(True)
+        self._quote_finder_busy = False
+
+    def _calendar_short_error(self, error: str, button: QPushButton):
+        self.manuscript_status_label.setText(f"[Error] {error}")
+        button.setEnabled(True)
+        self._quote_finder_busy = False
+
+    def manuscript_export_calendar_csv(self):
+        if not self._calendar_slots:
+            QMessageBox.warning(self, "No Calendar", "Generate a calendar first.")
+            return
+        import csv
+        path, _ = QFileDialog.getSaveFileName(
+            self, "Export Calendar", str(BASE_DIR / "content_calendar.csv"), "CSV Files (*.csv)"
+        )
+        if not path:
+            return
+        with open(path, "w", newline="", encoding="utf-8") as f:
+            writer = csv.writer(f)
+            writer.writerow(["Date", "Platform", "Format", "Quote", "Caption"])
+            for slot in self._calendar_slots:
+                writer.writerow([slot.day.strftime("%Y-%m-%d"), slot.platform, slot.format, slot.quote, slot.caption])
+        self.manuscript_status_label.setText(f"[Done] Exported calendar to {Path(path).name}")
 
     # ── Music handlers ────────────────────────────────────────────────────────
     def music_load_models(self):

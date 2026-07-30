@@ -25,6 +25,10 @@ PY="${PROJECT_ROOT}/.venv/bin/python"
 cd "$PROJECT_ROOT"
 
 echo "▸ Building ${APP_BUNDLE} with PyInstaller (this takes ~1 min)…"
+mkdir -p "${PROJECT_ROOT}/dist"
+# Keep Spotlight out of the build output, so the freshly built copy in dist/
+# never shows up as a second "Sentinel AI" alongside the installed one.
+touch "${PROJECT_ROOT}/dist/.metadata_never_index"
 "$PY" -m PyInstaller --noconfirm --clean SentinelAI.spec
 
 if [ "${1:-}" = "--no-install" ]; then
@@ -46,6 +50,9 @@ codesign --force --deep --sign - "$INSTALLED"
 # Register with Launch Services so it shows up in Spotlight / Launchpad.
 LSREG="/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister"
 "$LSREG" -f "$INSTALLED"
+# ...and drop the build copy from Launch Services, so Spotlight/Launchpad only
+# ever offer the installed /Applications one.
+"$LSREG" -u "$DIST_APP" 2>/dev/null || true
 
 echo ""
 echo "✓ Installed: ${INSTALLED}"

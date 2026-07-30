@@ -51,6 +51,18 @@ Select the most quotable, standalone lines from the text. A good line:
 Return ONLY a JSON array of strings, no prose, no markdown fences. Example:
 ["Quote one.", "Quote two.", "Quote three."]"""
 
+CALENDAR_CAPTION_PROMPT = """You write short, platform-native captions for book-quote social
+media posts. You receive a JSON array of items, each with "quote" and "platform"
+(tiktok, instagram, or pinterest). For each item, write ONE short caption in that
+platform's voice:
+- tiktok: conversational, first-person energy, ends with 2-3 #BookTok-style hashtags
+- instagram: warm, slightly more polished, ends with 2-3 hashtags
+- pinterest: keyword-rich for search (what a reader would actually type), no hashtags,
+  ends with a soft call to action
+
+Return ONLY a JSON array of strings (captions), same order and length as the input
+array. No prose, no markdown fences."""
+
 
 class ManuscriptAgent:
     """Publishing metrics, platform tracking, and todo management."""
@@ -83,4 +95,10 @@ class ManuscriptAgent:
         return [
             {"role": "system", "content": QUOTE_SUGGESTION_PROMPT},
             {"role": "user", "content": f"Extract the {count} most quotable lines from this text:\n\n{manuscript_text}"},
+        ]
+
+    def build_calendar_caption_messages(self, items_json: str) -> list[dict]:
+        return [
+            {"role": "system", "content": CALENDAR_CAPTION_PROMPT},
+            {"role": "user", "content": items_json},
         ]

@@ -84,6 +84,7 @@ def ensure_seeded() -> None:
             env_file.write_text(
                 "OPENAI_API_KEY=\n"
                 "DEEPSEEK_API_KEY=\n"
+                "KIMI_API_KEY=\n"
                 "GOOGLE_API_KEY=\n"
                 "ANTHROPIC_API_KEY=\n",
                 encoding="utf-8",
