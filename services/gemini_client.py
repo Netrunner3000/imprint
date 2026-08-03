@@ -10,6 +10,14 @@ def _gemini_api_key():
 
 
 class GeminiClientWrapper:
+    KNOWN_MODELS = [
+        "gemini-2.5-flash",
+        "gemini-2.5-pro",
+        "gemini-2.0-flash",
+        "gemini-1.5-flash",
+        "gemini-1.5-pro",
+    ]
+
     def __init__(self):
         self.api_key = _gemini_api_key()
         self.client = genai.Client(api_key=self.api_key) if self.api_key else None
@@ -17,6 +25,32 @@ class GeminiClientWrapper:
     @staticmethod
     def key_available():
         return bool(_gemini_api_key())
+
+    def list_models(self) -> list[str]:
+        """Model ids that support generateContent, from the API when reachable.
+
+        Falls back to KNOWN_MODELS with no key or on any API error so the model
+        dropdowns are never left empty.
+        """
+        if not self.client:
+            return self.KNOWN_MODELS
+        try:
+            def supports_generate(m) -> bool:
+                # The SDK has used both attribute names across versions, and
+                # either can come back as None.
+                actions = (getattr(m, "supported_actions", None)
+                           or getattr(m, "supported_generation_methods", None)
+                           or [])
+                return "generateContent" in actions
+
+            models = sorted(
+                m.name.replace("models/", "")
+                for m in self.client.models.list()
+                if supports_generate(m)
+            )
+            return models if models else self.KNOWN_MODELS
+        except Exception:
+            return self.KNOWN_MODELS
 
     def chat(self, messages, model="gemini-1.5-flash"):
         if not self.client:

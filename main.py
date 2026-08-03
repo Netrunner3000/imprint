@@ -33,7 +33,7 @@ load_dotenv(user_data_base() / ".env")
 import markdown
 
 from PySide6.QtCore import Qt, QTimer, QProcess, QUrl, QThread, Signal, QEvent
-from PySide6.QtGui import QTextCursor, QDesktopServices
+from PySide6.QtGui import QTextCursor, QDesktopServices, QColor, QFont
 from PySide6.QtWidgets import (
     QApplication, QSizePolicy, QWidget, QVBoxLayout, QHBoxLayout, QGridLayout, QGroupBox,
     QLabel, QTextEdit, QPushButton, QComboBox, QListWidget, QListWidgetItem,
@@ -95,6 +95,142 @@ REGISTRY_FILE = CONFIG_DIR / "registry.json"
 README_FILE = RESOURCE_DIR / "README.md"
 
 SUPPORTED_EBOOKS = {".pdf", ".epub", ".txt", ".mobi"}
+
+# ── Per-agent recommended setup ──────────────────────────────────────────────
+# Single source of truth for "which provider + model is right for THIS agent".
+# Each panel pre-selects its entry on startup, and the recommended provider and
+# model are painted red in their dropdowns so the user can always see what the
+# recommendation was, even after switching to something else mid-session.
+#
+# `provider` must match an item in that panel's provider box. `model` is matched
+# leniently (exact -> prefix -> substring) so a dated API id such as
+# "claude-sonnet-4-6-20260112" still resolves from "claude-sonnet-4-6".
+RECOMMENDED_COLOR = "#ff5555"
+
+AGENT_RECOMMENDATIONS = {
+    "osint": {
+        "provider": "deepseek", "model": "deepseek-v4-flash",
+        "reason": "Light, high-volume lookups and summaries — DeepSeek's flash tier "
+                  "gives solid structured output at the lowest cost per query.",
+    },
+    "osint_heavy": {
+        "provider": "anthropic", "model": "claude-opus-5",
+        "reason": "Deep multi-source dossiers need the strongest long-context "
+                  "synthesis. Low volume, so the higher token price is worth it.",
+    },
+    "wifi": {
+        "provider": "anthropic", "model": "claude-sonnet-5",
+        "reason": "Generating correct Kali/aircrack command lines rewards precision; "
+                  "Sonnet is accurate on tooling syntax without Opus pricing.",
+    },
+    "bug_bounty": {
+        "provider": "anthropic", "model": "claude-sonnet-5",
+        "reason": "Vulnerability triage plus a readable HackerOne write-up — Sonnet "
+                  "handles both the security reasoning and the report prose.",
+    },
+    "roi": {
+        "provider": "anthropic", "model": "claude-sonnet-5",
+        "reason": "Structured financial reasoning with consistent numeric tables.",
+    },
+    "investment": {
+        "provider": "anthropic", "model": "claude-opus-5",
+        "reason": "Long-horizon macro + technical + fundamental synthesis is the "
+                  "deepest reasoning task in the app, and it runs infrequently.",
+    },
+    "nfl_bet": {
+        "provider": "anthropic", "model": "claude-sonnet-5",
+        "reason": "Prop analysis needs reliable arithmetic for EV and projections.",
+    },
+    "fiverr": {
+        "provider": "openai", "model": "gpt-4o-mini",
+        "reason": "Gig copy sits next to DALL·E logo generation — staying on OpenAI "
+                  "keeps prompt style and image calls on one provider, cheaply.",
+    },
+    "health": {
+        "provider": "anthropic", "model": "claude-sonnet-5",
+        "reason": "Nutrition and wellness guidance benefits from Claude's careful, "
+                  "caveat-aware phrasing on health topics.",
+    },
+    "author": {
+        "provider": "anthropic", "model": "claude-fable-5",
+        "reason": "Fable 5 is the creative-writing member of the Claude 5 family — "
+                  "the closest fit for long-form fiction, character and dialogue work.",
+    },
+    "manuscript": {
+        "provider": "anthropic", "model": "claude-haiku-4-5-20251001",
+        "reason": "Sales metrics and todo tracking are light structured tasks — "
+                  "Haiku is the fastest and cheapest fit.",
+    },
+    "music": {
+        "provider": "anthropic", "model": "claude-sonnet-5",
+        "reason": "Release planning and distribution strategy — broad, practical "
+                  "reasoning without needing Opus depth.",
+    },
+    "webdesign": {
+        "provider": "anthropic", "model": "claude-sonnet-5",
+        "reason": "Strongest HTML/CSS/JS generation; produces working responsive "
+                  "markup in one pass more often than the cheaper models.",
+    },
+    "manager": {
+        "provider": "anthropic", "model": "claude-sonnet-5",
+        "reason": "Forge writes real agent source files — code generation quality "
+                  "matters more here than cost.",
+    },
+    "audiobook": {
+        "provider": "openai", "model": "tts-1", "voice": "alloy",
+        "reason": "Narrator is hard-wired to OpenAI TTS. Alloy is the most neutral, "
+                  "even-paced voice — the safest default for hours of narration.",
+    },
+}
+
+# agent key -> (provider box attribute, model box attribute)
+AGENT_SETUP_WIDGETS = {
+    "chat":        ("provider_box",             "model_box"),
+    "osint":       ("osint_provider_box",       "osint_model_box"),
+    "osint_heavy": ("osint_heavy_provider_box", "osint_heavy_model_box"),
+    "wifi":        ("wifi_provider_box",        "wifi_model_box"),
+    "bug_bounty":  ("bb_provider_box",          "bb_model_box"),
+    "roi":         ("roi_provider_box",         "roi_model_box"),
+    "investment":  ("inv_provider_box",         "inv_model_box"),
+    "nfl_bet":     ("nfl_bet_provider_box",     "nfl_bet_model_box"),
+    "fiverr":      ("fiverr_provider_box",      "fiverr_model_box"),
+    "health":      ("health_provider_box",      "health_model_box"),
+    "author":      ("author_provider_box",      "author_model_box"),
+    "manuscript":  ("manuscript_provider_box",  "manuscript_model_box"),
+    "music":       ("music_provider_box",       "music_model_box"),
+    "webdesign":   ("webdesign_provider_box",   "webdesign_model_box"),
+    "manager":     ("manager_provider_box",     "manager_model_box"),
+}
+
+# agent key -> the panel's own "reload the model list" method, called after the
+# provider is switched programmatically so the model box is populated before we
+# try to select the recommended model in it.
+AGENT_MODEL_LOADERS = {
+    "chat":        "load_provider_models",
+    "osint":       "osint_load_models",
+    "osint_heavy": "osint_heavy_load_models",
+    "wifi":        "wifi_load_models",
+    "bug_bounty":  "bb_load_models",
+    "roi":         "roi_load_models",
+    "investment":  "inv_load_models",
+    "nfl_bet":     "nfl_bet_load_models",
+    "fiverr":      "fiverr_load_models",
+    "health":      "health_load_models",
+    "author":      "author_load_models",
+    "manuscript":  "manuscript_load_models",
+    "music":       "music_load_models",
+    "webdesign":   "webdesign_load_models",
+    "manager":     "manager_load_models",
+}
+
+AGENT_PRETTY_NAMES = {
+    "chat": "Chat", "osint": "Trace", "osint_heavy": "Bloodhound",
+    "wifi": "Beacon", "bug_bounty": "Bug Spray", "roi": "Quick ROI",
+    "investment": "Oracle", "nfl_bet": "Playmaker", "fiverr": "Atelier",
+    "health": "Vitality", "author": "Manuscript", "manuscript": "Publisher",
+    "music": "Maestro", "webdesign": "Site Builder", "audiobook": "Narrator",
+    "manager": "Forge", "ops_identity": "Op Identity",
+}
 
 
 class ChatWorker(QThread):
@@ -384,6 +520,7 @@ class GodAI(QWidget):
         self.author_worker: Optional[ChatWorker] = None
         self._last_author_response: str = ""
         self._author_is_continuing: bool = False
+        self._author_export_done: bool = False
         self.author_pub_worker: Optional[ChatWorker] = None
         self.author_mkt_worker: Optional[ChatWorker] = None
         self.manuscript_worker: Optional[ChatWorker] = None
@@ -470,6 +607,9 @@ class GodAI(QWidget):
         from PySide6.QtWidgets import QApplication as _QApp
         _QApp.instance().installEventFilter(self)
         self.load_models()
+        # Pre-select each agent's recommended provider/model and paint those
+        # entries red in their dropdowns. Runs after every panel is built.
+        self.install_agent_recommendations()
         self.load_history_list()
         self.update_resource_label()
         self.update_usage_labels()
@@ -1567,7 +1707,10 @@ class GodAI(QWidget):
             f"{rec['provider']} · {rec['model']}\n"
             f"{rec['reason']}"
         )
-        
+        # Chat's recommendation moves with the tool/command/prompt, so repaint
+        # the red dropdown markings whenever the label is refreshed.
+        self.refresh_recommendation_marks("chat")
+
     def maybe_auto_apply_recommendation(self):
         if not hasattr(self, "auto_recommend_checkbox"):
             return
@@ -1576,6 +1719,270 @@ class GodAI(QWidget):
             return
 
         self.apply_recommended_setup()
+
+    def models_for_provider(self, provider: str) -> list[str]:
+        """Model ids offered by one provider, or [] for an unknown provider.
+
+        Every client falls back to its own KNOWN_MODELS list when the API is
+        unreachable, so this only returns empty for a name we don't handle.
+        """
+        clients = {
+            "ollama": self.ollama,
+            "openai": self.openai,
+            "deepseek": self.deepseek,
+            "kimi": self.kimi,
+            "gemini": self.gemini,
+            "anthropic": self.anthropic,
+        }
+        client = clients.get(provider)
+        if client is None:
+            return []
+        try:
+            return list(client.list_models())
+        except Exception:
+            return []
+
+    # ── Per-agent recommended setup ──────────────────────────────────────────
+    # Every agent panel gets its recommendation from AGENT_RECOMMENDATIONS
+    # pre-selected on startup, and the recommended provider/model entries are
+    # painted red inside their dropdowns. The red entry survives the user
+    # switching to something else, so the original recommendation stays visible
+    # for the whole session.
+
+    @staticmethod
+    def _find_model_index(combo, wanted: str) -> int:
+        """Locate `wanted` in a model combo, tolerating dated API model ids.
+
+        Providers return ids like "claude-sonnet-4-6-20260112" from the live API
+        but bare names like "claude-sonnet-4-6" from the offline fallback list,
+        so an exact match alone would silently miss. Tries exact, then prefix,
+        then substring, and returns -1 when nothing matches.
+        """
+        if not wanted:
+            return -1
+
+        exact = combo.findText(wanted)
+        if exact >= 0:
+            return exact
+
+        lowered = wanted.lower()
+        for i in range(combo.count()):
+            if combo.itemText(i).lower().startswith(lowered):
+                return i
+        for i in range(combo.count()):
+            if lowered in combo.itemText(i).lower():
+                return i
+        return -1
+
+    def _paint_recommended_item(self, combo, index: int, tooltip: str) -> None:
+        """Colour one dropdown entry red + bold and clear any previous marking.
+
+        Only the item's colour and tooltip change — never its text — because the
+        panels read `currentText()` straight back as the provider/model name.
+        """
+        if combo is None:
+            return
+
+        # The stock combo popup ignores per-item colour under some styles; an
+        # explicit QStyledItemDelegate makes ForegroundRole/FontRole take effect.
+        if not combo.property("_rec_delegate"):
+            from PySide6.QtWidgets import QStyledItemDelegate
+            combo.setItemDelegate(QStyledItemDelegate(combo))
+            combo.setProperty("_rec_delegate", True)
+
+        default_font = combo.font()
+        for i in range(combo.count()):
+            combo.setItemData(i, None, Qt.ForegroundRole)
+            combo.setItemData(i, default_font, Qt.FontRole)
+            combo.setItemData(i, "", Qt.ToolTipRole)
+
+        if index < 0:
+            return
+
+        marked_font = QFont(default_font)
+        marked_font.setBold(True)
+        combo.setItemData(index, QColor(RECOMMENDED_COLOR), Qt.ForegroundRole)
+        combo.setItemData(index, marked_font, Qt.FontRole)
+        combo.setItemData(index, tooltip, Qt.ToolTipRole)
+
+    def _mark_deviation(self, combo, is_recommended: bool) -> None:
+        """Tint a combo's border red while it holds a non-recommended value.
+
+        The red dropdown entry is only visible once the list is open; this makes
+        the deviation legible at a glance with the panel closed. The focus rule
+        is repeated here because a widget-level stylesheet outranks the global
+        one and would otherwise drop the green focus ring.
+        """
+        if combo is None:
+            return
+
+        if is_recommended:
+            combo.setStyleSheet("")
+        else:
+            combo.setStyleSheet(
+                f"QComboBox {{ border: 1px solid {RECOMMENDED_COLOR}; }}"
+                "QComboBox:focus { border: 1px solid #3cff88; }"
+            )
+
+    def _recommendation_for(self, agent_key: str) -> dict | None:
+        """Return {provider, model, reason} for an agent.
+
+        Chat is the one agent whose recommendation is not fixed — it already has
+        a live recommender that reacts to the selected tool, command and prompt
+        text — so defer to that and let the red marking follow it around.
+        """
+        if agent_key == "chat":
+            try:
+                rec = self.get_recommended_setup()
+            except Exception:
+                return None
+            # The audiobook branch reports a pseudo-model that has no combo entry.
+            return rec if rec.get("model") != "tts" else None
+
+        return AGENT_RECOMMENDATIONS.get(agent_key)
+
+    def refresh_recommendation_marks(self, agent_key: str) -> None:
+        """Re-apply the red marking for one agent's provider and model boxes.
+
+        Called after any model-list reload, since clearing a combo also drops the
+        per-item colour data.
+        """
+        rec = self._recommendation_for(agent_key)
+        widgets = AGENT_SETUP_WIDGETS.get(agent_key)
+        if not rec or not widgets:
+            return
+
+        provider_box = getattr(self, widgets[0], None)
+        model_box = getattr(self, widgets[1], None)
+        pretty = AGENT_PRETTY_NAMES.get(agent_key, agent_key)
+        tooltip = (
+            f"Recommended for {pretty}: {rec['provider']} · {rec['model']}\n"
+            f"{rec['reason']}"
+        )
+
+        if provider_box is not None:
+            idx = provider_box.findText(rec["provider"])
+            self._paint_recommended_item(provider_box, idx, tooltip)
+            provider_box.setToolTip(tooltip)
+            self._mark_deviation(
+                provider_box, provider_box.currentText() == rec["provider"]
+            )
+
+        if model_box is not None:
+            idx = self._find_model_index(model_box, rec["model"])
+            self._paint_recommended_item(model_box, idx, tooltip)
+            model_box.setToolTip(tooltip)
+            self._mark_deviation(
+                model_box, idx >= 0 and model_box.currentIndex() == idx
+            )
+
+    def _on_recommended_provider_changed(self, agent_key: str) -> None:
+        """React to the user switching provider on an agent panel.
+
+        Whenever the provider lands back on the recommended one, snap the model
+        box to the recommended model too — otherwise the panel's loader leaves
+        it on whatever happens to be first in the list. A deliberate model change
+        afterwards is left alone.
+        """
+        rec = self._recommendation_for(agent_key)
+        widgets = AGENT_SETUP_WIDGETS.get(agent_key)
+        if rec and widgets:
+            provider_box = getattr(self, widgets[0], None)
+            model_box = getattr(self, widgets[1], None)
+            if (provider_box is not None and model_box is not None
+                    and provider_box.currentText() == rec["provider"]):
+                idx = self._find_model_index(model_box, rec["model"])
+                if idx >= 0:
+                    model_box.setCurrentIndex(idx)
+
+        self.refresh_recommendation_marks(agent_key)
+
+    def apply_agent_recommendation(self, agent_key: str) -> None:
+        """Pre-select this agent's recommended provider + model, then mark them."""
+        if agent_key == "chat":
+            # Chat has its own apply path that also updates the recommendation
+            # panel and the live cost estimate.
+            self.apply_recommended_setup()
+            self.refresh_recommendation_marks("chat")
+            return
+
+        rec = AGENT_RECOMMENDATIONS.get(agent_key)
+        widgets = AGENT_SETUP_WIDGETS.get(agent_key)
+        if not rec or not widgets:
+            return
+
+        provider_box = getattr(self, widgets[0], None)
+        model_box = getattr(self, widgets[1], None)
+
+        if provider_box is not None:
+            idx = provider_box.findText(rec["provider"])
+            if idx >= 0:
+                provider_box.setCurrentIndex(idx)
+
+        # Populate the model list for the provider we just selected. Setting the
+        # provider fires currentTextChanged -> the panel's loader, but only when
+        # the value actually changed, so call the loader directly to cover the
+        # case where the recommended provider was already selected.
+        loader = getattr(self, AGENT_MODEL_LOADERS.get(agent_key, ""), None)
+        if callable(loader):
+            try:
+                loader()
+            except Exception:
+                pass
+
+        if model_box is not None:
+            idx = self._find_model_index(model_box, rec["model"])
+            if idx >= 0:
+                model_box.setCurrentIndex(idx)
+
+        self.refresh_recommendation_marks(agent_key)
+
+    def _install_audiobook_recommendation(self) -> None:
+        """Narrator has no provider/model choice — OpenAI TTS is hard-wired — so
+        the only thing to recommend is the narration voice."""
+        rec = AGENT_RECOMMENDATIONS.get("audiobook", {})
+        voice_box = getattr(self, "audiobook_voice_box", None)
+        voice = rec.get("voice")
+        if voice_box is None or not voice:
+            return
+
+        tooltip = f"Recommended for Narrator: voice '{voice}'\n{rec['reason']}"
+        idx = voice_box.findText(voice)
+        if idx >= 0:
+            voice_box.setCurrentIndex(idx)
+        self._paint_recommended_item(voice_box, idx, tooltip)
+        voice_box.setToolTip(tooltip)
+        voice_box.currentTextChanged.connect(
+            lambda _t: self._mark_deviation(
+                voice_box, voice_box.currentText() == voice
+            )
+        )
+
+    def install_agent_recommendations(self) -> None:
+        """Apply every agent's recommended setup once, at startup, and keep the
+        red markings in sync as the user changes providers or models later."""
+        self._install_audiobook_recommendation()
+
+        for agent_key in AGENT_SETUP_WIDGETS:
+            widgets = AGENT_SETUP_WIDGETS[agent_key]
+            provider_box = getattr(self, widgets[0], None)
+            model_box = getattr(self, widgets[1], None)
+
+            try:
+                self.apply_agent_recommendation(agent_key)
+            except Exception as e:
+                print(f"[Recommendations] {agent_key}: {e}")
+
+            # Re-mark after the panel's own loader has repopulated the model box.
+            # Connected last, so it runs after the loader already wired up above.
+            if provider_box is not None:
+                provider_box.currentTextChanged.connect(
+                    lambda _t, k=agent_key: self._on_recommended_provider_changed(k)
+                )
+            if model_box is not None:
+                model_box.currentTextChanged.connect(
+                    lambda _t, k=agent_key: self.refresh_recommendation_marks(k)
+                )
 
     def build_ui(self):
         outer_layout = QVBoxLayout(self)
@@ -2865,6 +3272,14 @@ class GodAI(QWidget):
         divider.setFrameShadow(QFrame.Sunken)
         divider.setStyleSheet("color: #444;")
         layout.addWidget(divider)
+
+        self.author_next_step_label = QLabel("")
+        self.author_next_step_label.setWordWrap(True)
+        self.author_next_step_label.setStyleSheet(
+            "background: rgba(60,255,136,0.08); border: 1px solid rgba(60,255,136,0.25); "
+            "border-radius: 6px; padding: 8px 10px; color: #3cff88; font-size: 12px;"
+        )
+        layout.addWidget(self.author_next_step_label)
 
         # ── Book Profile (collapsed by default — persisted, injected into every mode) ──
         profile_section = CollapsibleSection("📖  Book Profile", expanded=False)
@@ -6441,6 +6856,81 @@ class GodAI(QWidget):
             self.author_task_box.setCurrentText(current)
         self.author_task_box.blockSignals(False)
 
+    def _compute_next_step_tip(self) -> str:
+        """Pick the single most useful next action, checked against real app state.
+        Ordered write → publish → market, so it walks the whole book lifecycle."""
+        import os
+
+        profile = self._author_get_book_profile()
+        draft_words = len(self.author_draft_box.toPlainText().split())
+        outline = self.author_outline_box.toPlainText().strip()
+
+        # ── Writing phase ──
+        if not profile["title"]:
+            return ("📖  Start here — fill in Title, Author and Type in the Project Bar, then open "
+                    "Book Profile and click Save Profile. Everything downstream reuses it.")
+        if not profile["hook"] or not profile["target_reader"]:
+            return ("📖  Complete your Book Profile (Hook + Target reader). These two fields shape "
+                    "every blurb, description and social caption you'll generate later.")
+        if draft_words == 0 and not outline:
+            return ("✍️  No draft yet — set Task to Generate Outline, describe the book in Direction, "
+                    "and click Write. Outline first is faster than drafting blind.")
+        if draft_words == 0:
+            return ("✍️  Outline exists but no draft — switch Task to "
+                    f"{'Write Chapter' if profile['content_type'] == 'Non-Fiction' else 'Write Scene'} "
+                    "and start drafting. Use Continue to extend.")
+        if draft_words < 5000:
+            return (f"✍️  Draft is {draft_words:,} words — keep going with Write / Continue. "
+                    "Add 'Chapter 1', 'Chapter 2' heading lines as you go so Chapters and Export pick them up.")
+        if not self._author_export_done:
+            return (f"📤  {draft_words:,} words written — export a formatted copy (EPUB / DOCX / PDF) "
+                    "from the Write sidebar to see how it reads as a real book.")
+
+        # ── Publishing phase ──
+        todos = self._get_pending_todo_titles()
+        if any("Upload to Amazon KDP" in t for t in todos):
+            return ("📣  Draft exported. Next: generate a Back-Cover Blurb in Publish mode, then a "
+                    "KDP Listing in Market mode — that one output covers your description, categories, "
+                    "keywords and pricing. Then create your KDP account and upload.")
+        if any("cover files" in t for t in todos):
+            return ("🎨  Cover files are still on your checklist — KDP needs 3000×4500px at 300dpi. "
+                    "This is the one step the app can't do for you; hire a designer or use Canva/Reedsy.")
+
+        # ── Marketing phase ──
+        if not os.environ.get("PUBLISHDRIVE_API_KEY", "").strip():
+            return ("🔌  Book is live-ready. Connect PublishDrive (see the Connections panel) to pull "
+                    "real sales data in, or skip it and drop KDP CSV reports into data/kdp_reports/ instead.")
+        if any("Create TikTok, Instagram" in t for t in todos):
+            return ("📱  Set up your TikTok / Instagram / Pinterest accounts (same username on all three), "
+                    "then use Quote Finder → Calendar to batch a few weeks of posts in one pass.")
+        if any("TikTokers/BookTokers" in t for t in todos):
+            return ("🎬  Content pipeline is ready — generate quote graphics and shorts, then pitch "
+                    "BookTok creators in your niche with a free copy plus ready-made clips.")
+        return ("✅  Core pipeline complete. Keep the Calendar filled, watch sales on the Overview tab, "
+                "and work through whatever's left on your Publishing Todos.")
+
+    def _get_pending_todo_titles(self) -> list:
+        """Pending, non-engineering todo titles — the advisor only nudges toward real
+        publishing/marketing work, never the (Dev) roadmap items."""
+        import sqlite3
+        from services.database import DB_PATH
+        try:
+            conn = sqlite3.connect(DB_PATH)
+            rows = conn.execute(
+                "SELECT title FROM manuscript_todos WHERE status != 'done' AND platform != 'engineering'"
+            ).fetchall()
+            conn.close()
+            return [r[0] for r in rows]
+        except Exception:
+            return []
+
+    def _refresh_next_step_tip(self):
+        tip = self._compute_next_step_tip()
+        for attr in ("author_next_step_label", "manuscript_next_step_label"):
+            label = getattr(self, attr, None)
+            if label is not None:
+                label.setText(f"Next step:   {tip}")
+
     def _author_get_book_profile(self) -> dict:
         return {
             "title": self.author_title_input.text().strip(),
@@ -6485,6 +6975,7 @@ class GodAI(QWidget):
         from services.database import save_setting
         save_setting("author_book_profile", json.dumps(self._author_get_book_profile()))
         self.author_status_label.setText("[Saved] Book profile.")
+        self._refresh_next_step_tip()
 
     def _author_load_profile(self):
         import json
@@ -6636,6 +7127,7 @@ class GodAI(QWidget):
         self.author_continue_btn.setEnabled(True)
         self.author_stop_btn.setEnabled(False)
         self.author_save_btn.setEnabled(True)
+        self._refresh_next_step_tip()
 
     def _author_on_error(self, error: str):
         self.author_status_label.setText(f"[Error] {error}")
@@ -6686,6 +7178,8 @@ class GodAI(QWidget):
         try:
             export_book(text, title, author_name, fmt, Path(path))
             self.author_status_label.setText(f"[Done] Exported {fmt.upper()} to {Path(path).name}")
+            self._author_export_done = True
+            self._refresh_next_step_tip()
         except Exception as e:
             self.author_status_label.setText(f"[Error] {e}")
 
@@ -7015,6 +7509,30 @@ class GodAI(QWidget):
 
         tb.addStretch()
         layout.addWidget(top_bar)
+
+        self.manuscript_next_step_label = QLabel("")
+        self.manuscript_next_step_label.setWordWrap(True)
+        self.manuscript_next_step_label.setStyleSheet(
+            "background: rgba(60,255,136,0.08); border: 1px solid rgba(60,255,136,0.25); "
+            "border-radius: 6px; padding: 8px 10px; color: #3cff88; font-size: 12px;"
+        )
+        layout.addWidget(self.manuscript_next_step_label)
+
+        # ── Connections: which 3rd-party services are actually configured ─────
+        connections_section = CollapsibleSection("🔌  Connections", expanded=False)
+        self.manuscript_connections_layout = QVBoxLayout()
+        self.manuscript_connections_layout.setContentsMargins(4, 2, 4, 2)
+        self.manuscript_connections_layout.setSpacing(3)
+        connections_container = QWidget()
+        connections_container.setLayout(self.manuscript_connections_layout)
+        connections_section.addWidget(connections_container)
+
+        connections_refresh_btn = QPushButton("🔄  Refresh Status")
+        connections_refresh_btn.clicked.connect(self._refresh_connections_status)
+        connections_section.addWidget(connections_refresh_btn)
+
+        layout.addWidget(connections_section)
+        self._refresh_connections_status()
 
         self.manuscript_tabs = QTabWidget()
         layout.addWidget(self.manuscript_tabs, 1)
@@ -7409,6 +7927,50 @@ class GodAI(QWidget):
         except Exception:
             pass
 
+    def _refresh_connections_status(self):
+        """Shows which 3rd-party API keys are actually configured (checked from the running
+        process's environment — restart the app after editing .env for changes to appear).
+        Services with no API at all (KDP, Draft2Digital, IngramSpark, BookBub, TikTok/IG/Pinterest)
+        aren't listed here since there's nothing to check — their account-creation steps are on
+        the Publishing Todos list below (hover the ℹ️ items)."""
+        import os
+
+        while self.manuscript_connections_layout.count():
+            item = self.manuscript_connections_layout.takeAt(0)
+            w = item.widget()
+            if w:
+                w.deleteLater()
+
+        note = QLabel(
+            "API-key-based services only — KDP/Draft2Digital/IngramSpark/BookBub/social accounts "
+            "have no API to check; see the ℹ️ Publishing Todos below for those."
+        )
+        note.setWordWrap(True)
+        note.setStyleSheet("color: #777; font-size: 11px;")
+        self.manuscript_connections_layout.addWidget(note)
+
+        checks = [
+            ("PublishDrive", bool(os.environ.get("PUBLISHDRIVE_API_KEY", "").strip()),
+             "publishdrive.com → Settings → API", False),
+            ("ElevenLabs", bool(os.environ.get("ELEVENLABS_API_KEY", "").strip()),
+             "elevenlabs.io → Profile → API Keys", True),
+            ("Anthropic", self.anthropic.key_available(), "console.anthropic.com → API Keys", False),
+            ("OpenAI", self.openai.key_available(), "platform.openai.com → API Keys", False),
+            ("DeepSeek", self.deepseek.key_available(), "platform.deepseek.com → API Keys", False),
+            ("Gemini", self.gemini.key_available(), "aistudio.google.com → API Keys", False),
+        ]
+        for name, connected, where, optional in checks:
+            opt_tag = " (optional)" if optional else ""
+            if connected:
+                text = f"✅  {name}{opt_tag} — Connected"
+                color = "#3cff88"
+            else:
+                text = f"⚪  {name}{opt_tag} — Not connected · get a key at {where}"
+                color = "#999999"
+            row = QLabel(text)
+            row.setStyleSheet(f"color: {color}; font-size: 12px;")
+            self.manuscript_connections_layout.addWidget(row)
+
     def manuscript_refresh(self):
         """Fetch PublishDrive data and display summary."""
         from services.publishdrive_client import PublishDriveClient
@@ -7504,15 +8066,20 @@ class GodAI(QWidget):
         from services.database import DB_PATH
         conn = sqlite3.connect(DB_PATH)
         rows = conn.execute(
-            "SELECT id, title, status FROM manuscript_todos ORDER BY created_at DESC"
+            "SELECT id, title, status, platform, notes FROM manuscript_todos ORDER BY created_at DESC"
         ).fetchall()
         conn.close()
         self.manuscript_todo_list.clear()
-        for row_id, title, status in rows:
-            label = f"✅ {title}" if status == "done" else f"○ {title}"
-            item = QListWidgetItem(label)
+        for row_id, title, status, platform, notes in rows:
+            check = "✅" if status == "done" else "○"
+            tag = f"[{platform}] " if platform else ""
+            info = " ℹ️" if notes else ""
+            item = QListWidgetItem(f"{check} {tag}{title}{info}")
             item.setData(Qt.UserRole, row_id)
+            if notes:
+                item.setToolTip(notes)
             self.manuscript_todo_list.addItem(item)
+        self._refresh_next_step_tip()
 
     def manuscript_generate_quote_graphic(self):
         quote = self.quote_graphic_text.toPlainText().strip()
@@ -9234,14 +9801,7 @@ class GodAI(QWidget):
     def bb_load_models(self):
         provider = self.bb_provider_box.currentText()
         self.bb_model_box.clear()
-        try:
-            if provider == "ollama":
-                models = self.ollama.list_models()
-            else:
-                models = self.registry.get_models_for_provider(provider)
-        except Exception:
-            models = []
-        self.bb_model_box.addItems(models)
+        self.bb_model_box.addItems(self.models_for_provider(provider))
 
     def bb_run_nmap(self):
         cmd_text = self.bb_nmap_cmd_input.text().strip()
@@ -9434,22 +9994,13 @@ class GodAI(QWidget):
     def manager_load_models(self):
         provider = self.manager_provider_box.currentText()
         self.manager_model_box.clear()
-        if provider == "ollama":
-            try:
-                models = self.ollama.list_models()
-                self.manager_model_box.addItems(models if models else ["(no local models)"])
-            except Exception:
-                self.manager_model_box.addItems(["(ollama unavailable)"])
-        elif provider == "openai":
-            self.manager_model_box.addItems(["gpt-4o-mini", "gpt-4.1-mini", "gpt-4.1"])
-        elif provider == "deepseek":
-            self.manager_model_box.addItems(["deepseek-chat", "deepseek-reasoner"])
-        elif provider == "kimi":
-            self.manager_model_box.addItems(["kimi-k2.7-code", "kimi-k3"])
-        elif provider == "gemini":
-            self.manager_model_box.addItems(["gemini-1.5-flash", "gemini-1.5-pro"])
-        elif provider == "anthropic":
-            self.manager_model_box.addItems(["claude-sonnet-4-6", "claude-opus-4-6", "claude-haiku-4-5-20251001"])
+        models = self.models_for_provider(provider)
+        if models:
+            self.manager_model_box.addItems(models)
+        else:
+            self.manager_model_box.addItems(
+                ["(no local models)" if provider == "ollama" else "(unavailable)"]
+            )
 
     def manager_analyze_idea(self):
         idea = self.manager_idea_input.toPlainText().strip()
@@ -10131,7 +10682,10 @@ class GodAI(QWidget):
             from services.kdp_csv_parser import manuscript_seed_todos
             manuscript_seed_todos()
             self._load_manuscript_todos()
-        elif is_roi or is_health or is_author or is_music or is_nfl_bet or is_osint or is_osint_heavy or is_wifi or is_fiverr or is_webdesign or is_investment or is_bug_bounty:
+            self._refresh_next_step_tip()
+        elif is_author:
+            self._refresh_next_step_tip()
+        elif is_roi or is_health or is_music or is_nfl_bet or is_osint or is_osint_heavy or is_wifi or is_fiverr or is_webdesign or is_investment or is_bug_bounty:
             pass
         else:
             self.output_label.setText("Output")

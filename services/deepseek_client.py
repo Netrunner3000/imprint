@@ -3,6 +3,13 @@ from openai import OpenAI
 
 
 class DeepSeekClientWrapper:
+    # Offline fallback only. Ordered to match what the API currently serves —
+    # the older deepseek-chat / deepseek-reasoner ids are no longer offered.
+    KNOWN_MODELS = [
+        "deepseek-v4-flash",
+        "deepseek-v4-pro",
+    ]
+
     def __init__(self):
         self.api_key = os.getenv("DEEPSEEK_API_KEY")
         self.client = (
@@ -17,6 +24,21 @@ class DeepSeekClientWrapper:
     @staticmethod
     def key_available():
         return bool(os.getenv("DEEPSEEK_API_KEY"))
+
+    def list_models(self) -> list[str]:
+        """Available model ids, from the API when reachable.
+
+        Falls back to KNOWN_MODELS with no key or on any API error so the model
+        dropdowns are never left empty.
+        """
+        if not self.client:
+            return self.KNOWN_MODELS
+        try:
+            result = self.client.models.list()
+            models = sorted(m.id for m in result.data)
+            return models if models else self.KNOWN_MODELS
+        except Exception:
+            return self.KNOWN_MODELS
 
     def chat(self, messages, model="deepseek-chat"):
         if not self.client:
