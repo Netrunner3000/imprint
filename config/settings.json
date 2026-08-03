@@ -3,7 +3,7 @@
   "local_model_primary": "deepseek-r1:8b",
   "local_model_fallback": "deepseek-r1:1.5b",
   "cloud_model": "gpt-5",
-  "deepseek_model": "deepseek-chat",
+  "deepseek_model": "deepseek-v4-flash",
   "kimi_model": "kimi-k2.7-code",
   "gemini_model": "gemini-2.5-flash",
   "hybrid_cloud_target": "auto",

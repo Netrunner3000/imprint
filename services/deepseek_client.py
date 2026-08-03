@@ -40,7 +40,7 @@ class DeepSeekClientWrapper:
         except Exception:
             return self.KNOWN_MODELS
 
-    def chat(self, messages, model="deepseek-chat"):
+    def chat(self, messages, model="deepseek-v4-flash"):
         if not self.client:
             raise RuntimeError("DEEPSEEK_API_KEY is not set.")
 
@@ -59,11 +59,11 @@ class DeepSeekClientWrapper:
 
         return text, usage
 
-    def generate(self, prompt, model="deepseek-chat"):
+    def generate(self, prompt, model="deepseek-v4-flash"):
         messages = [{"role": "user", "content": prompt}]
         return self.chat(messages=messages, model=model)
     
-    def stream_chat(self, messages, model="deepseek-chat"):
+    def stream_chat(self, messages, model="deepseek-v4-flash"):
         if not self.client:
             raise RuntimeError("DEEPSEEK_API_KEY is not set.")
 

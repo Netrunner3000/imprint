@@ -411,7 +411,7 @@ class CollapsibleSection(QWidget):
     HEADER_STYLE = """
         QPushButton#CollapsibleHeader {
             text-align: left;
-            padding: 8px 10px;
+            padding: 4px 10px;
             background-color: transparent;
             border: none;
             color: #707070;
@@ -463,7 +463,11 @@ class CollapsibleSection(QWidget):
 
     def _update_header(self):
         arrow = "▾" if self._expanded else "▸"
-        self.header_btn.setText(f"  {arrow}   {self._title.upper()}")
+        # QPushButton reads "&" as a mnemonic marker, which silently turned
+        # "Finance & Business" into "FINANCE _BUSINESS". Double it to render a
+        # literal ampersand.
+        title = self._title.upper().replace("&", "&&")
+        self.header_btn.setText(f"  {arrow}   {title}")
         self.header_btn.setChecked(self._expanded)
 
 
@@ -1445,21 +1449,18 @@ class GodAI(QWidget):
 
         if backend == "ollama":
             self.live_estimate_label.setText(
-                f"Estimated Request Cost:\n"
-                f"FREE (local execution)\n"
+                f"Estimated Request Cost: FREE (local execution)\n"
                 f"{model} · ~{approx_tokens} tokens"
             )
         elif backend in {"openai", "deepseek", "kimi", "gemini"}:
             self.live_estimate_label.setText(
-                f"Estimated Request Cost:\n"
-                f"~€{estimated_cost:.2f}\n"
+                f"Estimated Request Cost: ~€{estimated_cost:.2f}\n"
                 f"{backend} · {model} · ~{approx_tokens} tokens\n"
                 f"⚠ Paid API"
             )
         else:
             self.live_estimate_label.setText(
-                f"Estimated Request Cost:\n"
-                f"~€{estimated_cost:.2f}\n"
+                f"Estimated Request Cost: ~€{estimated_cost:.2f}\n"
                 f"{backend} · {model} · ~{approx_tokens} tokens"
             )
 
@@ -2021,7 +2022,7 @@ class GodAI(QWidget):
         agents_container.setStyleSheet("background: transparent;")
         agents_layout = QVBoxLayout(agents_container)
         agents_layout.setContentsMargins(0, 0, 0, 0)
-        agents_layout.setSpacing(4)
+        agents_layout.setSpacing(2)
 
         icons = {
             "chat": "💬", "osint": "👹", "osint_heavy": "🔍",
@@ -2029,6 +2030,7 @@ class GodAI(QWidget):
             "health": "🏃", "author": "✍️", "webdesign": "🎨",
             "music": "🎵", "nfl_bet": "🏈", "wifi": "📡", "fiverr": "💼",
             "investment": "📊", "bug_bounty": "🐛", "ops_identity": "🪪",
+            "manuscript": "📚",
         }
         labels = {
             "chat": "Chat", "osint": "Trace", "osint_heavy": "Bloodhound",
@@ -2037,16 +2039,22 @@ class GodAI(QWidget):
             "music": "Maestro", "nfl_bet": "Playmaker", "wifi": "Beacon",
             "fiverr": "Atelier", "investment": "Oracle", "bug_bounty": "Bug Spray",
             "ops_identity": "Op Identity",
+            # Without this the sidebar fell back to name.capitalize() and showed a
+            # second "Manuscript" entry, colliding with the author agent. Every
+            # other surface (header title, registry) calls this one Publisher.
+            "manuscript": "Publisher",
         }
 
+        # Every section starts expanded — the sidebar is the main way in, so the
+        # full agent list should be visible on launch without a click.
         categories = [
             ("General",            ["chat"],                                                True),
             ("Finance & Business", ["roi", "investment", "nfl_bet", "fiverr"],             True),
             ("Research",           ["osint", "osint_heavy", "wifi"],                       True),
             ("Security",           ["bug_bounty"],                                         True),
-            ("Creative",           ["author", "manuscript", "music", "webdesign", "audiobook"],          False),
-            ("Wellness",           ["health"],                                              False),
-            ("System",             ["manager", "ops_identity"],                          False),
+            ("Creative",           ["author", "manuscript", "music", "webdesign", "audiobook"],          True),
+            ("Wellness",           ["health"],                                              True),
+            ("System",             ["manager", "ops_identity"],                           True),
         ]
 
         # Minimal sidebar row — clear separation via padding + hover fill
@@ -2243,7 +2251,7 @@ class GodAI(QWidget):
         self.agent_box.addItems(agent_items)
         self.agent_box.hide()
 
-        self.tool_label = QLabel("Tool")
+        self.tool_label = QLabel("Tool:")
         top_row_1.addWidget(self.tool_label)
 
         self.tool_box = QComboBox()
@@ -2252,7 +2260,7 @@ class GodAI(QWidget):
         self.tool_box.setMinimumWidth(140)
         top_row_1.addWidget(self.tool_box)
 
-        self.command_label = QLabel("Command")
+        self.command_label = QLabel("Command:")
         top_row_1.addWidget(self.command_label)
 
         self.command_box = QComboBox()
@@ -2367,9 +2375,12 @@ class GodAI(QWidget):
         self.recommend_setup_btn.clicked.connect(self.apply_recommended_setup)
         actions_row.addWidget(self.recommend_setup_btn)
 
+        # "Auto-Apply" modifies "Use Recommended", so it sits tight against it —
+        # then a gap before the unrelated cost/export buttons.
         self.auto_recommend_checkbox = QCheckBox("Auto-Apply")
         self.auto_recommend_checkbox.setChecked(False)
         actions_row.addWidget(self.auto_recommend_checkbox)
+        actions_row.addSpacing(10)
 
         self.estimate_btn = QPushButton("Estimate Cost")
         self.estimate_btn.setFixedHeight(32)
@@ -8750,7 +8761,7 @@ class GodAI(QWidget):
         cost_layout.setContentsMargins(10, 16, 10, 10)
         cost_layout.setSpacing(6)
 
-        self.live_estimate_label = QLabel("Estimated Request Cost:\n-")
+        self.live_estimate_label = QLabel("Estimated Request Cost: -")
         self.live_estimate_label.setWordWrap(True)
         cost_layout.addWidget(self.live_estimate_label)
 
@@ -9232,7 +9243,13 @@ class GodAI(QWidget):
         /* ── Checkboxes ────────────────────────────────────────────── */
         QCheckBox {
             color: #c0c0c0;
-            spacing: 8px;
+            spacing: 8px;        /* indicator → its own label */
+            /* Trailing room so a checkbox's label never butts straight into the
+               next widget (another checkbox's indicator, or a button). Must be
+               padding, not margin: Qt ignores margin here, and the macOS style
+               eats ~11px of any layout spacing we'd set instead. Global, so
+               every agent tab gets it. */
+            padding-right: 14px;
         }
         QCheckBox::indicator {
             width: 16px;
