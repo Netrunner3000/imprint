@@ -1,5 +1,7 @@
 # GOD_AI — Sentinel AI Documentation
 
+
+![Screenshot](docs/screenshot.png)
 **Version:** 1.0  
 **Stack:** Python 3.11+ · PySide6 · SQLite · Ollama · OpenAI · DeepSeek · Gemini
 
