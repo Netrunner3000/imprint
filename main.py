@@ -64,7 +64,6 @@ from agents.writing_agent import WritingAgent
 from agents.coding_agent import CodingAgent
 from agents.osint_agent import OSINTAgent
 from agents.manager_agent import ManagerAgent
-from agents.roi_agent import ROIAgent
 from agents.health_agent import HealthAgent
 from agents.author_agent import AuthorAgent
 from agents.manuscript_agent import ManuscriptAgent
@@ -76,7 +75,6 @@ from agents.nfl_stats_parser import parse_game_log, compute_stats, format_comput
 from agents.wifi_agent import WiFiAgent, KNOWN_ADAPTERS, detect_usb_adapters, build_kali_commands, AIRPORT
 from agents.osint_heavy_agent import OsintHeavyAgent
 from agents.fiverr_agent import FiverrAgent
-from agents.investment_agent import InvestmentAgent
 from services.agent_factory import AgentFactory
 
 
@@ -128,15 +126,6 @@ AGENT_RECOMMENDATIONS = {
         "provider": "anthropic", "model": "claude-sonnet-5",
         "reason": "Vulnerability triage plus a readable HackerOne write-up — Sonnet "
                   "handles both the security reasoning and the report prose.",
-    },
-    "roi": {
-        "provider": "anthropic", "model": "claude-sonnet-5",
-        "reason": "Structured financial reasoning with consistent numeric tables.",
-    },
-    "investment": {
-        "provider": "anthropic", "model": "claude-opus-5",
-        "reason": "Long-horizon macro + technical + fundamental synthesis is the "
-                  "deepest reasoning task in the app, and it runs infrequently.",
     },
     "nfl_bet": {
         "provider": "anthropic", "model": "claude-sonnet-5",
@@ -191,8 +180,6 @@ AGENT_SETUP_WIDGETS = {
     "osint_heavy": ("osint_heavy_provider_box", "osint_heavy_model_box"),
     "wifi":        ("wifi_provider_box",        "wifi_model_box"),
     "bug_bounty":  ("bb_provider_box",          "bb_model_box"),
-    "roi":         ("roi_provider_box",         "roi_model_box"),
-    "investment":  ("inv_provider_box",         "inv_model_box"),
     "nfl_bet":     ("nfl_bet_provider_box",     "nfl_bet_model_box"),
     "fiverr":      ("fiverr_provider_box",      "fiverr_model_box"),
     "health":      ("health_provider_box",      "health_model_box"),
@@ -212,8 +199,6 @@ AGENT_MODEL_LOADERS = {
     "osint_heavy": "osint_heavy_load_models",
     "wifi":        "wifi_load_models",
     "bug_bounty":  "bb_load_models",
-    "roi":         "roi_load_models",
-    "investment":  "inv_load_models",
     "nfl_bet":     "nfl_bet_load_models",
     "fiverr":      "fiverr_load_models",
     "health":      "health_load_models",
@@ -226,8 +211,8 @@ AGENT_MODEL_LOADERS = {
 
 AGENT_PRETTY_NAMES = {
     "chat": "Chat", "osint": "Trace", "osint_heavy": "Bloodhound",
-    "wifi": "Beacon", "bug_bounty": "Bug Spray", "roi": "Quick ROI",
-    "investment": "Oracle", "nfl_bet": "Playmaker", "fiverr": "Atelier",
+    "wifi": "Beacon", "bug_bounty": "Bug Spray",
+    "nfl_bet": "Playmaker", "fiverr": "Atelier",
     "health": "Vitality", "author": "Manuscript", "manuscript": "Publisher",
     "music": "Maestro", "webdesign": "Site Builder", "audiobook": "Narrator",
     "manager": "Forge", "ops_identity": "Op Identity",
@@ -518,8 +503,6 @@ class GodAI(QWidget):
         self.agent_factory = AgentFactory(BASE_DIR)
         self.pending_spec: dict | None = None
         self.manager_worker: Optional[ChatWorker] = None
-        self.roi_worker: Optional[ChatWorker] = None
-        self._last_roi_response: str = ""
         self.health_worker: Optional[ChatWorker] = None
         self._last_health_response: str = ""
         self.author_worker: Optional[ChatWorker] = None
@@ -563,7 +546,6 @@ class GodAI(QWidget):
             "writing": WritingAgent(),
             "coding": CodingAgent(),
             "osint": OSINTAgent(),
-            "roi": ROIAgent(),
             "health": HealthAgent(),
             "author": AuthorAgent(),
             "webdesign": WebdesignAgent(),
@@ -573,7 +555,6 @@ class GodAI(QWidget):
             "wifi": WiFiAgent(),
             "osint_heavy": OsintHeavyAgent(),
             "fiverr": FiverrAgent(),
-            "investment": InvestmentAgent(),
             "manuscript": ManuscriptAgent(),
         }
 
@@ -697,8 +678,6 @@ class GodAI(QWidget):
             "osint_heavy": "Deep OSINT investigation with five-section dossier.",
             "wifi":        "Wireless recon, signal analysis, Kali command generation.",
             "bug_bounty":  "Vulnerability triage + HackerOne-ready submission drafts.",
-            "roi":         "Short-to-medium term financial opportunity analysis.",
-            "investment":  "Longer-horizon market analysis with price targets.",
             "nfl_bet":     "NFL prop bet analysis with EV and projection modelling.",
             "fiverr":      "Logo gigs — DALL·E prompts, gig descriptions, delivery messages.",
             "health":      "Nutrition, fitness, mental wellness guidance.",
@@ -747,43 +726,7 @@ class GodAI(QWidget):
         })
 
         # ── Per-agent panel tooltips ─────────────────────────────────────
-        # Quick ROI
-        self._set_tooltips({
-            "roi_ticker_input":      "The asset identifier: ticker symbol, crypto code, currency pair, etc.",
-            "roi_asset_type_box":    "Market category. Affects the framing of the analysis.",
-            "roi_timeframe_box":     "How long you intend to hold the position.",
-            "roi_risk_box":          "Your risk appetite. Drives stop-loss width and position sizing.",
-            "roi_capital_input":     "Capital available for this position in euros (optional).",
-            "roi_context_input":     "Optional notes — chart pattern, recent news, thesis, key levels.",
-            "roi_provider_box":      "Which provider to run the analysis on. Claude Sonnet / Opus give the best structured output.",
-            "roi_model_box":         "Specific model.",
-            "roi_analyse_btn":       "Run the five-section ROI analysis.",
-            "roi_stop_btn":          "Cancel the analysis.",
-            "roi_help_btn":          "Open the Quick ROI documentation section.",
-            "roi_save_btn":          "Save the full analysis to a .txt file.",
-            "roi_clear_btn":         "Clear the form and the results.",
-            "roi_risk_bar":          "Risk Level on a 0–10 scale, derived from your tolerance and the model's confidence.",
-            "roi_return_label":      "Expected ROI range parsed from the analysis (e.g. 12–28%).",
-            "roi_rr_label":          "Risk-to-Reward ratio — 1:3 or better is considered favourable.",
-            "roi_conf_label":        "Model's stated confidence: Low / Medium / High.",
-        })
 
-        # Investment (Oracle)
-        self._set_tooltips({
-            "inv_ticker_input":   "Asset / ticker / market (e.g. NVDA, BTC, S&P 500).",
-            "inv_market_box":     "Asset class — affects which fundamentals (if any) are analysed.",
-            "inv_type_box":       "Analysis lens: Combined, Technical, Fundamental, or Macro-only.",
-            "inv_horizon_box":    "Analysis horizon — how far out the projection looks.",
-            "inv_context_input":  "Optional context — your thesis, focus areas, concerns.",
-            "inv_provider_box":   "Provider for the analysis call.",
-            "inv_model_box":      "Specific model.",
-            "inv_analyse_btn":    "Run the six-section market analysis with price targets.",
-            "inv_stop_btn":       "Cancel the analysis.",
-            "inv_save_btn":       "Save the full analysis to a .txt file.",
-            "inv_clear_btn":      "Clear the form and the results.",
-            "inv_risk_bar":       "Risk level for this market analysis (0–10).",
-            "inv_direction_label":"Predicted directional move: UP / DOWN / SIDEWAYS.",
-        })
 
         # NFL Props (Playmaker)
         self._set_tooltips({
@@ -1615,15 +1558,6 @@ class GodAI(QWidget):
                 "reason": "Audiobook conversion uses OpenAI TTS only."
             }
 
-        if agent == "roi":
-            if self.allow_anthropic_checkbox.isChecked():
-                return {"mode": "Hybrid allowed", "provider": "anthropic", "model": "claude-sonnet-4-6", "reason": "ROI analysis; Claude Sonnet excels at structured financial reasoning."}
-            if self.allow_deepseek_checkbox.isChecked():
-                return {"mode": "Hybrid allowed", "provider": "deepseek", "model": "deepseek-chat", "reason": "ROI analysis; DeepSeek is strong for structured analytical output."}
-            if self.allow_openai_checkbox.isChecked():
-                return {"mode": "Hybrid allowed", "provider": "openai", "model": "gpt-4o-mini", "reason": "ROI analysis; OpenAI is reliable for financial reasoning."}
-            return {"mode": "Local only", "provider": "ollama", "model": self.model_box.currentText(), "reason": "ROI analysis works best with a cloud model, but running locally."}
-
         if agent == "nfl_bet":
             if self.allow_anthropic_checkbox.isChecked():
                 return {"mode": "Hybrid allowed", "provider": "anthropic", "model": "claude-sonnet-4-6", "reason": "NFL props; Claude Sonnet handles structured sports data analysis well."}
@@ -2027,18 +1961,18 @@ class GodAI(QWidget):
 
         icons = {
             "chat": "💬", "osint": "👹", "osint_heavy": "🔍",
-            "audiobook": "🎧", "manager": "🏗", "roi": "📈",
+            "audiobook": "🎧", "manager": "🏗",
             "health": "🏃", "author": "✍️", "webdesign": "🎨",
             "music": "🎵", "nfl_bet": "🏈", "wifi": "📡", "fiverr": "💼",
-            "investment": "📊", "bug_bounty": "🐛", "ops_identity": "🪪",
+            "bug_bounty": "🐛", "ops_identity": "🪪",
             "manuscript": "📚",
         }
         labels = {
             "chat": "Chat", "osint": "Trace", "osint_heavy": "Bloodhound",
-            "audiobook": "Narrator", "manager": "Forge", "roi": "Quick ROI",
+            "audiobook": "Narrator", "manager": "Forge",
             "health": "Vitality", "author": "Manuscript", "webdesign": "Site Builder",
             "music": "Maestro", "nfl_bet": "Playmaker", "wifi": "Beacon",
-            "fiverr": "Atelier", "investment": "Oracle", "bug_bounty": "Bug Spray",
+            "fiverr": "Atelier", "bug_bounty": "Bug Spray",
             "ops_identity": "Op Identity",
             # Without this the sidebar fell back to name.capitalize() and showed a
             # second "Manuscript" entry, colliding with the author agent. Every
@@ -2050,7 +1984,7 @@ class GodAI(QWidget):
         # and you open the one you want.
         categories = [
             ("General",            ["chat"],                                                False),
-            ("Finance & Business", ["roi", "investment", "nfl_bet", "fiverr"],             False),
+            ("Finance & Business", ["nfl_bet", "fiverr"],                                 False),
             ("Research",           ["osint", "osint_heavy", "wifi"],                       False),
             ("Security",           ["bug_bounty"],                                         False),
             ("Creative",           ["author", "manuscript", "music", "webdesign", "audiobook"],         False),
@@ -2246,7 +2180,7 @@ class GodAI(QWidget):
 
         self.agent_box = QComboBox()
         agent_items = self.agents_config.get("agents", [])
-        for extra in ("manager", "roi", "author"):
+        for extra in ("manager", "author"):
             if extra not in agent_items:
                 agent_items = list(agent_items) + [extra]
         self.agent_box.addItems(agent_items)
@@ -2454,8 +2388,6 @@ class GodAI(QWidget):
         self.build_manager_panel()
         center_layout.addWidget(self.manager_panel)
 
-        self.build_roi_panel()
-        center_layout.addWidget(self.roi_panel)
 
         self.build_health_panel()
         center_layout.addWidget(self.health_panel)
@@ -2490,8 +2422,6 @@ class GodAI(QWidget):
         self.build_bug_bounty_panel()
         center_layout.addWidget(self.bug_bounty_panel)
 
-        self.build_investment_panel()
-        center_layout.addWidget(self.investment_panel)
 
         self.build_ops_identity_panel()
         center_layout.addWidget(self.ops_identity_panel)
@@ -2722,182 +2652,6 @@ class GodAI(QWidget):
         self.manager_provider_box.currentTextChanged.connect(self.manager_load_models)
         self.manager_load_models()
 
-    # ── ROI Agent Panel ──────────────────────────────────────────────────────
-    def build_roi_panel(self):
-        self.roi_panel = QWidget()
-        self.roi_panel.setObjectName("ROIPanel")
-        layout = QVBoxLayout(self.roi_panel)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(10)
-
-        # ── Quick Setup ──────────────────────────────────────────────
-        setup_group = QGroupBox("Quick Setup")
-        setup_group.setObjectName("ROISetupBox")
-        setup_layout = QGridLayout(setup_group)
-        setup_layout.setSpacing(6)
-
-        setup_layout.addWidget(QLabel("Ticker / Asset:"), 0, 0)
-        self.roi_ticker_input = QLineEdit()
-        self.roi_ticker_input.setPlaceholderText("e.g. AAPL, BTC, EUR/USD")
-        setup_layout.addWidget(self.roi_ticker_input, 0, 1, 1, 3)
-
-        setup_layout.addWidget(QLabel("Asset Type:"), 1, 0)
-        self.roi_asset_type_box = QComboBox()
-        self.roi_asset_type_box.addItems(["Stock", "Crypto", "Options", "Forex", "ETF", "Commodity", "Other"])
-        setup_layout.addWidget(self.roi_asset_type_box, 1, 1)
-
-        setup_layout.addWidget(QLabel("Timeframe:"), 1, 2)
-        self.roi_timeframe_box = QComboBox()
-        self.roi_timeframe_box.addItems(["Short (<2 weeks)", "Medium (2–8 weeks)", "Long (2–6 months)"])
-        setup_layout.addWidget(self.roi_timeframe_box, 1, 3)
-
-        setup_layout.addWidget(QLabel("Risk Tolerance:"), 2, 0)
-        self.roi_risk_box = QComboBox()
-        self.roi_risk_box.addItems(["Conservative", "Moderate", "Aggressive"])
-        self.roi_risk_box.setCurrentText("Moderate")
-        setup_layout.addWidget(self.roi_risk_box, 2, 1)
-
-        setup_layout.addWidget(QLabel("Capital (€):"), 2, 2)
-        self.roi_capital_input = QLineEdit()
-        self.roi_capital_input.setPlaceholderText("e.g. 5000")
-        setup_layout.addWidget(self.roi_capital_input, 2, 3)
-
-        setup_layout.addWidget(QLabel("Context / Notes:"), 3, 0)
-        self.roi_context_input = QTextEdit()
-        self.roi_context_input.setPlaceholderText(
-            "Optional: price levels, recent news, thesis, chart pattern, etc."
-        )
-        self.roi_context_input.setFixedHeight(60)
-        setup_layout.addWidget(self.roi_context_input, 3, 1, 1, 3)
-
-        provider_row = QHBoxLayout()
-        provider_row.addWidget(QLabel("Provider:"))
-        self.roi_provider_box = QComboBox()
-        self.roi_provider_box.addItems(["ollama", "openai", "deepseek", "kimi", "gemini", "anthropic"])
-        self.roi_provider_box.setCurrentText("anthropic")
-        provider_row.addWidget(self.roi_provider_box)
-
-        provider_row.addWidget(QLabel("Model:"))
-        self.roi_model_box = QComboBox()
-        self.roi_model_box.setMinimumWidth(200)
-        provider_row.addWidget(self.roi_model_box)
-
-        provider_row.addStretch()
-
-        self.roi_analyse_btn = QPushButton("Analyse")
-        self.roi_analyse_btn.setMinimumWidth(130)
-        self.roi_analyse_btn.setObjectName("PrimaryAction")
-        self.roi_analyse_btn.clicked.connect(self.roi_analyse)
-        provider_row.addWidget(self.roi_analyse_btn)
-
-        self.roi_stop_btn = QPushButton("Stop")
-        self.roi_stop_btn.setEnabled(False)
-        self.roi_stop_btn.setObjectName("DangerAction")
-        self.roi_stop_btn.clicked.connect(self.roi_stop)
-        provider_row.addWidget(self.roi_stop_btn)
-
-        self.roi_help_btn = QPushButton("Help")
-
-
-        self.roi_help_btn.setObjectName("ChipBtn")
-        self.roi_help_btn.setToolTip("Open ROI Agent documentation")
-        self.roi_help_btn.clicked.connect(self.show_agent_docs)
-        provider_row.addWidget(self.roi_help_btn)
-
-        setup_layout.addLayout(provider_row, 4, 0, 1, 4)
-        layout.addWidget(setup_group)
-
-        # ── Results splitter: tabs left, indicators right ────────────
-        results_splitter = QSplitter(Qt.Horizontal)
-
-        # Tabs
-        self.roi_tabs = QTabWidget()
-        self.roi_summary_box = QTextBrowser()
-        self.roi_summary_box.setOpenExternalLinks(False)
-        self.roi_tabs.addTab(self.roi_summary_box, "Summary")
-
-        self.roi_bull_bear_box = QTextBrowser()
-        self.roi_tabs.addTab(self.roi_bull_bear_box, "Bull / Bear")
-
-        self.roi_details_box = QTextBrowser()
-        self.roi_tabs.addTab(self.roi_details_box, "ROI Details")
-
-        self.roi_recommendation_box = QTextBrowser()
-        self.roi_tabs.addTab(self.roi_recommendation_box, "Recommendation")
-
-        results_splitter.addWidget(self.roi_tabs)
-
-        # Indicators panel
-        indicators_widget = QWidget()
-        indicators_layout = QVBoxLayout(indicators_widget)
-        indicators_layout.setContentsMargins(8, 0, 0, 0)
-        indicators_layout.setSpacing(10)
-
-        risk_group = QGroupBox("Risk Level")
-        risk_group.setObjectName("ROIRiskBox")
-        risk_layout = QVBoxLayout(risk_group)
-        self.roi_risk_bar = QProgressBar()
-        self.roi_risk_bar.setRange(0, 10)
-        self.roi_risk_bar.setValue(0)
-        self.roi_risk_bar.setTextVisible(False)
-        self.roi_risk_bar.setFixedHeight(16)
-        risk_layout.addWidget(self.roi_risk_bar)
-        self.roi_risk_value_label = QLabel("—")
-        self.roi_risk_value_label.setAlignment(Qt.AlignCenter)
-        risk_layout.addWidget(self.roi_risk_value_label)
-        indicators_layout.addWidget(risk_group)
-
-        return_group = QGroupBox("Expected ROI")
-        return_group.setObjectName("ROIReturnBox")
-        return_layout = QVBoxLayout(return_group)
-        self.roi_return_label = QLabel("—")
-        self.roi_return_label.setAlignment(Qt.AlignCenter)
-        self.roi_return_label.setStyleSheet("font-size: 20px; font-weight: bold; color: #3cff88;")
-        return_layout.addWidget(self.roi_return_label)
-        indicators_layout.addWidget(return_group)
-
-        rr_group = QGroupBox("Risk : Reward")
-        rr_group.setObjectName("ROIRRBox")
-        rr_layout = QVBoxLayout(rr_group)
-        self.roi_rr_label = QLabel("—")
-        self.roi_rr_label.setAlignment(Qt.AlignCenter)
-        self.roi_rr_label.setStyleSheet("font-size: 18px; font-weight: bold; color: #4db8ff;")
-        rr_layout.addWidget(self.roi_rr_label)
-        indicators_layout.addWidget(rr_group)
-
-        conf_group = QGroupBox("Confidence")
-        conf_group.setObjectName("ROIConfBox")
-        conf_layout = QVBoxLayout(conf_group)
-        self.roi_conf_label = QLabel("—")
-        self.roi_conf_label.setAlignment(Qt.AlignCenter)
-        self.roi_conf_label.setStyleSheet("font-size: 16px; font-weight: bold;")
-        conf_layout.addWidget(self.roi_conf_label)
-        indicators_layout.addWidget(conf_group)
-
-        indicators_layout.addStretch()
-
-        self.roi_save_btn = QPushButton("Save Analysis")
-        self.roi_save_btn.setEnabled(False)
-        self.roi_save_btn.clicked.connect(self.roi_save)
-        indicators_layout.addWidget(self.roi_save_btn)
-
-        self.roi_clear_btn = QPushButton("Clear")
-        self.roi_clear_btn.clicked.connect(self.roi_clear)
-        indicators_layout.addWidget(self.roi_clear_btn)
-
-        results_splitter.addWidget(indicators_widget)
-        results_splitter.setSizes([680, 220])
-
-        layout.addWidget(results_splitter, 1)
-
-        self.roi_status_label = QLabel("")
-        self.roi_status_label.setStyleSheet("font-size: 12px; color: #888;")
-        layout.addWidget(self.roi_status_label)
-
-        self.roi_panel.hide()
-
-        self.roi_provider_box.currentTextChanged.connect(self.roi_load_models)
-        self.roi_load_models()
 
     def build_health_panel(self):
         self.health_panel = QWidget()
@@ -5105,185 +4859,6 @@ class GodAI(QWidget):
         self.webdesign_provider_box.currentTextChanged.connect(self.webdesign_load_models)
         self.webdesign_load_models()
 
-    # ── Predictive Investment Agent panel ────────────────────────────────────
-    def build_investment_panel(self):
-        self.investment_panel = QWidget()
-        self.investment_panel.setObjectName("InvestmentPanel")
-        layout = QVBoxLayout(self.investment_panel)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(10)
-
-        # ── Setup ────────────────────────────────────────────────────────────
-        setup_group = QGroupBox("Market Analysis Setup")
-        setup_group.setObjectName("InvestmentSetupBox")
-        setup_layout = QGridLayout(setup_group)
-        setup_layout.setSpacing(6)
-
-        setup_layout.addWidget(QLabel("Ticker / Asset:"), 0, 0)
-        self.inv_ticker_input = QLineEdit()
-        self.inv_ticker_input.setPlaceholderText("e.g. NVDA, BTC, EUR/USD, S&P 500")
-        setup_layout.addWidget(self.inv_ticker_input, 0, 1, 1, 3)
-
-        setup_layout.addWidget(QLabel("Market:"), 1, 0)
-        self.inv_market_box = QComboBox()
-        self.inv_market_box.addItems(["Equities", "Crypto", "Forex", "Commodities", "ETF / Index", "Fixed Income", "Other"])
-        setup_layout.addWidget(self.inv_market_box, 1, 1)
-
-        setup_layout.addWidget(QLabel("Analysis Type:"), 1, 2)
-        self.inv_type_box = QComboBox()
-        self.inv_type_box.addItems(["Combined", "Technical", "Fundamental", "Macro"])
-        setup_layout.addWidget(self.inv_type_box, 1, 3)
-
-        setup_layout.addWidget(QLabel("Horizon:"), 2, 0)
-        self.inv_horizon_box = QComboBox()
-        self.inv_horizon_box.addItems(["1 Week", "1 Month", "3 Months", "6 Months", "1 Year"])
-        self.inv_horizon_box.setCurrentText("1 Month")
-        setup_layout.addWidget(self.inv_horizon_box, 2, 1)
-
-        setup_layout.addWidget(QLabel("Capital (€):"), 2, 2)
-        self.inv_capital_input = QLineEdit()
-        self.inv_capital_input.setPlaceholderText("Optional — e.g. 10000")
-        setup_layout.addWidget(self.inv_capital_input, 2, 3)
-
-        setup_layout.addWidget(QLabel("Thesis / Context:"), 3, 0)
-        self.inv_context_input = QTextEdit()
-        self.inv_context_input.setPlaceholderText(
-            "Optional: macro view, price levels, recent news, catalyst, sector thesis…"
-        )
-        self.inv_context_input.setFixedHeight(56)
-        setup_layout.addWidget(self.inv_context_input, 3, 1, 1, 3)
-
-        provider_row = QHBoxLayout()
-        provider_row.addWidget(QLabel("Provider:"))
-        self.inv_provider_box = QComboBox()
-        self.inv_provider_box.addItems(["ollama", "openai", "deepseek", "kimi", "gemini", "anthropic"])
-        self.inv_provider_box.setCurrentText("anthropic")
-        provider_row.addWidget(self.inv_provider_box)
-
-        provider_row.addWidget(QLabel("Model:"))
-        self.inv_model_box = QComboBox()
-        self.inv_model_box.setMinimumWidth(200)
-        provider_row.addWidget(self.inv_model_box)
-
-        provider_row.addStretch()
-
-        self.inv_analyse_btn = QPushButton("Analyse")
-        self.inv_analyse_btn.setMinimumWidth(130)
-        self.inv_analyse_btn.setObjectName("PrimaryAction")
-        self.inv_analyse_btn.clicked.connect(self.inv_analyse)
-        provider_row.addWidget(self.inv_analyse_btn)
-
-        self.inv_stop_btn = QPushButton("Stop")
-        self.inv_stop_btn.setEnabled(False)
-        self.inv_stop_btn.setObjectName("DangerAction")
-        self.inv_stop_btn.clicked.connect(self.inv_stop)
-        provider_row.addWidget(self.inv_stop_btn)
-
-        setup_layout.addLayout(provider_row, 4, 0, 1, 4)
-        layout.addWidget(setup_group)
-
-        # ── Results splitter: tabs left, indicators right ─────────────────────
-        results_splitter = QSplitter(Qt.Horizontal)
-
-        self.inv_tabs = QTabWidget()
-
-        self.inv_overview_box = QTextBrowser()
-        self.inv_tabs.addTab(self.inv_overview_box, "Overview")
-
-        self.inv_technicals_box = QTextBrowser()
-        self.inv_tabs.addTab(self.inv_technicals_box, "Technicals")
-
-        self.inv_macro_box = QTextBrowser()
-        self.inv_tabs.addTab(self.inv_macro_box, "Macro & Sector")
-
-        self.inv_targets_box = QTextBrowser()
-        self.inv_tabs.addTab(self.inv_targets_box, "Price Targets")
-
-        results_splitter.addWidget(self.inv_tabs)
-
-        # Indicators sidebar
-        indicators_widget = QWidget()
-        ind_layout = QVBoxLayout(indicators_widget)
-        ind_layout.setContentsMargins(8, 0, 0, 0)
-        ind_layout.setSpacing(10)
-
-        sent_group = QGroupBox("Market Sentiment")
-        sent_group.setObjectName("InvSentBox")
-        sent_layout = QVBoxLayout(sent_group)
-        self.inv_sentiment_label = QLabel("—")
-        self.inv_sentiment_label.setAlignment(Qt.AlignCenter)
-        self.inv_sentiment_label.setStyleSheet("font-size: 18px; font-weight: bold;")
-        sent_layout.addWidget(self.inv_sentiment_label)
-        ind_layout.addWidget(sent_group)
-
-        direction_group = QGroupBox("Predicted Move")
-        direction_group.setObjectName("InvDirBox")
-        dir_layout = QVBoxLayout(direction_group)
-        self.inv_direction_label = QLabel("—")
-        self.inv_direction_label.setAlignment(Qt.AlignCenter)
-        self.inv_direction_label.setStyleSheet("font-size: 20px; font-weight: bold; color: #4db8ff;")
-        dir_layout.addWidget(self.inv_direction_label)
-        self.inv_change_label = QLabel("—")
-        self.inv_change_label.setAlignment(Qt.AlignCenter)
-        self.inv_change_label.setStyleSheet("font-size: 14px; color: #aaa;")
-        dir_layout.addWidget(self.inv_change_label)
-        ind_layout.addWidget(direction_group)
-
-        conv_group = QGroupBox("Conviction")
-        conv_group.setObjectName("InvConvBox")
-        conv_layout = QVBoxLayout(conv_group)
-        self.inv_conviction_label = QLabel("—")
-        self.inv_conviction_label.setAlignment(Qt.AlignCenter)
-        self.inv_conviction_label.setStyleSheet("font-size: 16px; font-weight: bold;")
-        conv_layout.addWidget(self.inv_conviction_label)
-        ind_layout.addWidget(conv_group)
-
-        risk_group = QGroupBox("Risk Level")
-        risk_group.setObjectName("InvRiskBox")
-        risk_layout = QVBoxLayout(risk_group)
-        self.inv_risk_bar = QProgressBar()
-        self.inv_risk_bar.setRange(0, 10)
-        self.inv_risk_bar.setValue(0)
-        self.inv_risk_bar.setTextVisible(False)
-        self.inv_risk_bar.setFixedHeight(16)
-        risk_layout.addWidget(self.inv_risk_bar)
-        self.inv_risk_label = QLabel("—")
-        self.inv_risk_label.setAlignment(Qt.AlignCenter)
-        risk_layout.addWidget(self.inv_risk_label)
-        ind_layout.addWidget(risk_group)
-
-        ind_layout.addStretch()
-
-        self.inv_save_btn = QPushButton("Save Analysis")
-        self.inv_save_btn.setEnabled(False)
-        self.inv_save_btn.clicked.connect(self.inv_save)
-        ind_layout.addWidget(self.inv_save_btn)
-
-        self.inv_clear_btn = QPushButton("Clear")
-        self.inv_clear_btn.clicked.connect(self.inv_clear)
-        ind_layout.addWidget(self.inv_clear_btn)
-
-        results_splitter.addWidget(indicators_widget)
-        results_splitter.setSizes([680, 220])
-
-        layout.addWidget(results_splitter, 1)
-
-        disclaimer = QLabel(
-            "⚠️ For informational and research purposes only. Not financial advice. "
-            "Always conduct independent due diligence before acting on this analysis."
-        )
-        disclaimer.setWordWrap(True)
-        disclaimer.setStyleSheet("font-size: 11px; color: #888; padding: 4px 0;")
-        layout.addWidget(disclaimer)
-
-        self.inv_status_label = QLabel("")
-        self.inv_status_label.setStyleSheet("font-size: 12px; color: #888;")
-        layout.addWidget(self.inv_status_label)
-
-        self.investment_panel.hide()
-
-        self.inv_provider_box.currentTextChanged.connect(self.inv_load_models)
-        self.inv_load_models()
 
     # ── Wi-Fi Adapter panel ──────────────────────────────────────────────────
     def build_wifi_panel(self):
@@ -6664,169 +6239,6 @@ class GodAI(QWidget):
             if item.widget():
                 item.widget().deleteLater()
 
-    # ── ROI handlers ────────────────────────────────────────────────────────
-    def roi_load_models(self):
-        provider = self.roi_provider_box.currentText()
-        self.roi_model_box.clear()
-        try:
-            if provider == "ollama":
-                models = self.ollama.list_models()
-            elif provider == "openai":
-                models = self.openai.list_models()
-            elif provider == "deepseek":
-                models = self.deepseek.list_models()
-            elif provider == "kimi":
-                models = self.kimi.list_models()
-            elif provider == "gemini":
-                models = self.gemini.list_models()
-            elif provider == "anthropic":
-                models = self.anthropic.list_models()
-            else:
-                models = []
-            for m in models:
-                self.roi_model_box.addItem(m)
-        except Exception:
-            pass
-
-    def roi_analyse(self):
-        ticker = self.roi_ticker_input.text().strip()
-        asset_type = self.roi_asset_type_box.currentText()
-        timeframe = self.roi_timeframe_box.currentText()
-        risk = self.roi_risk_box.currentText()
-        capital = self.roi_capital_input.text().strip()
-        context = self.roi_context_input.toPlainText().strip()
-        provider = self.roi_provider_box.currentText()
-        model = self.roi_model_box.currentText()
-
-        if not ticker:
-            QMessageBox.warning(self, "Missing Input", "Please enter a ticker or asset name.")
-            return
-        if not model:
-            QMessageBox.warning(self, "No Model", "Please select a model.")
-            return
-
-        prompt_parts = [
-            f"Asset: {ticker} ({asset_type})",
-            f"Timeframe: {timeframe}",
-            f"Risk tolerance: {risk}",
-        ]
-        if capital:
-            prompt_parts.append(f"Available capital: €{capital}")
-        if context:
-            prompt_parts.append(f"Additional context: {context}")
-
-        prompt = "\n".join(prompt_parts)
-
-        agent = self.agent_instances["roi"]
-        messages = agent.build_messages(prompt)
-
-        self._roi_clear_displays()
-        self._last_roi_response = ""
-        self.roi_status_label.setText("Analysing...")
-        self.roi_analyse_btn.setEnabled(False)
-        self.roi_stop_btn.setEnabled(True)
-        self.roi_save_btn.setEnabled(False)
-
-        self.roi_worker = ChatWorker(self.run_backend, provider, model, messages, prompt)
-        self.roi_worker.token_signal.connect(self._roi_on_token)
-        self.roi_worker.finished_signal.connect(self._roi_on_finished)
-        self.roi_worker.error_signal.connect(self._roi_on_error)
-        self.roi_worker.start()
-
-    def _roi_on_token(self, token: str):
-        self._last_roi_response += token
-        self.roi_summary_box.setPlainText(self._last_roi_response)
-        self.roi_summary_box.moveCursor(QTextCursor.End)
-
-    def _roi_on_finished(self, full_response: str):
-        self._last_roi_response = full_response
-        self._populate_roi_tabs(full_response)
-        self._update_roi_indicators(full_response)
-        self.roi_status_label.setText("Analysis complete.")
-        self.roi_analyse_btn.setEnabled(True)
-        self.roi_stop_btn.setEnabled(False)
-        self.roi_save_btn.setEnabled(True)
-
-    def _roi_on_error(self, error: str):
-        self.roi_summary_box.setPlainText(f"[Error] {error}")
-        self.roi_status_label.setText("Error.")
-        self.roi_analyse_btn.setEnabled(True)
-        self.roi_stop_btn.setEnabled(False)
-
-    def roi_stop(self):
-        if self.roi_worker is not None and self.roi_worker.isRunning():
-            self.roi_worker.cancel()
-        self.roi_status_label.setText("Stopped.")
-        self.roi_analyse_btn.setEnabled(True)
-        self.roi_stop_btn.setEnabled(False)
-
-    def roi_save(self):
-        if not self._last_roi_response:
-            return
-        ticker = self.roi_ticker_input.text().strip() or "analysis"
-        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-        default_name = f"roi_{ticker}_{ts}.txt"
-        path, _ = QFileDialog.getSaveFileName(
-            self, "Save ROI Analysis", str(DATA_DIR / default_name), "Text files (*.txt);;All files (*)"
-        )
-        if path:
-            Path(path).write_text(self._last_roi_response, encoding="utf-8")
-            self.roi_status_label.setText(f"Saved to {Path(path).name}")
-
-    def roi_clear(self):
-        self._roi_clear_displays()
-        self.roi_ticker_input.clear()
-        self.roi_capital_input.clear()
-        self.roi_context_input.clear()
-        self.roi_status_label.setText("")
-        self._last_roi_response = ""
-
-    def _roi_clear_displays(self):
-        for box in (self.roi_summary_box, self.roi_bull_bear_box, self.roi_details_box, self.roi_recommendation_box):
-            box.clear()
-        self.roi_risk_bar.setValue(0)
-        self.roi_risk_value_label.setText("—")
-        self.roi_return_label.setText("—")
-        self.roi_return_label.setStyleSheet("font-size: 20px; font-weight: bold; color: #3cff88;")
-        self.roi_rr_label.setText("—")
-        self.roi_conf_label.setText("—")
-        self.roi_conf_label.setStyleSheet("font-size: 16px; font-weight: bold;")
-        self.roi_save_btn.setEnabled(False)
-
-    def _populate_roi_tabs(self, text: str):
-        sections = self._parse_roi_sections(text)
-        self.roi_summary_box.setPlainText(sections.get("summary", text))
-        self.roi_bull_bear_box.setPlainText(sections.get("bull_bear", ""))
-        self.roi_details_box.setPlainText(sections.get("roi_details", ""))
-        self.roi_recommendation_box.setPlainText(sections.get("recommendation", ""))
-
-    def _parse_roi_sections(self, text: str) -> dict:
-        patterns = {
-            "summary":        r"1\.\s*OPPORTUNITY SUMMARY(.*?)(?=2\.\s*BULL CASE|$)",
-            "bull_bear":      r"2\.\s*BULL CASE(.*?)(?=4\.\s*ROI ANALYSIS|$)",
-            "roi_details":    r"4\.\s*ROI ANALYSIS(.*?)(?=5\.\s*ACTIONABLE RECOMMENDATION|$)",
-            "recommendation": r"5\.\s*ACTIONABLE RECOMMENDATION(.*?)(?=⚠️|$)",
-        }
-        result = {}
-        for key, pat in patterns.items():
-            m = re.search(pat, text, re.DOTALL | re.IGNORECASE)
-            result[key] = m.group(1).strip() if m else ""
-        # bull_bear: combine sections 2 and 3
-        bear_m = re.search(r"3\.\s*BEAR CASE(.*?)(?=4\.\s*ROI ANALYSIS|$)", text, re.DOTALL | re.IGNORECASE)
-        if bear_m:
-            result["bull_bear"] = (result.get("bull_bear", "") + "\n\n3. BEAR CASE\n" + bear_m.group(1).strip()).strip()
-        return result
-
-    def _update_roi_indicators(self, text: str):
-        # Expected ROI %
-        roi_m = re.search(r"Expected ROI.*?(\d[\d.]+)\s*%.*?(\d[\d.]+)\s*%", text, re.IGNORECASE)
-        if not roi_m:
-            roi_m = re.search(r"(\d[\d.]+)\s*%.*?to.*?(\d[\d.]+)\s*%", text, re.IGNORECASE)
-        if roi_m:
-            lo, hi = roi_m.group(1), roi_m.group(2)
-            self.roi_return_label.setText(f"{lo}–{hi}%")
-            avg = (float(lo) + float(hi)) / 2
-            color = "#3cff88" if avg >= 15 else "#f0c040" if avg >= 5 else "#ff5555"
     def author_load_models(self):
         provider = self.author_provider_box.currentText()
         self.author_model_box.clear()
@@ -9432,206 +8844,6 @@ class GodAI(QWidget):
         }
         """)
 
-    # ── Investment Agent handlers ─────────────────────────────────────────────
-    def inv_load_models(self):
-        provider = self.inv_provider_box.currentText()
-        self.inv_model_box.clear()
-        try:
-            if provider == "ollama":
-                models = self.ollama.list_models()
-            elif provider == "openai":
-                models = self.openai.list_models()
-            elif provider == "deepseek":
-                models = self.deepseek.list_models()
-            elif provider == "kimi":
-                models = self.kimi.list_models()
-            elif provider == "gemini":
-                models = self.gemini.list_models()
-            elif provider == "anthropic":
-                models = self.anthropic.list_models()
-            else:
-                models = []
-            for m in models:
-                self.inv_model_box.addItem(m)
-        except Exception:
-            pass
-
-    def inv_analyse(self):
-        ticker = self.inv_ticker_input.text().strip()
-        market = self.inv_market_box.currentText()
-        analysis_type = self.inv_type_box.currentText()
-        horizon = self.inv_horizon_box.currentText()
-        capital = self.inv_capital_input.text().strip()
-        context = self.inv_context_input.toPlainText().strip()
-        provider = self.inv_provider_box.currentText()
-        model = self.inv_model_box.currentText()
-
-        if not ticker:
-            QMessageBox.warning(self, "Missing Input", "Please enter a ticker or asset name.")
-            return
-        if not model:
-            QMessageBox.warning(self, "No Model", "Please select a model.")
-            return
-
-        prompt_parts = [
-            f"Asset: {ticker} ({market})",
-            f"Analysis type: {analysis_type}",
-            f"Horizon: {horizon}",
-        ]
-        if capital:
-            prompt_parts.append(f"Capital available: €{capital}")
-        if context:
-            prompt_parts.append(f"Thesis / context: {context}")
-
-        prompt = "\n".join(prompt_parts)
-
-        agent = self.agent_instances["investment"]
-        messages = agent.build_messages(prompt)
-
-        self._inv_clear_displays()
-        self._last_inv_response = ""
-        self.inv_status_label.setText("Analysing…")
-        self.inv_analyse_btn.setEnabled(False)
-        self.inv_stop_btn.setEnabled(True)
-        self.inv_save_btn.setEnabled(False)
-
-        self.inv_worker = ChatWorker(self.run_backend, provider, model, messages, prompt)
-        self.inv_worker.token_signal.connect(self._inv_on_token)
-        self.inv_worker.finished_signal.connect(self._inv_on_finished)
-        self.inv_worker.error_signal.connect(self._inv_on_error)
-        self.inv_worker.start()
-
-    def _inv_on_token(self, token: str):
-        self._last_inv_response += token
-        self.inv_overview_box.setPlainText(self._last_inv_response)
-        self.inv_overview_box.moveCursor(QTextCursor.End)
-
-    def _inv_on_finished(self, full_response: str):
-        self._last_inv_response = full_response
-        self._populate_inv_tabs(full_response)
-        self._update_inv_indicators(full_response)
-        self.inv_status_label.setText("Analysis complete.")
-        self.inv_analyse_btn.setEnabled(True)
-        self.inv_stop_btn.setEnabled(False)
-        self.inv_save_btn.setEnabled(True)
-
-    def _inv_on_error(self, error: str):
-        self.inv_overview_box.setPlainText(f"[Error] {error}")
-        self.inv_status_label.setText("Error.")
-        self.inv_analyse_btn.setEnabled(True)
-        self.inv_stop_btn.setEnabled(False)
-
-    def inv_stop(self):
-        if self.inv_worker is not None and self.inv_worker.isRunning():
-            self.inv_worker.cancel()
-        self.inv_status_label.setText("Stopped.")
-        self.inv_analyse_btn.setEnabled(True)
-        self.inv_stop_btn.setEnabled(False)
-
-    def inv_save(self):
-        if not self._last_inv_response:
-            return
-        ticker = self.inv_ticker_input.text().strip() or "analysis"
-        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-        default_name = f"investment_{ticker}_{ts}.txt"
-        path, _ = QFileDialog.getSaveFileName(
-            self, "Save Investment Analysis", str(DATA_DIR / default_name), "Text files (*.txt);;All files (*)"
-        )
-        if path:
-            Path(path).write_text(self._last_inv_response, encoding="utf-8")
-            self.inv_status_label.setText(f"Saved to {Path(path).name}")
-
-    def inv_clear(self):
-        self._inv_clear_displays()
-        self.inv_ticker_input.clear()
-        self.inv_capital_input.clear()
-        self.inv_context_input.clear()
-        self.inv_status_label.setText("")
-        self._last_inv_response = ""
-
-    def _inv_clear_displays(self):
-        for box in (self.inv_overview_box, self.inv_technicals_box, self.inv_macro_box, self.inv_targets_box):
-            box.clear()
-        self.inv_sentiment_label.setText("—")
-        self.inv_sentiment_label.setStyleSheet("font-size: 18px; font-weight: bold;")
-        self.inv_direction_label.setText("—")
-        self.inv_direction_label.setStyleSheet("font-size: 20px; font-weight: bold; color: #4db8ff;")
-        self.inv_change_label.setText("—")
-        self.inv_conviction_label.setText("—")
-        self.inv_conviction_label.setStyleSheet("font-size: 16px; font-weight: bold;")
-        self.inv_risk_bar.setValue(0)
-        self.inv_risk_label.setText("—")
-        self.inv_save_btn.setEnabled(False)
-
-    def _populate_inv_tabs(self, text: str):
-        sections = self._parse_inv_sections(text)
-        self.inv_overview_box.setPlainText(sections.get("overview", text))
-        self.inv_technicals_box.setPlainText(sections.get("technicals", ""))
-        self.inv_macro_box.setPlainText(sections.get("macro", ""))
-        self.inv_targets_box.setPlainText(sections.get("targets", ""))
-
-    def _parse_inv_sections(self, text: str) -> dict:
-        patterns = {
-            "overview":   r"1\.\s*MARKET OVERVIEW(.*?)(?=2\.\s*TECHNICAL|$)",
-            "technicals": r"2\.\s*TECHNICAL PICTURE(.*?)(?=3\.\s*MACRO|$)",
-            "macro":      r"3\.\s*MACRO.*?CONTEXT(.*?)(?=4\.\s*FUNDAMENTAL|5\.\s*PRICE|$)",
-            "targets":    r"5\.\s*PRICE TARGETS.*?PREDICTION(.*?)(?=6\.\s*KEY RISKS|⚠|$)",
-        }
-        result = {}
-        for key, pat in patterns.items():
-            m = re.search(pat, text, re.DOTALL | re.IGNORECASE)
-            result[key] = m.group(1).strip() if m else ""
-        risks_m = re.search(r"6\.\s*KEY RISKS(.*?)(?=⚠|$)", text, re.DOTALL | re.IGNORECASE)
-        if risks_m:
-            result["targets"] = (result.get("targets", "") + "\n\n6. KEY RISKS\n" + risks_m.group(1).strip()).strip()
-        return result
-
-    def _update_inv_indicators(self, text: str):
-        bull_m = re.search(r"(risk.on|bullish|strong upside|positive momentum)", text, re.IGNORECASE)
-        bear_m = re.search(r"(risk.off|bearish|strong downside|negative momentum)", text, re.IGNORECASE)
-        if bull_m and not bear_m:
-            self.inv_sentiment_label.setText("Bullish")
-            self.inv_sentiment_label.setStyleSheet("font-size: 18px; font-weight: bold; color: #3cff88;")
-        elif bear_m and not bull_m:
-            self.inv_sentiment_label.setText("Bearish")
-            self.inv_sentiment_label.setStyleSheet("font-size: 18px; font-weight: bold; color: #ff5555;")
-        else:
-            self.inv_sentiment_label.setText("Neutral")
-            self.inv_sentiment_label.setStyleSheet("font-size: 18px; font-weight: bold; color: #f0c040;")
-
-        dir_m = re.search(r"Predicted directional move.*?:\s*(UP|DOWN|SIDEWAYS)", text, re.IGNORECASE)
-        if dir_m:
-            direction = dir_m.group(1).upper()
-            color = {"UP": "#3cff88", "DOWN": "#ff5555", "SIDEWAYS": "#f0c040"}.get(direction, "#4db8ff")
-            arrow = {"UP": "↑ UP", "DOWN": "↓ DOWN", "SIDEWAYS": "→ SIDEWAYS"}.get(direction, direction)
-            self.inv_direction_label.setText(arrow)
-            self.inv_direction_label.setStyleSheet(f"font-size: 20px; font-weight: bold; color: {color};")
-
-        pct_m = re.search(r"(\d[\d.]+)\s*%.*?(upside|downside|move|target)", text, re.IGNORECASE)
-        if pct_m:
-            self.inv_change_label.setText(f"~{pct_m.group(1)}%")
-
-        conv_m = re.search(r"Conviction.*?:\s*(Low|Medium|High)", text, re.IGNORECASE)
-        if conv_m:
-            level = conv_m.group(1).capitalize()
-            conv_colors = {"Low": "#ff5555", "Medium": "#f0c040", "High": "#3cff88"}
-            self.inv_conviction_label.setText(level)
-            self.inv_conviction_label.setStyleSheet(
-                f"font-size: 16px; font-weight: bold; color: {conv_colors.get(level, '#ffffff')};"
-            )
-
-        risk_score = 5
-        if dir_m:
-            risk_score = {"DOWN": 8, "SIDEWAYS": 5, "UP": 4}.get(dir_m.group(1).upper(), 5)
-        if conv_m:
-            adj = {"Low": 2, "Medium": 0, "High": -1}.get(conv_m.group(1).capitalize(), 0)
-            risk_score = max(1, min(10, risk_score + adj))
-        self.inv_risk_bar.setValue(risk_score)
-        bar_color = "#3cff88" if risk_score <= 3 else "#f0c040" if risk_score <= 6 else "#ff5555"
-        self.inv_risk_bar.setStyleSheet(
-            f"QProgressBar::chunk {{ background-color: {bar_color}; border-radius: 3px; }}"
-        )
-        self.inv_risk_label.setText(f"{risk_score}/10")
 
     # ── Bug Bounty Agent panel ───────────────────────────────────────────────
     def build_bug_bounty_panel(self):
@@ -10617,8 +9829,8 @@ class GodAI(QWidget):
         # ── Update the agent header bar (title + subtitle + status pill) ─
         agent_titles = {
             "chat": "CHAT", "osint": "TRACE", "osint_heavy": "BLOODHOUND",
-            "wifi": "BEACON", "bug_bounty": "BUG SPRAY", "roi": "QUICK ROI",
-            "investment": "ORACLE", "nfl_bet": "PLAYMAKER", "fiverr": "ATELIER",
+            "wifi": "BEACON", "bug_bounty": "BUG SPRAY",
+            "nfl_bet": "PLAYMAKER", "fiverr": "ATELIER",
             "health": "VITALITY", "author": "MANUSCRIPT", "manuscript": "PUBLISHER",
             "music": "MAESTRO", "webdesign": "SITE BUILDER", "audiobook": "NARRATOR",
             "manager": "FORGE", "ops_identity": "OP IDENTITY",
@@ -10629,8 +9841,6 @@ class GodAI(QWidget):
             "osint_heavy": "Deep OSINT investigation with five-section dossier and curated tradecraft tools.",
             "wifi":        "Wireless reconnaissance, signal analysis, and Kali command generation.",
             "bug_bounty":  "Vulnerability triage with CWE classification and HackerOne-ready submission drafts.",
-            "roi":         "Short-to-medium term return opportunity analysis across all asset classes.",
-            "investment":  "Longer-horizon market analysis — macro, technical, and fundamental synthesis with price targets.",
             "nfl_bet":     "NFL prop bet analysis with edge assessment, EV calculation, and season projection modelling.",
             "fiverr":      "Logo gigs end-to-end — DALL·E logo prompts, gig descriptions, and client delivery messages.",
             "health":      "Nutrition, fitness, mental wellness, and lifestyle guidance — informational, not medical advice.",
@@ -10652,7 +9862,6 @@ class GodAI(QWidget):
 
         is_audiobook = agent_name == "audiobook"
         is_manager = agent_name == "manager"
-        is_roi = agent_name == "roi"
         is_health = agent_name == "health"
         is_author = agent_name == "author"
         is_manuscript = agent_name == "manuscript"
@@ -10663,17 +9872,15 @@ class GodAI(QWidget):
         is_wifi = agent_name == "wifi"
         is_fiverr = agent_name == "fiverr"
         is_webdesign = agent_name == "webdesign"
-        is_investment = agent_name == "investment"
         is_bug_bounty = agent_name == "bug_bounty"
         is_ops_identity = agent_name == "ops_identity"
-        is_custom = (is_audiobook or is_manager or is_roi or is_health or is_author or is_manuscript
+        is_custom = (is_audiobook or is_manager or is_health or is_author or is_manuscript
                      or is_music or is_nfl_bet or is_osint or is_osint_heavy or is_wifi or is_fiverr
-                     or is_webdesign or is_investment or is_bug_bounty or is_ops_identity)
+                     or is_webdesign or is_bug_bounty or is_ops_identity)
 
         self.normal_panel.setVisible(not is_custom)
         self.audiobook_panel.setVisible(is_audiobook)
         self.manager_panel.setVisible(is_manager)
-        self.roi_panel.setVisible(is_roi)
         self.health_panel.setVisible(is_health)
         self.author_panel.setVisible(is_author)
         self.manuscript_panel.setVisible(is_manuscript)
@@ -10684,7 +9891,6 @@ class GodAI(QWidget):
         self.wifi_panel.setVisible(is_wifi)
         self.fiverr_panel.setVisible(is_fiverr)
         self.webdesign_panel.setVisible(is_webdesign)
-        self.investment_panel.setVisible(is_investment)
         self.bug_bounty_panel.setVisible(is_bug_bounty)
         self.ops_identity_panel.setVisible(is_ops_identity)
         # Output area only relevant for standard (non-custom) agents like Chat.
@@ -10709,7 +9915,7 @@ class GodAI(QWidget):
             self._refresh_next_step_tip()
         elif is_author:
             self._refresh_next_step_tip()
-        elif is_roi or is_health or is_music or is_nfl_bet or is_osint or is_osint_heavy or is_wifi or is_fiverr or is_webdesign or is_investment or is_bug_bounty:
+        elif is_health or is_music or is_nfl_bet or is_osint or is_osint_heavy or is_wifi or is_fiverr or is_webdesign or is_bug_bounty:
             pass
         else:
             self.output_label.setText("Output")
@@ -11379,10 +10585,6 @@ class GodAI(QWidget):
             self.stop_chat_worker()
             return
 
-        if self.roi_worker is not None and self.roi_worker.isRunning():
-            self.roi_stop()
-            return
-
         if self.health_worker is not None and self.health_worker.isRunning():
             self.health_stop()
             return
@@ -11616,8 +10818,8 @@ class GodAI(QWidget):
         # Map agent key → doc filename (same as the key for most)
         doc_file_map = {
             "chat": "chat", "osint": "osint", "osint_heavy": "osint_heavy",
-            "wifi": "wifi", "bug_bounty": "bug_bounty", "roi": "roi",
-            "investment": "investment", "nfl_bet": "nfl_bet", "fiverr": "fiverr",
+            "wifi": "wifi", "bug_bounty": "bug_bounty",
+            "nfl_bet": "nfl_bet", "fiverr": "fiverr",
             "health": "health", "author": "author", "music": "music",
             "webdesign": "webdesign", "audiobook": "audiobook",
             "manager": "manager", "ops_identity": "ops_identity",
@@ -11729,8 +10931,8 @@ class GodAI(QWidget):
         # Build dialog
         agent_titles = {
             "chat": "CHAT", "osint": "TRACE", "osint_heavy": "BLOODHOUND",
-            "wifi": "BEACON", "bug_bounty": "BUG SPRAY", "roi": "QUICK ROI",
-            "investment": "ORACLE", "nfl_bet": "PLAYMAKER", "fiverr": "ATELIER",
+            "wifi": "BEACON", "bug_bounty": "BUG SPRAY",
+            "nfl_bet": "PLAYMAKER", "fiverr": "ATELIER",
             "health": "VITALITY", "author": "MANUSCRIPT", "manuscript": "PUBLISHER",
             "music": "MAESTRO", "webdesign": "SITE BUILDER", "audiobook": "NARRATOR",
             "manager": "FORGE", "ops_identity": "OP IDENTITY",

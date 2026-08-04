@@ -35,9 +35,7 @@ from agents.author_agent       import AuthorAgent
 from agents.bug_bounty_agent   import BugBountyAgent
 from agents.fiverr_agent       import FiverrAgent
 from agents.health_agent       import HealthAgent
-from agents.investment_agent   import InvestmentAgent
 from agents.nfl_bet_agent      import NflBetAgent
-from agents.roi_agent          import ROIAgent
 from agents.music_agent        import MusicAgent
 from agents.webdesign_agent    import WebdesignAgent
 from agents.wifi_agent         import WiFiAgent
@@ -576,41 +574,9 @@ class TestHealthAgent:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 12. InvestmentAgent
 # Scenario: equity analysis on NVDA ahead of earnings
 # ─────────────────────────────────────────────────────────────────────────────
 
-class TestInvestmentAgent:
-    agent = InvestmentAgent()
-
-    PROMPT = (
-        "Analyse NVDA (Nvidia) ahead of its Q2 2025 earnings report.\n"
-        "Current price: $875. 52-week range: $410–$974.\n"
-        "Macro: Fed on hold, AI capex cycle in full swing.\n"
-        "Provide price targets with bull/base/bear cases."
-    )
-
-    def test_message_structure(self):
-        msgs = self.agent.build_messages(self.PROMPT)
-        assert _roles(msgs) == ["system", "user"]
-
-    def test_prompt_preserved(self):
-        msgs = self.agent.build_messages(self.PROMPT)
-        assert "NVDA" in _user(msgs)
-        assert "$875" in _user(msgs)
-
-    def test_system_prompt_contains_analysis_sections(self):
-        sys = _system(self.agent.build_messages(self.PROMPT))
-        for section in ["MARKET OVERVIEW", "TECHNICAL", "PRICE TARGETS", "RISKS"]:
-            assert section in sys
-
-    def test_system_prompt_contains_disclaimer(self):
-        sys = _system(self.agent.build_messages(self.PROMPT))
-        assert "financial advice" in sys.lower() or "disclaimer" in sys.lower()
-
-    def test_system_prompt_requests_probability_assessments(self):
-        sys = _system(self.agent.build_messages(self.PROMPT))
-        assert "%" in sys or "probability" in sys.lower()
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -653,41 +619,9 @@ class TestNflBetAgent:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 14. ROIAgent
 # Scenario: biotech small-cap pre-FDA catalyst, 6-week window
 # ─────────────────────────────────────────────────────────────────────────────
 
-class TestROIAgent:
-    agent = ROIAgent()
-
-    PROMPT = (
-        "Asset: RXMD (Progressive Care Inc.) — biotech, $0.18/share.\n"
-        "Catalyst: FDA PDUFA date for lead drug in 6 weeks.\n"
-        "Sector: biotech binary event. Options IV very elevated.\n"
-        "Timeframe: 6 weeks. Risk capital: $2,000."
-    )
-
-    def test_message_structure(self):
-        msgs = self.agent.build_messages(self.PROMPT)
-        assert _roles(msgs) == ["system", "user"]
-
-    def test_prompt_preserved(self):
-        msgs = self.agent.build_messages(self.PROMPT)
-        assert "FDA" in _user(msgs)
-        assert "RXMD" in _user(msgs)
-
-    def test_system_prompt_contains_roi_sections(self):
-        sys = _system(self.agent.build_messages(self.PROMPT))
-        for section in ["BULL CASE", "BEAR CASE", "ROI ANALYSIS", "RECOMMENDATION"]:
-            assert section in sys
-
-    def test_system_prompt_mentions_risk_reward(self):
-        sys = _system(self.agent.build_messages(self.PROMPT))
-        assert "risk" in sys.lower() and ("reward" in sys.lower() or "ratio" in sys.lower())
-
-    def test_system_prompt_contains_disclaimer(self):
-        sys = _system(self.agent.build_messages(self.PROMPT))
-        assert "financial advice" in sys.lower() or "informational" in sys.lower()
 
 
 # ─────────────────────────────────────────────────────────────────────────────

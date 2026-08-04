@@ -26,17 +26,15 @@
    - 5.3 [Bloodhound Agent](#53-bloodhound-agent)
    - 5.4 [Beacon Agent](#54-beacon-agent)
    - 5.5 [Bug Spray Agent](#55-bug-spray-agent)
-   - 5.6 [Quick ROI Agent](#56-quick-roi-agent)
-   - 5.7 [Oracle Agent](#57-oracle-agent)
-   - 5.8 [Playmaker Agent](#58-playmaker-agent)
-   - 5.9 [Atelier Agent](#59-atelier-agent)
-   - 5.10 [Vitality Agent](#510-vitality-agent)
-   - 5.11 [Manuscript Agent](#511-manuscript-agent)
-   - 5.12 [Maestro Agent](#512-maestro-agent)
-   - 5.13 [Site Builder Agent](#513-site-builder-agent)
-   - 5.14 [Narrator Agent](#514-narrator-agent)
-   - 5.15 [Forge Agent](#515-forge-agent)
-   - 5.16 [Publisher Agent](#516-publisher-agent)
+   - 5.6 [Playmaker Agent](#56-playmaker-agent)
+   - 5.7 [Atelier Agent](#57-atelier-agent)
+   - 5.8 [Vitality Agent](#58-vitality-agent)
+   - 5.9 [Manuscript Agent](#59-manuscript-agent)
+   - 5.10 [Maestro Agent](#510-maestro-agent)
+   - 5.11 [Site Builder Agent](#511-site-builder-agent)
+   - 5.12 [Narrator Agent](#512-narrator-agent)
+   - 5.13 [Forge Agent](#513-forge-agent)
+   - 5.14 [Publisher Agent](#514-publisher-agent)
 6. [Tools](#6-tools)
 7. [Providers & Models](#7-providers--models)
    - 7.1 [Ollama (Local)](#71-ollama-local)
@@ -61,7 +59,7 @@
 18. [Earning Income with Sentinel AI](#18-earning-income-with-sentinel-ai)
     - 18.1 [Service-Based Income (Fiverr, Web Design, Author)](#181-service-based-income-fiverr-web-design-author)
     - 18.2 [Recurring Revenue (Music, Audiobook)](#182-recurring-revenue-music-audiobook)
-    - 18.3 [Speculative Income (Quick ROI, Oracle, Playmaker)](#183-speculative-income-quick-roi-oracle-playmaker)
+    - 18.3 [Speculative Income (Playmaker)](#183-speculative-income-playmaker)
     - 18.4 [Bounty & Research Income (Bug Spray, Trace)](#184-bounty--research-income-bug-spray-trace)
     - 18.5 [Required External Accounts & Tools](#185-required-external-accounts--tools)
     - 18.6 [Realistic Earnings Expectations](#186-realistic-earnings-expectations)
@@ -781,227 +779,7 @@ A large paste area for HTTP request/response, Burp output, manual observations, 
 
 ---
 
-### 5.6 Quick ROI Agent
-
-**Left-panel button:** 📈 Quick ROI  (category: **Finance & Business**)
-
-A specialist financial analysis agent designed to evaluate short-to-medium term return opportunities across all major asset classes. Unlike the general Chat agent, the ROI agent uses a fully custom panel instead of the standard input/output layout. Everything — from the form fields to the indicator widgets — is purpose-built for financial analysis.
-
-> ⚠️ All output is for informational and analytical purposes only. It does not constitute financial advice. Always conduct your own due diligence before investing.
-
----
-
-#### What the ROI Agent Does
-
-Given an asset and basic parameters, the ROI agent instructs an LLM to produce a structured five-section analysis:
-
-1. **Opportunity Summary** — the asset, current context, and intended timeframe.
-2. **Bull Case** — key upside catalysts, price targets, and confidence level.
-3. **Bear Case** — key risks, downside scenarios, and stop-loss recommendation.
-4. **ROI Analysis** — expected return range (%), risk/reward ratio, and suggested position sizing.
-5. **Actionable Recommendation** — entry strategy, exit levels, and when to re-evaluate.
-
-Each section appears in its own tab in the results area. Visual indicators on the right update automatically from the analysis text.
-
----
-
-#### ROI Panel Layout
-
-##### Quick Setup (form group)
-
-| Field | Description |
-|-------|-------------|
-| **Ticker / Asset** | Identifier — `AAPL`, `BTC`, `EUR/USD`, `GLD`, `CL`. **Required.** |
-| **Asset Type** | Stock / Crypto / Options / Forex / ETF / Commodity / Other. |
-| **Timeframe** | Short (<2 weeks) / Medium (2–8 weeks) / Long (2–6 months). |
-| **Risk Tolerance** | Conservative / Moderate / Aggressive — drives suggested position sizing and the Risk Level bar. |
-| **Capital (€)** | Optional but improves absolute-terms position sizing. |
-| **Context / Notes** | Optional — chart patterns, news, earnings dates, support/resistance levels. |
-| **Provider / Model** | Default Anthropic. |
-
-##### Action Buttons
-
-| Button | Action |
-|--------|--------|
-| **Analyse** | Builds the prompt and sends it. |
-| **Stop** | Cancels the in-flight request. |
-| **Help** | Opens this documentation at the Quick ROI section. |
-| **Save Analysis** | Exports the full response to `roi_<ticker>_<timestamp>.txt`. |
-| **Clear** | Resets the form (preserving provider/model) and indicators. |
-
-##### Results Tabs
-
-| Tab | Content |
-|-----|---------|
-| **Summary** | Section 1, also streams live during generation. |
-| **Bull / Bear** | Sections 2 + 3 combined. |
-| **ROI Details** | Section 4 — return range, R:R, sizing. |
-| **Recommendation** | Section 5 — entry/exit/re-evaluation. |
-
-##### Indicators Sidebar
-
-| Indicator | Description |
-|-----------|-------------|
-| **Risk Level** | 0–10 bar derived from Risk Tolerance + model confidence. Green 1–3 / Amber 4–6 / Red 7–10. |
-| **Expected ROI** | Range extracted from Section 4 (e.g. `12–28%`). Green ≥15 %, amber 5–14 %, red <5 %. |
-| **Risk : Reward** | Ratio parsed from the analysis (e.g. `1 : 3`). |
-| **Confidence** | Low / Medium / High from the model. |
-
----
-
-#### How to Use — Step by Step
-
-1. Click **📈 Quick ROI** in the left-panel agent buttons.
-2. Enter the **Ticker / Asset** — e.g. `NVDA`.
-3. Set **Asset Type**, **Timeframe**, and **Risk Tolerance**.
-4. Optionally enter **Capital** and **Context / Notes**.
-5. Pick a **Provider** and **Model** (Claude Sonnet/Opus recommended).
-6. Click **Analyse**.
-7. The Summary tab streams the response; when complete, all tabs and indicators populate.
-8. Review Bull/Bear for catalysts and risks, ROI Details for sizing, Recommendation for the trade plan.
-9. Click **Save Analysis** to archive, or **Clear** to start fresh.
-
----
-
-#### External Requirements
-
-- API key for the chosen LLM provider — Claude is recommended for parser compliance.
-- No live market data is fetched; supply current price and recent context in the Notes field for time-sensitive setups.
-
----
-
-#### Tips & Limitations
-
-> **Be specific with context.** "TSLA — earnings next week, stock down 18 %, $220 support tested twice" produces vastly better analysis than just "TSLA".
-
-> Indicators are parsed with regex; smaller local models often deviate from the five-section format and leave indicators at `—`. The text in the tabs is always authoritative.
-
-> See Chapter 18 for monetisation strategy across financial analysis agents.
-
----
-
-#### Agent Class Reference
-
-| Property | Value |
-|----------|-------|
-| Agent class | `agents/roi_agent.py` — `ROIAgent` |
-| Agent name (DB) | `roi` |
-| Label | Quick ROI |
-| Default provider | Anthropic (in panel) |
-| System prompt | Structured 5-section financial analyst prompt with asset class coverage, tone rules, mandatory disclaimer |
-
----
-
-### 5.7 Oracle Agent
-
-**Left-panel button:** 📊 Oracle  (category: **Finance & Business**)
-
-A predictive market-analysis agent for longer-horizon investment decisions. Where Quick ROI focuses on tactical trades (days to weeks), the Investment agent produces full market outlooks (1 week to 1 year) blending macro, technical, fundamental, and sector analysis with explicit price targets and probability assessments.
-
-> ⚠️ Market analysis for informational and research purposes only. Not financial advice. Past performance is not indicative of future results.
-
----
-
-#### What the Oracle Agent Does
-
-Six-section structured outlook:
-
-1. **MARKET OVERVIEW** — asset, macro regime (risk-on / risk-off / transitional), key drivers.
-2. **TECHNICAL PICTURE** — trend, support/resistance, patterns, momentum indicators.
-3. **MACRO & SECTOR CONTEXT** — sector rotation, central bank policy, macro tail/headwinds.
-4. **FUNDAMENTALS** (equities/ETFs only) — valuation, earnings, analyst consensus.
-5. **PRICE TARGETS & PREDICTION** — base / bull / bear targets with probabilities, predicted direction (UP/DOWN/SIDEWAYS), conviction.
-6. **KEY RISKS** — event risks, structural risks, liquidity risks.
-
----
-
-#### Investment Panel Layout
-
-##### Market Analysis Setup (form group)
-
-| Field | Description |
-|-------|-------------|
-| **Ticker / Asset** | e.g. `NVDA`, `BTC`, `EUR/USD`, `S&P 500`. **Required.** |
-| **Market** | Equities / Crypto / Forex / Commodities / ETF / Index / Fixed Income / Other. |
-| **Analysis Type** | Combined / Technical / Fundamental / Macro. |
-| **Horizon** | 1 Week / 1 Month / 3 Months / 6 Months / 1 Year (defaults to 1 Month). |
-| **Capital (€)** | Optional. |
-| **Thesis / Context** | Optional macro view, price levels, news, catalyst. |
-| **Provider / Model** | Default Anthropic. |
-
-##### Action Buttons
-
-| Button | Action |
-|--------|--------|
-| **Analyse** | Builds the multi-field prompt and sends it. |
-| **Stop** | Cancels the request. |
-| **Save Analysis** | Exports the full outlook to a `.txt`. |
-| **Clear** | Resets the form and indicators. |
-
-##### Results Tabs
-
-| Tab | Content |
-|-----|---------|
-| **Overview** | Section 1 + live stream. |
-| **Technicals** | Section 2. |
-| **Macro & Sector** | Section 3. |
-| **Price Targets** | Sections 4 + 5 — fundamentals plus price predictions. |
-
-##### Indicators Sidebar
-
-| Indicator | Description |
-|-----------|-------------|
-| **Market Sentiment** | Risk-on / Risk-off / Transitional (parsed). |
-| **Predicted Move** | UP / DOWN / SIDEWAYS, with the expected % change below. |
-| **Conviction** | Low / Medium / High. |
-| **Risk Level** | 0–10 progress bar parsed from the response. |
-
-A persistent disclaimer ribbon is shown at the bottom of the panel.
-
----
-
-#### How to Use — Step by Step
-
-1. Click **📊 Oracle** under **Finance & Business**.
-2. Enter the **Ticker / Asset**.
-3. Pick **Market** and **Analysis Type** (Combined is the richest).
-4. Set **Horizon** to match your investment thesis.
-5. (Optional) Add **Capital** and a **Thesis / Context** snippet.
-6. Pick **Provider** and **Model**.
-7. Click **Analyse**.
-8. Step through the four tabs — Overview, Technicals, Macro & Sector, Price Targets — and read the indicators sidebar for the predicted move and conviction.
-9. Click **Save Analysis** to archive.
-
----
-
-#### External Requirements
-
-- LLM provider API key.
-- For best fundamentals coverage, supply recent earnings figures and consensus estimates in the Thesis field — the model does not fetch them live.
-
----
-
-#### Tips & Limitations
-
-> The Investment agent has **no live market data**. The Thesis / Context field is critical for time-sensitive forecasts.
-
-> The disclaimer ribbon is rendered in the panel itself, not just the response, to make the non-advice nature unmissable.
-
----
-
-#### Agent Class Reference
-
-| Property | Value |
-|----------|-------|
-| Agent class | `agents/investment_agent.py` — `InvestmentAgent` |
-| Agent name (DB) | `investment` |
-| Label | Oracle |
-| Default provider | Anthropic |
-| System prompt | Six-section macro/technical/fundamental synthesis, probability-weighted price targets, mandatory disclaimer block |
-
----
-
-### 5.8 Playmaker Agent
+### 5.6 Playmaker Agent
 
 **Left-panel button:** 🏈 Playmaker  (category: **Finance & Business**)
 
@@ -1136,7 +914,7 @@ Buttons: **Build Projection**, **Stop**. A small **computed stats label** displa
 
 ---
 
-### 5.9 Atelier Agent
+### 5.7 Atelier Agent
 
 **Left-panel button:** 💼 Atelier  (category: **Finance & Business**)
 
@@ -1243,7 +1021,7 @@ A **Clear** button at the bottom resets the panel.
 
 ---
 
-### 5.10 Vitality Agent
+### 5.8 Vitality Agent
 
 **Left-panel button:** 🏃 Vitality  (category: **Wellness**)
 
@@ -1346,7 +1124,7 @@ Four-section structured response:
 
 ---
 
-### 5.11 Manuscript Agent
+### 5.9 Manuscript Agent
 
 **Left-panel button:** ✍️ Manuscript  (category: **Creative**)
 
@@ -1611,7 +1389,7 @@ Platform format rules enforced by the Market system prompt:
 
 ---
 
-### 5.12 Maestro Agent
+### 5.10 Maestro Agent
 
 **Left-panel button:** 🎵 Maestro  (category: **Creative**)
 
@@ -1719,7 +1497,7 @@ One tab per section: **Artist Profile**, **Release Setup**, **Distribution**, **
 
 ---
 
-### 5.13 Site Builder Agent
+### 5.11 Site Builder Agent
 
 **Left-panel button:** 🎨 Site Builder  (category: **Creative**)
 
@@ -1826,7 +1604,7 @@ The panel splits the output into HTML / CSS / JS tabs and computes line counts f
 
 ---
 
-### 5.14 Narrator Agent
+### 5.12 Narrator Agent
 
 **Left-panel button:** 🎧 Narrator  (category: **Creative**)
 
@@ -1936,7 +1714,7 @@ The conversion runs as a `QProcess` so the GUI stays responsive. Output is strea
 
 ---
 
-### 5.15 Forge Agent
+### 5.13 Forge Agent
 
 **Left-panel button:** 🏗 Forge  (category: **System**)
 
@@ -2043,7 +1821,7 @@ The LLM must return a single JSON object with these fields:
 
 ---
 
-### 5.16 Publisher Agent
+### 5.14 Publisher Agent
 
 **Left-panel button:** 📚 Publisher  (category: **Creative**)
 
@@ -3043,38 +2821,11 @@ Recurring revenue compounds — once published, content keeps earning. These two
 
 ---
 
-### 18.3 Speculative Income (Quick ROI, Oracle, Playmaker)
+### 18.3 Speculative Income (Playmaker)
 
 Speculative income depends on **risk-taking**: real money on the line, no guarantee of return. These agents are decision-support tools, not money printers. Treat outputs as **one input among many** in your own due diligence.
 
-> ⚠️ The Quick ROI, Oracle, and Playmaker agents do **not** execute trades or place bets. They produce analysis. You must always make the final decision and execute manually.
-
----
-
-#### Quick ROI & Oracle (Trading and Position-Sizing)
-
-**Agents:** 5.6 Quick ROI, 5.7 Oracle
-
-**Difference:**
-
-- **Quick ROI** is short-to-medium horizon (days to months) — momentum, swing trades, options strategies.
-- **Investment** is longer-horizon (weeks to a year+) — macro, fundamentals, structural positioning.
-
-**Income path:**
-
-1. Open a brokerage account — Interactive Brokers (global), Schwab/Fidelity (US), Trading 212 / Trade Republic (EU), eToro (social trading).
-2. Open a crypto account — Coinbase, Kraken, or Binance (where legal).
-3. Use Quick ROI for entry/exit points; use Investment for thesis-level confirmation before sizing.
-4. **Use the suggested position size**, not maximum size. The risk indicators are there for a reason.
-5. Always set stop-losses where the agent recommends them.
-6. Save every analysis via **Save Analysis** so you can review what worked / didn't.
-
-**Realistic earnings:**
-
-- These are **highly variable**. A skilled discretionary trader using AI assistance to confirm ideas can target **5–15% annual returns** above the index. Most retail traders lose money long-term.
-- The agent reduces emotional bias by forcing structured analysis. It does not give you an edge against institutional flow.
-
-**External costs:** Brokerage commissions (often $0/trade on US stocks, small spreads on crypto). API fees for live data if you integrate later.
+> ⚠️ The Playmaker agent does **not** execute trades or place bets. They produce analysis. You must always make the final decision and execute manually.
 
 ---
 

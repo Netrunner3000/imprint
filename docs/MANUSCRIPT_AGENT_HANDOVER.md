@@ -725,7 +725,7 @@ Column names in KDP reports vary slightly by report type (Summary vs. Detail). T
 - **Price sync script**: `publishdrive_client.update_metadata()` is already wired — add a UI form to push price changes
 - **Multi-book support**: current design assumes one primary title. Add a `book_id` selector to support multiple books
 - **Goodreads / Storygraph ratings scrape**: no API, would need requests + BeautifulSoup (already in requirements)
-- **Revenue chart**: use the existing `QTextBrowser` for now; upgrade to a matplotlib embed (same pattern as investment_agent) once data is flowing
+- **Revenue chart**: use the existing `QTextBrowser` for now; upgrade to a matplotlib embed (the Oracle agent used to demonstrate this pattern; it has since been removed — see SONAR) once data is flowing
 
 ---
 
