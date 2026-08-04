@@ -34,6 +34,7 @@ import markdown
 
 from PySide6.QtCore import Qt, QTimer, QProcess, QUrl, QThread, Signal, QEvent
 from PySide6.QtGui import QTextCursor, QDesktopServices, QColor, QFont
+from PySide6.QtNetwork import QLocalServer, QLocalSocket
 from PySide6.QtWidgets import (
     QApplication, QSizePolicy, QWidget, QVBoxLayout, QHBoxLayout, QGridLayout, QGroupBox,
     QLabel, QTextEdit, QPushButton, QComboBox, QListWidget, QListWidgetItem,
@@ -2045,16 +2046,16 @@ class GodAI(QWidget):
             "manuscript": "Publisher",
         }
 
-        # Every section starts expanded — the sidebar is the main way in, so the
-        # full agent list should be visible on launch without a click.
+        # Every section starts collapsed — launch shows just the category list,
+        # and you open the one you want.
         categories = [
-            ("General",            ["chat"],                                                True),
-            ("Finance & Business", ["roi", "investment", "nfl_bet", "fiverr"],             True),
-            ("Research",           ["osint", "osint_heavy", "wifi"],                       True),
-            ("Security",           ["bug_bounty"],                                         True),
-            ("Creative",           ["author", "manuscript", "music", "webdesign", "audiobook"],          True),
-            ("Wellness",           ["health"],                                              True),
-            ("System",             ["manager", "ops_identity"],                           True),
+            ("General",            ["chat"],                                                False),
+            ("Finance & Business", ["roi", "investment", "nfl_bet", "fiverr"],             False),
+            ("Research",           ["osint", "osint_heavy", "wifi"],                       False),
+            ("Security",           ["bug_bounty"],                                         False),
+            ("Creative",           ["author", "manuscript", "music", "webdesign", "audiobook"],         False),
+            ("Wellness",           ["health"],                                              False),
+            ("System",             ["manager", "ops_identity"],                          False),
         ]
 
         # Minimal sidebar row — clear separation via padding + hover fill
@@ -8721,13 +8722,15 @@ class GodAI(QWidget):
         system_card = QGroupBox("SYSTEM")
         system_card.setObjectName("RightCard")
         system_layout = QVBoxLayout(system_card)
-        system_layout.setContentsMargins(10, 16, 10, 10)
+        system_layout.setContentsMargins(10, 6, 10, 10)
         system_layout.setSpacing(6)
 
         self.resource_label = QLabel()
         self.resource_label.setTextFormat(Qt.RichText)
         self.resource_label.setWordWrap(True)
-        self.resource_label.setFixedHeight(130)
+        # Sized to its content rather than pinned: the stat block is a fixed
+        # number of lines, and 130px left a visible gap above the button.
+        self.resource_label.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Minimum)
         self.resource_label.setObjectName("ResourceLabel")
         system_layout.addWidget(self.resource_label)
 
@@ -8741,7 +8744,7 @@ class GodAI(QWidget):
         routing_card = QGroupBox("ROUTING")
         routing_card.setObjectName("RightCard")
         routing_layout = QVBoxLayout(routing_card)
-        routing_layout.setContentsMargins(10, 16, 10, 10)
+        routing_layout.setContentsMargins(10, 6, 10, 10)
         routing_layout.setSpacing(6)
 
         self.route_result_label = QLabel("Router: not yet computed")
@@ -8758,7 +8761,7 @@ class GodAI(QWidget):
         cost_card = QGroupBox("COST")
         cost_card.setObjectName("RightCard")
         cost_layout = QVBoxLayout(cost_card)
-        cost_layout.setContentsMargins(10, 16, 10, 10)
+        cost_layout.setContentsMargins(10, 6, 10, 10)
         cost_layout.setSpacing(6)
 
         self.live_estimate_label = QLabel("Estimated Request Cost: -")
@@ -8788,7 +8791,7 @@ class GodAI(QWidget):
         budget_card = QGroupBox("BUDGET")
         budget_card.setObjectName("RightCard")
         budget_layout = QVBoxLayout(budget_card)
-        budget_layout.setContentsMargins(10, 16, 10, 10)
+        budget_layout.setContentsMargins(10, 6, 10, 10)
         budget_layout.setSpacing(6)
 
         self.budget_label = QLabel("Budget: not yet calculated")
@@ -8835,7 +8838,7 @@ class GodAI(QWidget):
         actions_card = QGroupBox("ACTIONS")
         actions_card.setObjectName("RightCard")
         actions_layout = QVBoxLayout(actions_card)
-        actions_layout.setContentsMargins(10, 16, 10, 10)
+        actions_layout.setContentsMargins(10, 6, 10, 10)
         actions_layout.setSpacing(6)
 
         self.cost_history_btn = QPushButton("📊  Cost History")
@@ -8856,7 +8859,7 @@ class GodAI(QWidget):
         keys_card = QGroupBox("API KEYS")
         keys_card.setObjectName("RightCard")
         keys_layout = QVBoxLayout(keys_card)
-        keys_layout.setContentsMargins(10, 16, 10, 10)
+        keys_layout.setContentsMargins(10, 6, 10, 10)
         keys_layout.setSpacing(4)
 
         self.openai_key_label = QLabel(f"OpenAI: {self.safe_key_status(OpenAIClientWrapper)}")
@@ -8919,8 +8922,12 @@ class GodAI(QWidget):
             background-color: #161616;
             border: 1px solid #242424;
             border-radius: 10px;
-            margin-top: 18px;
-            padding: 14px 12px 10px 12px;
+            /* The title is drawn in this top margin. Card padding and each card
+               layout's own top margin both apply *inside*, so they stack: keep
+               their sum at a deliberate ~16px. It was ~30px (baggy) and briefly
+               ~6px (cramped, title crowding the border). */
+            margin-top: 16px;
+            padding: 10px 12px 10px 12px;
         }
         QGroupBox#RightCard::title {
             subcontrol-origin: margin;
@@ -12067,9 +12074,51 @@ class GodAI(QWidget):
             pass
         event.accept()
 
+SINGLE_INSTANCE_KEY = "sentinel-ai.single-instance"
+
+
+def _hand_off_to_running_instance() -> bool:
+    """True when another copy is already running — it is asked to come forward.
+
+    A local socket is the reliable signal here: a lock file can be left behind by
+    a crash, and the .app launcher spawns a fresh python each time, so the OS
+    can't dedupe the launch for us.
+    """
+    probe = QLocalSocket()
+    probe.connectToServer(SINGLE_INSTANCE_KEY)
+    if not probe.waitForConnected(400):
+        return False
+    probe.write(b"raise")
+    probe.waitForBytesWritten(400)
+    probe.disconnectFromServer()
+    return True
+
+
 if __name__ == "__main__":
     app = QApplication([])
+
+    # Second launch: focus the window that is already open and leave. The exit
+    # code has to be 0 — the launcher raises an error dialog on anything else.
+    if _hand_off_to_running_instance():
+        sys.exit(0)
+
+    QLocalServer.removeServer(SINGLE_INSTANCE_KEY)   # clear a socket left by a crash
+    instance_server = QLocalServer()
+    instance_server.listen(SINGLE_INSTANCE_KEY)
+
     window = GodAI()
     window.show()
+
+    def _raise_existing_window():
+        instance_server.nextPendingConnection()      # drain the pending connection
+        window.setWindowState(
+            (window.windowState() & ~Qt.WindowMinimized) | Qt.WindowActive
+        )
+        window.show()
+        window.raise_()
+        window.activateWindow()
+
+    instance_server.newConnection.connect(_raise_existing_window)
+
     app.exec()
 

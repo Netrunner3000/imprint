@@ -1,4 +1,15 @@
 #!/usr/bin/env bash
+# ─────────────────────────────────────────────────────────────────────────────
+# NOT the everyday script. Use scripts/install_app.sh instead — that installs a
+# launcher that runs this project's code live, so edits apply on next launch
+# with no rebuild.
+#
+# This one FREEZES the code into the bundle: running it replaces the live app in
+# /Applications with a snapshot, and you are back to re-running a build after
+# every edit. Keep it only for producing a self-contained bundle to hand to
+# another machine (no project folder or .venv required there).
+# ─────────────────────────────────────────────────────────────────────────────
+#
 # Build & install "Sentinel AI.app" — a self-contained macOS application bundle
 # produced by PyInstaller (bundles its own Python + every dependency). Unlike a
 # dev checkout, the app does NOT need the project's .venv or even the project
