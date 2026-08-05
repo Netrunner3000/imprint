@@ -32,14 +32,14 @@ load_dotenv(user_data_base() / ".env")
 
 import markdown
 
-from PySide6.QtCore import Qt, QTimer, QProcess, QUrl, QThread, Signal, QEvent
+from PySide6.QtCore import Qt, QTimer, QProcess, QUrl, QThread, Signal, QEvent, QRect, QPoint, QSize
 from PySide6.QtGui import QTextCursor, QDesktopServices, QColor, QFont
 from PySide6.QtNetwork import QLocalServer, QLocalSocket
 from PySide6.QtWidgets import (
     QApplication, QSizePolicy, QWidget, QVBoxLayout, QHBoxLayout, QGridLayout, QGroupBox,
     QLabel, QTextEdit, QPushButton, QComboBox, QListWidget, QListWidgetItem,
     QMessageBox, QCheckBox, QTextBrowser, QSplitter, QLineEdit, QFileDialog,
-    QProgressBar, QDialog, QTabWidget, QFrame, QScrollArea, QStackedWidget,
+    QProgressBar, QDialog, QTabWidget, QFrame, QScrollArea, QStackedWidget, QLayout,
 )
 
 from services.ollama_client import OllamaClient
@@ -389,6 +389,82 @@ class ShortsWorker(QThread):
             self.done_signal.emit(str(self.output_path))
         except Exception as e:
             self.error_signal.emit(str(e))
+
+
+class FlowLayout(QLayout):
+    """Left-to-right layout that wraps onto a new line when it runs out of width.
+
+    A QHBoxLayout of buttons reports the sum of their widths as its minimum, so a
+    long control row pins a hard minimum width on the whole pane. Below that the
+    splitter compresses the buttons past their own minimums and the labels get
+    chopped ("Auto Rout", "ecomme"). Wrapping instead keeps every control at its
+    natural size and lets the pane shrink to the width of the widest single item.
+    """
+
+    def __init__(self, parent=None, spacing=6):
+        super().__init__(parent)
+        self._items = []
+        self.setContentsMargins(0, 0, 0, 0)
+        self.setSpacing(spacing)
+
+    # ── QLayout plumbing ────────────────────────────────────────────────
+    def addItem(self, item):
+        self._items.append(item)
+
+    def count(self):
+        return len(self._items)
+
+    def itemAt(self, index):
+        return self._items[index] if 0 <= index < len(self._items) else None
+
+    def takeAt(self, index):
+        return self._items.pop(index) if 0 <= index < len(self._items) else None
+
+    def expandingDirections(self):
+        return Qt.Orientations(Qt.Orientation(0))
+
+    def hasHeightForWidth(self):
+        return True
+
+    def heightForWidth(self, width):
+        return self._arrange(QRect(0, 0, width, 0), apply=False)
+
+    def setGeometry(self, rect):
+        super().setGeometry(rect)
+        self._arrange(rect, apply=True)
+
+    def sizeHint(self):
+        return self.minimumSize()
+
+    def minimumSize(self):
+        size = QSize()
+        for item in self._items:
+            size = size.expandedTo(item.minimumSize())
+        margins = self.contentsMargins()
+        return size + QSize(margins.left() + margins.right(),
+                            margins.top() + margins.bottom())
+
+    # ── placement ───────────────────────────────────────────────────────
+    def _arrange(self, rect, apply):
+        margins = self.contentsMargins()
+        left = rect.x() + margins.left()
+        right = rect.right() - margins.right()
+        x, y = left, rect.y() + margins.top()
+        line_height = 0
+        space = self.spacing()
+
+        for item in self._items:
+            hint = item.sizeHint()
+            if x + hint.width() > right and line_height > 0:   # wrap
+                x = left
+                y += line_height + space
+                line_height = 0
+            if apply:
+                item.setGeometry(QRect(QPoint(x, y), hint))
+            x += hint.width() + space
+            line_height = max(line_height, hint.height())
+
+        return y + line_height - rect.y() + margins.bottom()
 
 
 class CollapsibleSection(QWidget):
@@ -2246,8 +2322,9 @@ class GodAI(QWidget):
         
         self.model_box.currentTextChanged.connect(self.save_provider_model_preference)
 
-        # Row 3: execution mode and API permissions
-        top_row_3 = QHBoxLayout()
+        # Row 3: execution mode and API permissions — wraps when the pane narrows.
+        top_row_3_container = QWidget()
+        top_row_3 = FlowLayout(top_row_3_container, spacing=6)
 
         self.execution_mode_box = QComboBox()
         self.execution_mode_box.addItems(["Local only", "Hybrid allowed", "Cloud only"])
@@ -2275,17 +2352,16 @@ class GodAI(QWidget):
         self.allow_anthropic_checkbox.setChecked(False)
         top_row_3.addWidget(self.allow_anthropic_checkbox)
 
-        top_row_3.addStretch()
-        normal_layout.addLayout(top_row_3)
+        normal_layout.addWidget(top_row_3_container)
 
         self.input_box = QTextEdit()
         self.input_box.setPlaceholderText("Type your message here...")
         self.input_box.setMinimumHeight(190)
         normal_layout.addWidget(self.input_box)
 
-        # Single action row
-        actions_row = QHBoxLayout()
-        actions_row.setSpacing(6)
+        # Single action row — wraps instead of truncating when the pane narrows.
+        actions_container = QWidget()
+        actions_row = FlowLayout(actions_container, spacing=6)
 
         self.send_btn = QPushButton("Send")
         self.send_btn.setFixedHeight(34)
@@ -2310,12 +2386,12 @@ class GodAI(QWidget):
         self.recommend_setup_btn.clicked.connect(self.apply_recommended_setup)
         actions_row.addWidget(self.recommend_setup_btn)
 
-        # "Auto-Apply" modifies "Use Recommended", so it sits tight against it —
-        # then a gap before the unrelated cost/export buttons.
+        # "Auto-Apply" modifies "Use Recommended", so it follows it directly. Its
+        # own trailing padding provides the gap before the cost/export buttons —
+        # a spacer item would wrap as if it were a control.
         self.auto_recommend_checkbox = QCheckBox("Auto-Apply")
         self.auto_recommend_checkbox.setChecked(False)
         actions_row.addWidget(self.auto_recommend_checkbox)
-        actions_row.addSpacing(10)
 
         self.estimate_btn = QPushButton("Estimate Cost")
         self.estimate_btn.setFixedHeight(32)
@@ -2327,8 +2403,7 @@ class GodAI(QWidget):
         self.export_btn.clicked.connect(self.export_report)
         actions_row.addWidget(self.export_btn)
 
-        actions_row.addStretch()
-        normal_layout.addLayout(actions_row)
+        normal_layout.addWidget(actions_container)
 
         # ===== INPUT =====
         self.input_box.textChanged.connect(self.update_live_cost_estimate)
