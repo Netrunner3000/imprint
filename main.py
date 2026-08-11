@@ -42,12 +42,13 @@ from PySide6.QtWidgets import (
     QProgressBar, QDialog, QTabWidget, QFrame, QScrollArea, QStackedWidget, QLayout,
 )
 
-from services.ollama_client import OllamaClient
+from services.ollama_client import OllamaClient, MUSE_GLIMMER_VARIANTS, muse_glimmer_default
 from services.openai_client import OpenAIClientWrapper
 from services.deepseek_client import DeepSeekClientWrapper
 from services.kimi_client import KimiClientWrapper
 from services.gemini_client import GeminiClientWrapper
 from services.anthropic_client import AnthropicClientWrapper
+from services.qwen_client import QwenClientWrapper
 from services.resource_monitor import ResourceMonitor
 from services.history_store import HistoryStore
 from services.report_exporter import ReportExporter
@@ -324,6 +325,34 @@ class SubprocessWorker(QThread):
             self.error_signal.emit(str(e))
 
 
+class ModelPullWorker(QThread):
+    """Downloads an Ollama model off the UI thread.
+
+    progress_signal carries (status, completed_bytes, total_bytes); total is 0
+    until Ollama has resolved the manifest.
+    """
+    progress_signal = Signal(str, int, int)
+    finished_signal = Signal(str)
+    error_signal = Signal(str)
+
+    def __init__(self, client, model: str):
+        super().__init__()
+        self._client = client
+        self._model = model
+
+    def run(self):
+        try:
+            self._client.pull_model(
+                self._model,
+                on_progress=lambda status, done, total: self.progress_signal.emit(
+                    status, int(done or 0), int(total or 0)
+                ),
+            )
+            self.finished_signal.emit(self._model)
+        except Exception as e:
+            self.error_signal.emit(str(e))
+
+
 class FiverrImageWorker(QThread):
     """Downloads and saves DALL-E 3 generated logo images."""
     image_ready_signal = Signal(str, int)   # local_path, index
@@ -564,6 +593,7 @@ class GodAI(QWidget):
         self.kimi = KimiClientWrapper()
         self.gemini = GeminiClientWrapper()
         self.anthropic = AnthropicClientWrapper()
+        self.qwen = QwenClientWrapper()
         self.monitor = ResourceMonitor()
         self.history = HistoryStore()
         self.report_exporter = ReportExporter()
@@ -672,6 +702,8 @@ class GodAI(QWidget):
         # Pre-select each agent's recommended provider/model and paint those
         # entries red in their dropdowns. Runs after every panel is built.
         self.install_agent_recommendations()
+        self.muse_pull_worker: Optional[ModelPullWorker] = None
+        self.refresh_muse_button()
         self.load_history_list()
         self.update_resource_label()
         self.update_usage_labels()
@@ -986,19 +1018,24 @@ class GodAI(QWidget):
         return min(180, max(10, base + words // 20))
 
     def estimate_chat_cost(self, backend, model, prompt):
+        """Pre-flight cost estimate in EUR, plus the approximate token count.
+
+        Prices come from the pricing table via UsageTracker — the same source
+        that bills the request afterwards. This used to be a second hardcoded
+        per-backend dict which had no entry for anthropic or qwen, so both were
+        estimated at zero and sailed straight past the budget gate in
+        Validator.validate() no matter how expensive the model was.
+        """
         approx_input_tokens = max(1, int(len(prompt) / 4))
         approx_output_tokens = max(250, int(approx_input_tokens * 1.2))
         approx_total_tokens = approx_input_tokens + approx_output_tokens
 
-        pricing = {
-            "ollama": 0.0,
-            "openai": 0.000002,
-            "deepseek": 0.0000005,
-            "kimi": 0.0000025,
-            "gemini": 0.000001,
-        }
+        if backend == "ollama":
+            return 0.0, approx_total_tokens
 
-        estimated_cost = approx_total_tokens * pricing.get(backend, 0.0)
+        estimated_cost = self.usage_tracker.calculate_cost_eur(
+            backend, model, approx_input_tokens, approx_output_tokens
+        )
 
         return round(estimated_cost, 5), approx_total_tokens
 
@@ -1512,6 +1549,97 @@ class GodAI(QWidget):
         total = max(0, int(total))
         return f"{total // 60:02d}:{total % 60:02d}"
 
+    # ── Local-model memory guard ─────────────────────────────────────────────
+    # Cloud models cost money and are gated by budget. Local models are free, so
+    # they bypassed every check — yet they are the only ones that can wedge the
+    # machine. This sizes the model against real memory before it is loaded.
+
+    # A loaded model needs roughly its file size resident, plus KV cache and
+    # runtime overhead. 1.15 is a deliberately mild allowance: the aim is to
+    # catch "this will thrash", not to model llama.cpp allocation exactly.
+    MEMORY_OVERHEAD_FACTOR = 1.15
+    # Leave room for the OS and Sentinel itself rather than letting a model take
+    # every last byte of physical RAM.
+    MEMORY_HEADROOM_GB = 3.0
+
+    def assess_local_model(self, model: str) -> dict | None:
+        """Weigh a local model against this machine's memory.
+
+        Returns None when the check does not apply (not a known local model, or
+        the daemon is unreachable and the size is unknowable). Otherwise a dict
+        with level "ok" | "tight" | "too_big", the numbers behind it, and a
+        human-readable message.
+        """
+        import psutil
+
+        size_bytes = self.ollama.model_size_bytes(model)
+        if size_bytes is None:
+            # Not pulled yet — fall back to the published download size for the
+            # builds we ship a figure for, so the dropdown can grey them out.
+            published_gb = MUSE_GLIMMER_VARIANTS.get(model)
+            if published_gb is None:
+                return None
+            size_gb = float(published_gb)
+        else:
+            size_gb = size_bytes / 1e9
+
+        needed_gb = size_gb * self.MEMORY_OVERHEAD_FACTOR
+        vm = psutil.virtual_memory()
+        total_gb = vm.total / 1e9
+        available_gb = vm.available / 1e9
+
+        if needed_gb > total_gb - self.MEMORY_HEADROOM_GB:
+            level = "too_big"
+            message = (
+                f"{model} needs about {needed_gb:.1f} GB of memory, but this machine "
+                f"only has {total_gb:.0f} GB in total. It cannot run here without "
+                "swapping so hard the system becomes unresponsive."
+            )
+        elif needed_gb > available_gb:
+            level = "tight"
+            message = (
+                f"{model} needs about {needed_gb:.1f} GB, but only {available_gb:.1f} GB "
+                f"is free right now (of {total_gb:.0f} GB). It will fit, but expect "
+                "heavy swapping and slow replies — closing other apps will help."
+            )
+        else:
+            level = "ok"
+            message = f"{model} needs ~{needed_gb:.1f} GB; {available_gb:.1f} GB free."
+
+        return {
+            "level": level,
+            "model": model,
+            "needed_gb": needed_gb,
+            "available_gb": available_gb,
+            "total_gb": total_gb,
+            "message": message,
+        }
+
+    def check_memory_before_request(self, backend: str, model: str) -> bool:
+        """Interactive pre-flight for local models. False means "do not run".
+
+        Must be called from the GUI thread, before the worker is constructed.
+        """
+        if backend != "ollama":
+            return True
+
+        verdict = self.assess_local_model(model)
+        if verdict is None or verdict["level"] == "ok":
+            return True
+
+        if verdict["level"] == "too_big":
+            QMessageBox.critical(self, "Model Too Large For This Machine", verdict["message"])
+            return False
+
+        choice = QMessageBox.warning(
+            self,
+            "Low Memory",
+            verdict["message"] + "\n\nRun it anyway?",
+            QMessageBox.Yes | QMessageBox.Cancel,
+            QMessageBox.Cancel,
+        )
+        return choice == QMessageBox.Yes
+
     def check_budget_before_request(self, estimated_cost: float, backend: str) -> bool:
         if backend == "ollama":
             return True
@@ -1732,6 +1860,134 @@ class GodAI(QWidget):
 
         self.apply_recommended_setup()
 
+    # ── Muse Glimmer (local, via Ollama) ─────────────────────────────────────
+
+    def _set_chat_status(self, text: str) -> None:
+        """Write to the chat status line, revealing it if it is still hidden."""
+        label = getattr(self, "chat_status_label", None)
+        if label is None:
+            return
+        label.setText(text)
+        label.setVisible(bool(text))
+
+    @staticmethod
+    def _total_ram_gb() -> int:
+        import psutil
+        return round(psutil.virtual_memory().total / 1e9)
+
+    def _muse_choice(self) -> tuple[str, int]:
+        """The Muse Glimmer build best suited to this machine: (tag, size_gb)."""
+        return muse_glimmer_default(self._total_ram_gb())
+
+    def mark_oversized_models(self, combo) -> None:
+        """Grey out local models this machine cannot physically run.
+
+        Advisory only — the entry stays selectable, and run_backend() is the
+        real gate. Colouring here just makes the limit visible before clicking.
+        """
+        if combo is None:
+            return
+
+        for i in range(combo.count()):
+            # Never overwrite the red recommendation marking.
+            if combo.itemData(i, Qt.ForegroundRole) is not None:
+                continue
+            verdict = self.assess_local_model(combo.itemText(i))
+            if verdict is None:
+                continue
+            if verdict["level"] == "too_big":
+                combo.setItemData(i, QColor("#666666"), Qt.ForegroundRole)
+                combo.setItemData(i, f"⚠ {verdict['message']}", Qt.ToolTipRole)
+            elif verdict["level"] == "tight":
+                combo.setItemData(i, f"⚠ {verdict['message']}", Qt.ToolTipRole)
+
+    def refresh_muse_button(self) -> None:
+        """Show the pull button only while Muse Glimmer is not installed."""
+        btn = getattr(self, "get_muse_btn", None)
+        if btn is None:
+            return
+
+        # Installed at all? Any of the published builds counts.
+        installed = any(
+            self.ollama.is_model_installed(tag) for tag in MUSE_GLIMMER_VARIANTS
+        )
+        tag, size_gb = self._muse_choice()
+
+        btn.setVisible(not installed)
+        btn.setToolTip(
+            f"Download Meta's Muse Glimmer ({tag}) into Ollama — ~{size_gb} GB. "
+            "A 30B open-weights agentic model tuned for tool use, long tasks and "
+            "failure recovery. Runs locally, so it is free and nothing leaves "
+            "this machine."
+        )
+
+    def pull_muse_glimmer(self) -> None:
+        if getattr(self, "muse_pull_worker", None) is not None and self.muse_pull_worker.isRunning():
+            QMessageBox.information(self, "Already Downloading", "Muse Glimmer is already downloading.")
+            return
+
+        tag, size_gb = self._muse_choice()
+        total_ram_gb = self._total_ram_gb()
+
+        ram_note = ""
+        if total_ram_gb and total_ram_gb < size_gb + 8:
+            ram_note = (
+                f"\n\n⚠ This machine has {total_ram_gb} GB of memory and the model needs "
+                f"about {size_gb} GB resident. Expect heavy swapping and slow responses — "
+                "Meta targets a 24–32 GB envelope. Close other apps before running it."
+            )
+
+        confirm = QMessageBox.question(
+            self,
+            "Download Muse Glimmer?",
+            f"This downloads {tag} (~{size_gb} GB) into Ollama.\n\n"
+            "Meta's 30B open-weights agentic model (Apache 2.0), tuned for tool use, "
+            "long-running tasks and failure recovery. It runs locally — free, and no "
+            f"data leaves this machine.{ram_note}",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No,
+        )
+        if confirm != QMessageBox.Yes:
+            return
+
+        self.get_muse_btn.setEnabled(False)
+        self.muse_pull_worker = ModelPullWorker(self.ollama, tag)
+        self.muse_pull_worker.progress_signal.connect(self._on_muse_pull_progress)
+        self.muse_pull_worker.finished_signal.connect(self._on_muse_pull_finished)
+        self.muse_pull_worker.error_signal.connect(self._on_muse_pull_error)
+        self.muse_pull_worker.start()
+
+    def _on_muse_pull_progress(self, status: str, done: int, total: int) -> None:
+        if total > 0:
+            pct = int(done / total * 100)
+            self._set_chat_status(
+                f"Muse Glimmer: {status} — {done / 1e9:.1f} / {total / 1e9:.1f} GB ({pct}%)"
+            )
+            self.tool_progress.setValue(pct)
+        else:
+            self._set_chat_status(f"Muse Glimmer: {status}")
+
+    def _on_muse_pull_finished(self, model: str) -> None:
+        self.tool_progress.setValue(100)
+        self._set_chat_status(f"Muse Glimmer installed ({model}).")
+        self.get_muse_btn.setEnabled(True)
+        self.refresh_muse_button()
+        # Bring it into the dropdown straight away if Ollama is the live provider.
+        if self.provider_box.currentText() == "ollama":
+            self.load_provider_models()
+        QMessageBox.information(
+            self,
+            "Muse Glimmer Ready",
+            f"{model} is installed.\n\nSelect provider 'ollama' and pick it from the "
+            "Model list. It runs locally at no cost.",
+        )
+
+    def _on_muse_pull_error(self, message: str) -> None:
+        self.tool_progress.setValue(0)
+        self._set_chat_status("Muse Glimmer download failed.")
+        self.get_muse_btn.setEnabled(True)
+        QMessageBox.warning(self, "Download Failed", message)
+
     def models_for_provider(self, provider: str) -> list[str]:
         """Model ids offered by one provider, or [] for an unknown provider.
 
@@ -1745,6 +2001,7 @@ class GodAI(QWidget):
             "kimi": self.kimi,
             "gemini": self.gemini,
             "anthropic": self.anthropic,
+            "qwen": self.qwen,
         }
         client = clients.get(provider)
         if client is None:
@@ -1887,6 +2144,9 @@ class GodAI(QWidget):
             self._mark_deviation(
                 model_box, idx >= 0 and model_box.currentIndex() == idx
             )
+            # After the red marking, since _paint_recommended_item resets every
+            # item's colour and would otherwise wipe the grey.
+            self.mark_oversized_models(model_box)
 
     def _on_recommended_provider_changed(self, agent_key: str) -> None:
         """React to the user switching provider on an agent panel.
@@ -2286,7 +2546,7 @@ class GodAI(QWidget):
         top_row_2 = QHBoxLayout()
 
         self.provider_box = QComboBox()
-        self.provider_box.addItems(["ollama", "openai", "deepseek", "kimi", "gemini", "anthropic"])
+        self.provider_box.addItems(["ollama", "openai", "deepseek", "kimi", "gemini", "anthropic", "qwen"])
         self.provider_box.setMinimumWidth(120)
         top_row_2.addWidget(QLabel("Provider:"))
         top_row_2.addWidget(self.provider_box)
@@ -2302,6 +2562,13 @@ class GodAI(QWidget):
         self.refresh_models_btn.setObjectName("ChipBtn")
         self.refresh_models_btn.clicked.connect(self.load_provider_models)
         top_row_2.addWidget(self.refresh_models_btn)
+
+        # Offers a one-click pull of Meta's Muse Glimmer. Hidden once the model
+        # is installed, since it is then just another entry in the model box.
+        self.get_muse_btn = QPushButton("⬇ Get Muse Glimmer")
+        self.get_muse_btn.setObjectName("ChipBtn")
+        self.get_muse_btn.clicked.connect(self.pull_muse_glimmer)
+        top_row_2.addWidget(self.get_muse_btn)
 
         self.model_guide_btn = QPushButton("Model Guide")
 
@@ -2351,6 +2618,10 @@ class GodAI(QWidget):
         self.allow_anthropic_checkbox = QCheckBox("Anthropic")
         self.allow_anthropic_checkbox.setChecked(False)
         top_row_3.addWidget(self.allow_anthropic_checkbox)
+
+        self.allow_qwen_checkbox = QCheckBox("Qwen")
+        self.allow_qwen_checkbox.setChecked(False)
+        top_row_3.addWidget(self.allow_qwen_checkbox)
 
         normal_layout.addWidget(top_row_3_container)
 
@@ -2655,7 +2926,7 @@ class GodAI(QWidget):
         idea_btn_row = QHBoxLayout()
 
         self.manager_provider_box = QComboBox()
-        self.manager_provider_box.addItems(["ollama", "openai", "deepseek", "kimi", "gemini", "anthropic"])
+        self.manager_provider_box.addItems(["ollama", "openai", "deepseek", "kimi", "gemini", "anthropic", "qwen"])
         self.manager_provider_box.setCurrentText("deepseek")
         idea_btn_row.addWidget(QLabel("Provider:"))
         idea_btn_row.addWidget(self.manager_provider_box)
@@ -2776,7 +3047,7 @@ class GodAI(QWidget):
         provider_row = QHBoxLayout()
 
         self.health_provider_box = QComboBox()
-        self.health_provider_box.addItems(["ollama", "openai", "deepseek", "kimi", "gemini", "anthropic"])
+        self.health_provider_box.addItems(["ollama", "openai", "deepseek", "kimi", "gemini", "anthropic", "qwen"])
         self.health_provider_box.setCurrentText("anthropic")
         provider_row.addWidget(self.health_provider_box)
 
@@ -2901,6 +3172,8 @@ class GodAI(QWidget):
                 models = self.gemini.list_models()
             elif provider == "anthropic":
                 models = self.anthropic.list_models()
+            elif provider == "qwen":
+                models = self.qwen.list_models()
             else:
                 models = []
             for m in models:
@@ -3243,7 +3516,7 @@ class GodAI(QWidget):
 
         sb.addWidget(QLabel("Provider:"))
         self.author_provider_box = QComboBox()
-        self.author_provider_box.addItems(["ollama", "openai", "deepseek", "kimi", "gemini", "anthropic"])
+        self.author_provider_box.addItems(["ollama", "openai", "deepseek", "kimi", "gemini", "anthropic", "qwen"])
         self.author_provider_box.setCurrentText("anthropic")
         sb.addWidget(self.author_provider_box)
 
@@ -3668,7 +3941,7 @@ class GodAI(QWidget):
         provider_row = QHBoxLayout()
 
         self.music_provider_box = QComboBox()
-        self.music_provider_box.addItems(["ollama", "openai", "deepseek", "kimi", "gemini", "anthropic"])
+        self.music_provider_box.addItems(["ollama", "openai", "deepseek", "kimi", "gemini", "anthropic", "qwen"])
         self.music_provider_box.setCurrentText("anthropic")
         provider_row.addWidget(self.music_provider_box)
 
@@ -3849,7 +4122,7 @@ class GodAI(QWidget):
         provider_row = QHBoxLayout()
         provider_row.addWidget(QLabel("Provider:"))
         self.nfl_bet_provider_box = QComboBox()
-        self.nfl_bet_provider_box.addItems(["ollama", "openai", "deepseek", "kimi", "gemini", "anthropic"])
+        self.nfl_bet_provider_box.addItems(["ollama", "openai", "deepseek", "kimi", "gemini", "anthropic", "qwen"])
         self.nfl_bet_provider_box.setCurrentText("anthropic")
         provider_row.addWidget(self.nfl_bet_provider_box)
 
@@ -4063,7 +4336,7 @@ class GodAI(QWidget):
         provider_row = QHBoxLayout()
         provider_row.addWidget(QLabel("Provider:"))
         self.osint_provider_box = QComboBox()
-        self.osint_provider_box.addItems(["ollama", "openai", "deepseek", "kimi", "gemini", "anthropic"])
+        self.osint_provider_box.addItems(["ollama", "openai", "deepseek", "kimi", "gemini", "anthropic", "qwen"])
         self.osint_provider_box.setCurrentText("anthropic")
         provider_row.addWidget(self.osint_provider_box)
 
@@ -4181,7 +4454,7 @@ class GodAI(QWidget):
         provider_row = QHBoxLayout()
         provider_row.addWidget(QLabel("Provider:"))
         self.osint_heavy_provider_box = QComboBox()
-        self.osint_heavy_provider_box.addItems(["ollama", "openai", "deepseek", "kimi", "gemini", "anthropic"])
+        self.osint_heavy_provider_box.addItems(["ollama", "openai", "deepseek", "kimi", "gemini", "anthropic", "qwen"])
         self.osint_heavy_provider_box.setCurrentText("anthropic")
         provider_row.addWidget(self.osint_heavy_provider_box)
 
@@ -4367,6 +4640,8 @@ class GodAI(QWidget):
                 models = self.gemini.list_models()
             elif provider == "anthropic":
                 models = self.anthropic.list_models()
+            elif provider == "qwen":
+                models = self.qwen.list_models()
             else:
                 models = []
             for m in models:
@@ -4489,6 +4764,8 @@ class GodAI(QWidget):
                 models = self.gemini.list_models()
             elif provider == "anthropic":
                 models = self.anthropic.list_models()
+            elif provider == "qwen":
+                models = self.qwen.list_models()
             else:
                 models = []
             for m in models:
@@ -4826,7 +5103,7 @@ class GodAI(QWidget):
         provider_row = QHBoxLayout()
         provider_row.addWidget(QLabel("Provider:"))
         self.webdesign_provider_box = QComboBox()
-        self.webdesign_provider_box.addItems(["ollama", "openai", "deepseek", "kimi", "gemini", "anthropic"])
+        self.webdesign_provider_box.addItems(["ollama", "openai", "deepseek", "kimi", "gemini", "anthropic", "qwen"])
         self.webdesign_provider_box.setCurrentText("anthropic")
         provider_row.addWidget(self.webdesign_provider_box)
 
@@ -5014,7 +5291,7 @@ class GodAI(QWidget):
         provider_row = QHBoxLayout()
 
         self.wifi_provider_box = QComboBox()
-        self.wifi_provider_box.addItems(["ollama", "openai", "deepseek", "kimi", "gemini", "anthropic"])
+        self.wifi_provider_box.addItems(["ollama", "openai", "deepseek", "kimi", "gemini", "anthropic", "qwen"])
         self.wifi_provider_box.setCurrentText("anthropic")
         provider_row.addWidget(self.wifi_provider_box)
 
@@ -5181,6 +5458,8 @@ class GodAI(QWidget):
                 models = self.gemini.list_models()
             elif provider == "anthropic":
                 models = self.anthropic.list_models()
+            elif provider == "qwen":
+                models = self.qwen.list_models()
             else:
                 models = []
         except Exception:
@@ -5446,6 +5725,8 @@ class GodAI(QWidget):
                 models = self.gemini.list_models()
             elif provider == "anthropic":
                 models = self.anthropic.list_models()
+            elif provider == "qwen":
+                models = self.qwen.list_models()
             else:
                 models = []
             for m in models:
@@ -5614,6 +5895,8 @@ class GodAI(QWidget):
                 models = self.gemini.list_models()
             elif provider == "anthropic":
                 models = self.anthropic.list_models()
+            elif provider == "qwen":
+                models = self.qwen.list_models()
             else:
                 models = []
             for m in models:
@@ -5944,7 +6227,7 @@ class GodAI(QWidget):
         provider_row = QHBoxLayout()
         provider_row.addWidget(QLabel("Text Provider:"))
         self.fiverr_provider_box = QComboBox()
-        self.fiverr_provider_box.addItems(["anthropic", "openai", "deepseek", "kimi", "gemini", "ollama"])
+        self.fiverr_provider_box.addItems(["anthropic", "openai", "deepseek", "kimi", "gemini", "qwen", "ollama"])
         self.fiverr_provider_box.setCurrentText("anthropic")
         provider_row.addWidget(self.fiverr_provider_box)
 
@@ -6095,6 +6378,8 @@ class GodAI(QWidget):
                 models = self.gemini.list_models()
             elif provider == "anthropic":
                 models = self.anthropic.list_models()
+            elif provider == "qwen":
+                models = self.qwen.list_models()
             else:
                 models = []
             for m in models:
@@ -6330,6 +6615,8 @@ class GodAI(QWidget):
                 models = self.gemini.list_models()
             elif provider == "anthropic":
                 models = self.anthropic.list_models()
+            elif provider == "qwen":
+                models = self.qwen.list_models()
             else:
                 models = []
             for m in models:
@@ -7066,7 +7353,7 @@ class GodAI(QWidget):
 
         sb.addWidget(QLabel("Provider:"))
         self.manuscript_provider_box = QComboBox()
-        self.manuscript_provider_box.addItems(["anthropic", "openai", "deepseek", "kimi", "gemini"])
+        self.manuscript_provider_box.addItems(["anthropic", "openai", "deepseek", "kimi", "gemini", "qwen"])
         self.manuscript_provider_box.currentTextChanged.connect(self.manuscript_load_models)
         sb.addWidget(self.manuscript_provider_box)
 
@@ -7753,30 +8040,8 @@ class GodAI(QWidget):
         self.manuscript_status_label.setText(f"[Error] {error}")
 
     def _parse_quote_list(self, text: str) -> list:
-        text = text.strip()
-        text = re.sub(r"^```(json)?|```$", "", text, flags=re.MULTILINE).strip()
-        try:
-            data = json.loads(text)
-            if isinstance(data, list):
-                return [str(q).strip() for q in data if str(q).strip()]
-        except Exception:
-            pass
-        m = re.search(r"\[.*\]", text, re.DOTALL)
-        if m:
-            try:
-                data = json.loads(m.group(0))
-                if isinstance(data, list):
-                    return [str(q).strip() for q in data if str(q).strip()]
-            except Exception:
-                pass
-        lines = []
-        for line in text.splitlines():
-            line = line.strip().strip("-•* ").strip()
-            line = re.sub(r"^\d+[\.\)]\s*", "", line)
-            line = line.strip("\"“”")
-            if line:
-                lines.append(line)
-        return lines
+        from services.llm_parsing import parse_string_list
+        return parse_string_list(text)
 
     def _build_quote_suggestion_row(self, quote: str) -> QWidget:
         row = QWidget()
@@ -8052,6 +8317,8 @@ class GodAI(QWidget):
                 models = self.gemini.list_models()
             elif provider == "anthropic":
                 models = self.anthropic.list_models()
+            elif provider == "qwen":
+                models = self.qwen.list_models()
             else:
                 models = []
         except Exception:
@@ -8503,7 +8770,7 @@ class GodAI(QWidget):
             if provider == "ollama":
                 models = self.ollama.list_models()
                 if not models:
-                    models = ["deepseek-r1:8b", "deepseek-r1:1.5b"]
+                    models = list(OllamaClient.KNOWN_MODELS)
 
             elif provider == "openai":
                 if not self.openai.client:
@@ -8575,6 +8842,8 @@ class GodAI(QWidget):
 
             elif provider == "anthropic":
                 models = self.anthropic.list_models()
+            elif provider == "qwen":
+                models = self.qwen.list_models()
 
             else:
                 models = []
@@ -9005,7 +9274,7 @@ class GodAI(QWidget):
         provider_row = QHBoxLayout()
         provider_row.addWidget(QLabel("Provider:"))
         self.bb_provider_box = QComboBox()
-        self.bb_provider_box.addItems(["ollama", "openai", "deepseek", "kimi", "gemini", "anthropic"])
+        self.bb_provider_box.addItems(["ollama", "openai", "deepseek", "kimi", "gemini", "anthropic", "qwen"])
         self.bb_provider_box.setCurrentText("anthropic")
         provider_row.addWidget(self.bb_provider_box)
         provider_row.addWidget(QLabel("Model:"))
@@ -10293,7 +10562,7 @@ class GodAI(QWidget):
         except Exception:
             models = []
         if not models:
-            models = ["deepseek-r1:8b", "deepseek-r1:1.5b"]
+            models = list(OllamaClient.KNOWN_MODELS)
         self.model_box.addItems(models)
         self.update_live_cost_estimate()
 
@@ -10391,6 +10660,7 @@ class GodAI(QWidget):
             "allow_kimi": self.allow_kimi_checkbox.isChecked(),
             "allow_gemini": self.allow_gemini_checkbox.isChecked(),
             "allow_anthropic": self.allow_anthropic_checkbox.isChecked(),
+            "allow_qwen": self.allow_qwen_checkbox.isChecked(),
         }
 
         validation = self.validator.validate(
@@ -10414,6 +10684,12 @@ class GodAI(QWidget):
             estimated_cost,
             approx_tokens,
         ):
+            return
+
+        # Memory pre-flight sits with the other gates, before any UI state is
+        # changed. Run it after the worker is armed and a cancel would strand a
+        # disabled Send button and an open run-log entry.
+        if not self.check_memory_before_request(final_backend, final_model):
             return
 
         try:
@@ -10495,6 +10771,15 @@ class GodAI(QWidget):
 
     def run_backend(self, backend, model, messages, prompt):
         if backend == "ollama":
+            # Runs on the worker thread, so this cannot prompt — it is the hard
+            # floor only. Every agent funnels through here, so a model that
+            # physically cannot fit is stopped once, for all of them, and the
+            # message surfaces via each agent's existing error path instead of
+            # freezing the machine for the full request timeout.
+            verdict = self.assess_local_model(model)
+            if verdict is not None and verdict["level"] == "too_big":
+                raise RuntimeError(verdict["message"])
+
             if hasattr(self.ollama, "chat"):
                 return self.ollama.chat(model=model, messages=messages)
             if hasattr(self.ollama, "generate"):
@@ -10523,6 +10808,14 @@ class GodAI(QWidget):
                 return self.kimi.chat(messages=messages, model=model)
             if hasattr(self.kimi, "generate"):
                 return self.kimi.generate(prompt, model=model)
+
+        if backend == "qwen":
+            if hasattr(self.qwen, "stream_chat"):
+                return self.qwen.stream_chat(messages=messages, model=model)
+            if hasattr(self.qwen, "chat"):
+                return self.qwen.chat(messages=messages, model=model)
+            if hasattr(self.qwen, "generate"):
+                return self.qwen.generate(prompt, model=model)
 
         if backend == "gemini":
             if hasattr(self.gemini, "stream_chat"):

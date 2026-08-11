@@ -11,7 +11,8 @@
         "openai",
         "deepseek",
         "kimi",
-        "gemini"
+        "gemini",
+        "qwen"
       ],
       "allowed_tools": [
         "General Chat",
@@ -36,7 +37,8 @@
         "openai",
         "deepseek",
         "kimi",
-        "gemini"
+        "gemini",
+        "qwen"
       ],
       "allowed_tools": [
         "General Chat",
@@ -54,7 +56,8 @@
       "enabled": true,
       "version": "1.0",
       "allowed_providers": [
-        "openai"
+        "openai",
+        "qwen"
       ],
       "allowed_tools": [],
       "budget_limit_eur": 10.0,
@@ -68,8 +71,18 @@
       "label": "Publisher",
       "enabled": true,
       "version": "1.0",
-      "allowed_providers": ["anthropic", "openai", "deepseek", "kimi", "gemini"],
-      "allowed_tools": ["General Chat", "Summarize"],
+      "allowed_providers": [
+        "anthropic",
+        "openai",
+        "deepseek",
+        "kimi",
+        "gemini",
+        "qwen"
+      ],
+      "allowed_tools": [
+        "General Chat",
+        "Summarize"
+      ],
       "budget_limit_eur": 2.0,
       "requires_approval": false,
       "description": "Book publishing metrics, platform distribution tracking, and todo management.",
@@ -87,7 +100,8 @@
         "openai",
         "deepseek",
         "kimi",
-        "gemini"
+        "gemini",
+        "qwen"
       ],
       "budget_limit_eur": null,
       "requires_approval": false,
@@ -101,7 +115,8 @@
       "allowed_providers": [
         "ollama",
         "openai",
-        "gemini"
+        "gemini",
+        "qwen"
       ],
       "budget_limit_eur": null,
       "requires_approval": false,
@@ -116,7 +131,8 @@
         "ollama",
         "openai",
         "deepseek",
-        "kimi"
+        "kimi",
+        "qwen"
       ],
       "budget_limit_eur": null,
       "requires_approval": false,
@@ -132,7 +148,8 @@
         "openai",
         "deepseek",
         "kimi",
-        "gemini"
+        "gemini",
+        "qwen"
       ],
       "budget_limit_eur": null,
       "requires_approval": false,
@@ -146,7 +163,8 @@
       "allowed_providers": [
         "ollama",
         "openai",
-        "gemini"
+        "gemini",
+        "qwen"
       ],
       "budget_limit_eur": null,
       "requires_approval": false,

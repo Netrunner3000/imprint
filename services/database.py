@@ -167,8 +167,6 @@ def _sync_agent_labels(conn: sqlite3.Connection) -> None:
         "osint_heavy": "Bloodhound",
         "wifi":        "Beacon",
         "bug_bounty":  "Bug Spray",
-        "roi":         "Quick ROI",
-        "investment":  "Oracle",
         "nfl_bet":     "Playmaker",
         "fiverr":      "Atelier",
         "health":      "Vitality",
@@ -195,6 +193,11 @@ def _seed_missing_pricing(conn: sqlite3.Connection) -> None:
         ("anthropic", "claude-3-opus-20240229",    15.00,  75.00),
         ("anthropic", "claude-3-haiku-20240307",    0.25,   1.25),
         ("anthropic", "default",                    3.00,  15.00),
+        # Qwen via Alibaba Model Studio. Pricing is regional — these are the
+        # Frankfurt/EU rates (Singapore is dearer at 2.00 / 6.00).
+        ("qwen", "qwen3.8-max",                     1.65,   4.951),
+        ("qwen", "qwen3-max",                       1.65,   4.951),
+        ("qwen", "default",                         1.65,   4.951),
     ]
     for backend, model, inp, out in defaults:
         conn.execute(
@@ -206,18 +209,10 @@ def _seed_missing_pricing(conn: sqlite3.Connection) -> None:
 
 def _seed_default_agents(conn: sqlite3.Connection) -> None:
     """Insert built-in agents that may not exist in the DB yet (new agents added in updates)."""
+    # Quick ROI and Oracle (investment) are deliberately absent: that work moved
+    # to the SONAR app, and their panels and agent modules were removed here.
+    # Re-adding them would resurrect orphaned registry rows on every launch.
     agents = [
-        {
-            "name": "roi",
-            "label": "Quick ROI",
-            "description": "Short-to-medium term return opportunity analysis across stocks, crypto, options, forex, and more.",
-            "allowed_providers": json.dumps([]),
-            "allowed_tools": None,
-            "budget_limit_eur": None,
-            "requires_approval": 0,
-            "log_path": "data/logs/runs.jsonl",
-            "auto_generated": 0,
-        },
         {
             "name": "health",
             "label": "Health",
@@ -299,17 +294,6 @@ def _seed_default_agents(conn: sqlite3.Connection) -> None:
             "name": "fiverr",
             "label": "Fiverr",
             "description": "Fiverr freelancer agent — generates logo concepts via DALL-E 3, writes professional delivery messages, and creates Fiverr gig descriptions.",
-            "allowed_providers": json.dumps([]),
-            "allowed_tools": None,
-            "budget_limit_eur": None,
-            "requires_approval": 0,
-            "log_path": "data/logs/runs.jsonl",
-            "auto_generated": 0,
-        },
-        {
-            "name": "investment",
-            "label": "Investment",
-            "description": "Predictive market analysis — macro, technical, and fundamental synthesis with price targets across equities, crypto, forex, and commodities. For informational purposes only, not financial advice.",
             "allowed_providers": json.dumps([]),
             "allowed_tools": None,
             "budget_limit_eur": None,
