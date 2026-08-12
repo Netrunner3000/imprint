@@ -154,6 +154,7 @@ def init_db() -> None:
     if is_new:
         _migrate_from_json(conn)
     _seed_missing_pricing(conn)
+    _correct_stale_pricing(conn)
     _seed_default_agents(conn)
     _sync_agent_labels(conn)
     conn.close()
@@ -182,12 +183,60 @@ def _sync_agent_labels(conn: sqlite3.Connection) -> None:
     conn.commit()
 
 
+def _correct_stale_pricing(conn: sqlite3.Connection) -> None:
+    """One-time repair of pricing rows that were seeded at the wrong rate.
+
+    _seed_missing_pricing uses INSERT OR IGNORE, so it can add new models but
+    never fixes a row that already exists. These three were wrong: the Opus
+    4.6/4.7 rows carried the old Opus 4.1 rate of 15/75 when those models
+    actually bill at 5/25, and Haiku 4.5 was seeded a notch low.
+
+    Guarded by a settings flag so it runs once and never overwrites a price the
+    user has since edited in Settings -> Pricing.
+    """
+    flag = conn.execute(
+        "SELECT value FROM settings WHERE key = 'pricing_correction_2026_08'"
+    ).fetchone()
+    if flag:
+        return
+
+    corrections = [
+        ("anthropic", "claude-opus-4-6",            5.00, 25.00, 15.00, 75.00),
+        ("anthropic", "claude-opus-4-7",            5.00, 25.00, 15.00, 75.00),
+        ("anthropic", "claude-haiku-4-5-20251001",  1.00,  5.00,  0.80,  4.00),
+    ]
+    for backend, model, new_in, new_out, old_in, old_out in corrections:
+        # Only touch rows still holding the original wrong value.
+        conn.execute(
+            "UPDATE pricing SET input_per_1m_usd = ?, output_per_1m_usd = ? "
+            "WHERE backend = ? AND model = ? "
+            "AND input_per_1m_usd = ? AND output_per_1m_usd = ?",
+            (new_in, new_out, backend, model, old_in, old_out),
+        )
+
+    conn.execute(
+        "INSERT OR REPLACE INTO settings (key, value) VALUES ('pricing_correction_2026_08', 'done')"
+    )
+    conn.commit()
+
+
 def _seed_missing_pricing(conn: sqlite3.Connection) -> None:
     """Insert default pricing rows that may not exist yet (e.g. new providers)."""
+    # Anthropic list prices per 1M tokens, from the official pricing table.
+    # Note the Opus 4.5-and-later tier is 5/25, NOT the 15/75 that Opus 4/4.1
+    # charged — seeding those at 15/75 overstated every estimate threefold.
     defaults = [
-        ("anthropic", "claude-opus-4-6",          15.00,  75.00),
+        ("anthropic", "claude-fable-5",            10.00,  50.00),
+        ("anthropic", "claude-opus-5",              5.00,  25.00),
+        ("anthropic", "claude-sonnet-5",            2.00,  10.00),
+        ("anthropic", "claude-opus-4-8",            5.00,  25.00),
+        ("anthropic", "claude-opus-4-7",            5.00,  25.00),
+        ("anthropic", "claude-opus-4-6",            5.00,  25.00),
+        ("anthropic", "claude-opus-4-5-20251101",   5.00,  25.00),
+        ("anthropic", "claude-opus-4-1-20250805",  15.00,  75.00),
         ("anthropic", "claude-sonnet-4-6",          3.00,  15.00),
-        ("anthropic", "claude-haiku-4-5-20251001",  0.80,   4.00),
+        ("anthropic", "claude-sonnet-4-5-20250929", 3.00,  15.00),
+        ("anthropic", "claude-haiku-4-5-20251001",  1.00,   5.00),
         ("anthropic", "claude-3-5-sonnet-20241022", 3.00,  15.00),
         ("anthropic", "claude-3-5-haiku-20241022",  0.80,   4.00),
         ("anthropic", "claude-3-opus-20240229",    15.00,  75.00),

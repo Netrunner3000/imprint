@@ -12,7 +12,8 @@
         "deepseek",
         "kimi",
         "gemini",
-        "qwen"
+        "qwen",
+        "anthropic"
       ],
       "allowed_tools": [
         "General Chat",
@@ -38,7 +39,8 @@
         "deepseek",
         "kimi",
         "gemini",
-        "qwen"
+        "qwen",
+        "anthropic"
       ],
       "allowed_tools": [
         "General Chat",
@@ -77,7 +79,8 @@
         "deepseek",
         "kimi",
         "gemini",
-        "qwen"
+        "qwen",
+        "ollama"
       ],
       "allowed_tools": [
         "General Chat",
@@ -86,6 +89,27 @@
       "budget_limit_eur": 2.0,
       "requires_approval": false,
       "description": "Book publishing metrics, platform distribution tracking, and todo management.",
+      "log_path": "data/logs/runs.jsonl"
+    },
+    {
+      "name": "manager",
+      "type": "agent",
+      "label": "Forge",
+      "enabled": true,
+      "version": "1.0",
+      "allowed_providers": [
+        "ollama",
+        "openai",
+        "deepseek",
+        "kimi",
+        "gemini",
+        "anthropic",
+        "qwen"
+      ],
+      "allowed_tools": [],
+      "budget_limit_eur": null,
+      "requires_approval": false,
+      "description": "Builds and reviews new agents and tools.",
       "log_path": "data/logs/runs.jsonl"
     }
   ],
@@ -101,7 +125,8 @@
         "deepseek",
         "kimi",
         "gemini",
-        "qwen"
+        "qwen",
+        "anthropic"
       ],
       "budget_limit_eur": null,
       "requires_approval": false,
@@ -116,7 +141,9 @@
         "ollama",
         "openai",
         "gemini",
-        "qwen"
+        "qwen",
+        "anthropic",
+        "kimi"
       ],
       "budget_limit_eur": null,
       "requires_approval": false,
@@ -132,7 +159,8 @@
         "openai",
         "deepseek",
         "kimi",
-        "qwen"
+        "qwen",
+        "anthropic"
       ],
       "budget_limit_eur": null,
       "requires_approval": false,
@@ -149,7 +177,8 @@
         "deepseek",
         "kimi",
         "gemini",
-        "qwen"
+        "qwen",
+        "anthropic"
       ],
       "budget_limit_eur": null,
       "requires_approval": false,
@@ -164,7 +193,9 @@
         "ollama",
         "openai",
         "gemini",
-        "qwen"
+        "qwen",
+        "anthropic",
+        "kimi"
       ],
       "budget_limit_eur": null,
       "requires_approval": false,
