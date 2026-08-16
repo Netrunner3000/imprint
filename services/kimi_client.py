@@ -1,6 +1,8 @@
 import os
 from openai import OpenAI
 
+from services.api_limits import REQUEST_TIMEOUT_SECONDS, MAX_RETRIES
+
 
 class KimiClientWrapper:
     """Wrapper for Moonshot AI's Kimi models via the OpenAI-compatible Kimi API.
@@ -21,6 +23,8 @@ class KimiClientWrapper:
             OpenAI(
                 api_key=self.api_key,
                 base_url="https://api.moonshot.ai/v1",
+                timeout=REQUEST_TIMEOUT_SECONDS,
+                max_retries=MAX_RETRIES,
             )
             if self.api_key
             else None

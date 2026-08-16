@@ -375,3 +375,42 @@ class TestParseStringList:
         # The caller renders this straight into a list widget; it must never throw.
         for junk in ["{not: valid}", "[[[", "null", "42", "   "]:
             assert isinstance(parse_string_list(junk), list)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 7. Asset output paths
+# Scenario: several graphics/shorts are generated in quick succession
+# ─────────────────────────────────────────────────────────────────────────────
+
+class TestUniqueOutputPath:
+    """Regression guard: asset filenames used to be timestamp-only, so generating
+    two graphics inside the same tick silently overwrote the first."""
+
+    def test_rapid_calls_never_collide(self, tmp_path):
+        from ui.book_widgets import unique_output_path
+        paths = []
+        for _ in range(10):
+            p = unique_output_path(tmp_path, "quote", ".png")
+            p.write_bytes(b"x")          # occupy it, as a real render would
+            paths.append(p)
+        assert len(set(paths)) == 10
+
+    def test_respects_stem_and_suffix(self, tmp_path):
+        from ui.book_widgets import unique_output_path
+        p = unique_output_path(tmp_path, "short", ".mp4")
+        assert p.name.startswith("short_")
+        assert p.suffix == ".mp4"
+
+    def test_creates_missing_directory(self, tmp_path):
+        from ui.book_widgets import unique_output_path
+        target = tmp_path / "nested" / "dir"
+        p = unique_output_path(target, "quote", ".png")
+        assert target.exists()
+        assert p.parent == target
+
+    def test_paired_png_and_mp4_share_a_stem(self, tmp_path):
+        # Shorts derive the image path from the video path, so they must match.
+        from ui.book_widgets import unique_output_path
+        video = unique_output_path(tmp_path, "short", ".mp4")
+        image = video.with_suffix(".png")
+        assert video.stem == image.stem

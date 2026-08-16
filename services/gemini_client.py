@@ -1,5 +1,8 @@
 import os
 from google import genai
+from google.genai import types as genai_types
+
+from services.api_limits import REQUEST_TIMEOUT_MS
 
 
 def _gemini_api_key():
@@ -20,7 +23,15 @@ class GeminiClientWrapper:
 
     def __init__(self):
         self.api_key = _gemini_api_key()
-        self.client = genai.Client(api_key=self.api_key) if self.api_key else None
+        self.client = (
+            genai.Client(
+                api_key=self.api_key,
+                # google-genai takes milliseconds here, unlike the other SDKs
+                http_options=genai_types.HttpOptions(timeout=REQUEST_TIMEOUT_MS),
+            )
+            if self.api_key
+            else None
+        )
 
     @staticmethod
     def key_available():

@@ -1,5 +1,7 @@
 import os
 
+from services.api_limits import REQUEST_TIMEOUT_SECONDS, MAX_RETRIES
+
 try:
     import anthropic as _sdk
     _HAS_SDK = True
@@ -20,7 +22,15 @@ class AnthropicClientWrapper:
 
     def __init__(self):
         api_key = os.environ.get("ANTHROPIC_API_KEY", "")
-        self.client = _sdk.Anthropic(api_key=api_key) if _HAS_SDK and api_key else None
+        self.client = (
+            _sdk.Anthropic(
+                api_key=api_key,
+                timeout=REQUEST_TIMEOUT_SECONDS,
+                max_retries=MAX_RETRIES,
+            )
+            if _HAS_SDK and api_key
+            else None
+        )
 
     @staticmethod
     def key_available() -> bool:

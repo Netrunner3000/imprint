@@ -1,6 +1,8 @@
 import os
 from openai import OpenAI
 
+from services.api_limits import REQUEST_TIMEOUT_SECONDS, MAX_RETRIES
+
 
 class OpenAIClientWrapper:
     KNOWN_MODELS = [
@@ -12,7 +14,15 @@ class OpenAIClientWrapper:
 
     def __init__(self):
         self.api_key = os.getenv("OPENAI_API_KEY")
-        self.client = OpenAI(api_key=self.api_key) if self.api_key else None
+        self.client = (
+            OpenAI(
+                api_key=self.api_key,
+                timeout=REQUEST_TIMEOUT_SECONDS,
+                max_retries=MAX_RETRIES,
+            )
+            if self.api_key
+            else None
+        )
 
     @staticmethod
     def key_available():

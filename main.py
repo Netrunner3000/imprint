@@ -40,6 +40,7 @@ from PySide6.QtWidgets import (
     QLabel, QTextEdit, QPushButton, QComboBox, QListWidget, QListWidgetItem,
     QMessageBox, QCheckBox, QTextBrowser, QSplitter, QLineEdit, QFileDialog,
     QProgressBar, QDialog, QTabWidget, QFrame, QScrollArea, QStackedWidget, QLayout,
+    QInputDialog,
 )
 
 from services.ollama_client import OllamaClient, MUSE_GLIMMER_VARIANTS, muse_glimmer_default
@@ -77,6 +78,10 @@ from agents.wifi_agent import WiFiAgent, KNOWN_ADAPTERS, detect_usb_adapters, bu
 from agents.osint_heavy_agent import OsintHeavyAgent
 from agents.fiverr_agent import FiverrAgent
 from services.agent_factory import AgentFactory
+from ui.book_widgets import (
+    make_theme_box, make_size_box, make_voice_source_box,
+    theme_key, size_key, unique_output_path,
+)
 
 
 # Writable base = project root in dev, ~/Library/Application Support/Sentinel AI when frozen.
@@ -86,6 +91,9 @@ RESOURCE_DIR = resource_base()
 CONFIG_DIR = BASE_DIR / "config"
 DATA_DIR = BASE_DIR / "data"
 CHATS_DIR = DATA_DIR / "chats"
+
+# Sentinel value for the Saved Chats agent filter — not a real agent name.
+ALL_AGENTS_FILTER = "All agents"
 
 SETTINGS_FILE = CONFIG_DIR / "settings.json"
 AGENTS_FILE = CONFIG_DIR / "agents.json"
@@ -220,347 +228,12 @@ AGENT_PRETTY_NAMES = {
 }
 
 
-class ChatWorker(QThread):
-    token_signal = Signal(str)
-    status_signal = Signal(str)
-    finished_signal = Signal(str)
-    error_signal = Signal(str)
-    usage_signal = Signal(dict)
-
-    def __init__(self, run_backend_func, backend: str, model: str, messages: list, prompt: str):
-        super().__init__()
-        self.run_backend_func = run_backend_func
-        self.backend = backend
-        self.model = model
-        self.messages = messages
-        self.prompt = prompt
-        self._cancel_requested = False
-
-    def cancel(self):
-        self._cancel_requested = True
-
-    def _emit_as_tokens(self, text: str):
-        for part in re.split(r"(\s+)", text):
-            if self._cancel_requested:
-                return
-            self.token_signal.emit(part)
-            time.sleep(0.006)
-
-    def run(self):
-        try:
-            self.status_signal.emit("Model processing started...")
-            result = self.run_backend_func(
-                self.backend,
-                self.model,
-                self.messages,
-                self.prompt,
-            )
-
-            usage = None
-            response_parts = []
-
-            # ===== STREAMING CASE =====
-            if hasattr(result, "__iter__") and not isinstance(result, (str, tuple, dict)):
-                self.status_signal.emit("Streaming response...")
-
-                for token in result:
-                    if self._cancel_requested:
-                        self.error_signal.emit("Request cancelled by user.")
-                        return
-
-                    response_parts.append(token)
-                    self.token_signal.emit(token)
-
-                response = "".join(response_parts)
-                
-                usage = {
-                    "cost_type_override": "stream-estimated"
-        }
-
-            # ===== TUPLE (response, usage) =====
-            elif isinstance(result, tuple):
-                response, usage = result
-                self._emit_as_tokens(response)
-
-            # ===== NORMAL STRING RESPONSE =====
-            else:
-                response = result
-                self._emit_as_tokens(response)
-
-            if usage:
-                self.usage_signal.emit(usage)
-
-            self.finished_signal.emit(response)
-
-        except Exception as e:
-            self.error_signal.emit(str(e))
-
-
-class SubprocessWorker(QThread):
-    finished_signal = Signal(str)
-    error_signal = Signal(str)
-
-    def __init__(self, cmd: list):
-        super().__init__()
-        self._cmd = cmd
-        self._cancelled = False
-
-    def cancel(self):
-        self._cancelled = True
-
-    def run(self):
-        try:
-            result = subprocess.run(self._cmd, capture_output=True, text=True, timeout=30)
-            if self._cancelled:
-                return
-            output = result.stdout.strip()
-            if result.stderr.strip():
-                output += f"\n\n[stderr]\n{result.stderr.strip()}"
-            self.finished_signal.emit(output or "[No output returned]")
-        except subprocess.TimeoutExpired:
-            self.error_signal.emit("Command timed out after 30 seconds.")
-        except FileNotFoundError as e:
-            self.error_signal.emit(f"Command not found: {e}")
-        except Exception as e:
-            self.error_signal.emit(str(e))
-
-
-class ModelPullWorker(QThread):
-    """Downloads an Ollama model off the UI thread.
-
-    progress_signal carries (status, completed_bytes, total_bytes); total is 0
-    until Ollama has resolved the manifest.
-    """
-    progress_signal = Signal(str, int, int)
-    finished_signal = Signal(str)
-    error_signal = Signal(str)
-
-    def __init__(self, client, model: str):
-        super().__init__()
-        self._client = client
-        self._model = model
-
-    def run(self):
-        try:
-            self._client.pull_model(
-                self._model,
-                on_progress=lambda status, done, total: self.progress_signal.emit(
-                    status, int(done or 0), int(total or 0)
-                ),
-            )
-            self.finished_signal.emit(self._model)
-        except Exception as e:
-            self.error_signal.emit(str(e))
-
-
-class FiverrImageWorker(QThread):
-    """Downloads and saves DALL-E 3 generated logo images."""
-    image_ready_signal = Signal(str, int)   # local_path, index
-    all_done_signal = Signal(list)           # all local paths
-    error_signal = Signal(str)
-    status_signal = Signal(str)
-
-    def __init__(self, openai_client, image_prompt: str, count: int, save_dir: Path):
-        super().__init__()
-        self.openai_client = openai_client
-        self.image_prompt = image_prompt
-        self.count = count
-        self.save_dir = save_dir
-        self._cancel_requested = False
-
-    def cancel(self):
-        self._cancel_requested = True
-
-    def run(self):
-        import urllib.request
-        self.save_dir.mkdir(parents=True, exist_ok=True)
-        paths = []
-        for i in range(self.count):
-            if self._cancel_requested:
-                self.error_signal.emit("Cancelled.")
-                return
-            try:
-                self.status_signal.emit(f"Generating concept {i + 1} of {self.count}...")
-                url = self.openai_client.generate_image(self.image_prompt)
-                local_path = self.save_dir / f"logo_{i + 1}.png"
-                urllib.request.urlretrieve(url, str(local_path))
-                paths.append(str(local_path))
-                self.image_ready_signal.emit(str(local_path), i)
-            except Exception as e:
-                self.error_signal.emit(f"Concept {i + 1} failed: {e}")
-                return
-        self.all_done_signal.emit(paths)
-
-
-class ShortsWorker(QThread):
-    """Narrates a quote and renders it into a short vertical MP4."""
-    status_signal = Signal(str)
-    done_signal = Signal(str)   # output video path
-    error_signal = Signal(str)
-
-    def __init__(self, quote: str, image_path: Path, output_path: Path,
-                 use_elevenlabs: bool, voice_id: str):
-        super().__init__()
-        self.quote = quote
-        self.image_path = image_path
-        self.output_path = output_path
-        self.use_elevenlabs = use_elevenlabs
-        self.voice_id = voice_id
-
-    def run(self):
-        from services.shorts_generator import render_short
-        try:
-            self.status_signal.emit("[Narrating…]")
-            render_short(
-                self.quote, self.image_path, self.output_path,
-                use_elevenlabs=self.use_elevenlabs, voice_id=self.voice_id,
-            )
-            self.done_signal.emit(str(self.output_path))
-        except Exception as e:
-            self.error_signal.emit(str(e))
-
-
-class FlowLayout(QLayout):
-    """Left-to-right layout that wraps onto a new line when it runs out of width.
-
-    A QHBoxLayout of buttons reports the sum of their widths as its minimum, so a
-    long control row pins a hard minimum width on the whole pane. Below that the
-    splitter compresses the buttons past their own minimums and the labels get
-    chopped ("Auto Rout", "ecomme"). Wrapping instead keeps every control at its
-    natural size and lets the pane shrink to the width of the widest single item.
-    """
-
-    def __init__(self, parent=None, spacing=6):
-        super().__init__(parent)
-        self._items = []
-        self.setContentsMargins(0, 0, 0, 0)
-        self.setSpacing(spacing)
-
-    # ── QLayout plumbing ────────────────────────────────────────────────
-    def addItem(self, item):
-        self._items.append(item)
-
-    def count(self):
-        return len(self._items)
-
-    def itemAt(self, index):
-        return self._items[index] if 0 <= index < len(self._items) else None
-
-    def takeAt(self, index):
-        return self._items.pop(index) if 0 <= index < len(self._items) else None
-
-    def expandingDirections(self):
-        return Qt.Orientations(Qt.Orientation(0))
-
-    def hasHeightForWidth(self):
-        return True
-
-    def heightForWidth(self, width):
-        return self._arrange(QRect(0, 0, width, 0), apply=False)
-
-    def setGeometry(self, rect):
-        super().setGeometry(rect)
-        self._arrange(rect, apply=True)
-
-    def sizeHint(self):
-        return self.minimumSize()
-
-    def minimumSize(self):
-        size = QSize()
-        for item in self._items:
-            size = size.expandedTo(item.minimumSize())
-        margins = self.contentsMargins()
-        return size + QSize(margins.left() + margins.right(),
-                            margins.top() + margins.bottom())
-
-    # ── placement ───────────────────────────────────────────────────────
-    def _arrange(self, rect, apply):
-        margins = self.contentsMargins()
-        left = rect.x() + margins.left()
-        right = rect.right() - margins.right()
-        x, y = left, rect.y() + margins.top()
-        line_height = 0
-        space = self.spacing()
-
-        for item in self._items:
-            hint = item.sizeHint()
-            if x + hint.width() > right and line_height > 0:   # wrap
-                x = left
-                y += line_height + space
-                line_height = 0
-            if apply:
-                item.setGeometry(QRect(QPoint(x, y), hint))
-            x += hint.width() + space
-            line_height = max(line_height, hint.height())
-
-        return y + line_height - rect.y() + margins.bottom()
-
-
-class CollapsibleSection(QWidget):
-    """Modern accordion-style section with header button and toggleable content."""
-
-    HEADER_STYLE = """
-        QPushButton#CollapsibleHeader {
-            text-align: left;
-            padding: 4px 10px;
-            background-color: transparent;
-            border: none;
-            color: #707070;
-            font-weight: bold;
-            font-size: 10px;
-            letter-spacing: 1.5px;
-        }
-        QPushButton#CollapsibleHeader:hover {
-            color: #ffffff;
-        }
-        QPushButton#CollapsibleHeader:checked {
-            color: #999999;
-        }
-    """
-
-    def __init__(self, title: str, expanded: bool = True):
-        super().__init__()
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(2)
-
-        self._expanded = expanded
-        self._title = title
-
-        self.header_btn = QPushButton()
-        self.header_btn.setObjectName("CollapsibleHeader")
-        self.header_btn.setCheckable(True)
-        self.header_btn.setChecked(expanded)
-        self.header_btn.setStyleSheet(self.HEADER_STYLE)
-        self.header_btn.clicked.connect(self._toggle)
-        layout.addWidget(self.header_btn)
-
-        self.content = QWidget()
-        self.content_layout = QVBoxLayout(self.content)
-        self.content_layout.setContentsMargins(0, 4, 0, 10)
-        self.content_layout.setSpacing(3)
-        layout.addWidget(self.content)
-
-        self._update_header()
-        self.content.setVisible(expanded)
-
-    def addWidget(self, widget):
-        self.content_layout.addWidget(widget)
-
-    def _toggle(self):
-        self._expanded = not self._expanded
-        self.content.setVisible(self._expanded)
-        self._update_header()
-
-    def _update_header(self):
-        arrow = "▾" if self._expanded else "▸"
-        # QPushButton reads "&" as a mnemonic marker, which silently turned
-        # "Finance & Business" into "FINANCE _BUSINESS". Double it to render a
-        # literal ampersand.
-        title = self._title.upper().replace("&", "&&")
-        self.header_btn.setText(f"  {arrow}   {title}")
-        self.header_btn.setChecked(self._expanded)
-
+from ui.workers import (
+    ChatWorker, SubprocessWorker, ModelPullWorker, FiverrImageWorker, ShortsWorker,
+)
+from ui.widgets import FlowLayout, CollapsibleSection
+from ui.style import GLOBAL_STYLESHEET
+from ui.tooltips import seed_tooltips
 
 class GodAI(QWidget):
     def __init__(self):
@@ -604,6 +277,8 @@ class GodAI(QWidget):
         self.registry = Registry()
         self.validator = Validator(self.registry)
         self.run_logger = RunLogger()
+        # agent name -> context for an in-flight request (see authorize_request)
+        self._pending_requests = {}
 
         self.manager_agent = ManagerAgent()
         self.agent_factory = AgentFactory(BASE_DIR)
@@ -746,248 +421,7 @@ class GodAI(QWidget):
                 widget.setToolTip(text)
 
     def _seed_tooltips(self):
-        """Apply explanatory tooltips to every important control in every
-        panel. Tooltips can be toggled off via the chip in the header bar."""
-        # ── Centre-panel general controls (Chat / normal panel) ──────────
-        self._set_tooltips({
-            "tool_box":                "System prompt frame applied to the conversation (General Chat, Writing, Coding, Summarize, Rewrite).",
-            "command_box":             "Pre-built prompt scaffold from config/commands.json. Pick one or type your own message.",
-            "provider_box":            "AI provider that will run this request. Ollama is local & free; Anthropic / OpenAI / DeepSeek / Gemini are cloud (pay-as-you-go).",
-            "model_box":               "Specific model under the chosen provider. Larger models cost more but produce stronger output.",
-            "refresh_models_btn":      "Re-fetch the model list from the selected provider.",
-            "model_guide_btn":         "Open the in-app Model Guide with current models, pricing, and recommendations.",
-            "docs_btn":                "Open the full Sentinel AI documentation.",
-            "agent_docs_btn":          "Open the documentation for the currently active agent.",
-            "execution_mode_box":      "Local-only: only Ollama. Hybrid: pick best of local/cloud. Cloud-only: only paid providers.",
-            "allow_openai_checkbox":   "Allow this request to use the OpenAI API (paid).",
-            "allow_deepseek_checkbox": "Allow this request to use the DeepSeek API (paid, cheap).",
-            "allow_kimi_checkbox": "Allow this request to use the Kimi API (paid, strong at coding/agentic tasks).",
-            "allow_gemini_checkbox":   "Allow this request to use Google Gemini (free tier available).",
-            "allow_anthropic_checkbox":"Allow this request to use Anthropic Claude (paid).",
-            "input_box":               "Type your prompt here. Long prompts cost more on paid providers.",
-            "send_btn":                "Send the prompt to the selected provider and model.",
-            "stop_chat_btn":           "Cancel the in-flight request.",
-            "auto_route_btn":          "Let the router pick the best agent + provider + model automatically.",
-            "recommend_setup_btn":     "Apply the recommended provider + model for the current tool / agent.",
-            "auto_recommend_checkbox": "Apply the recommendation automatically on every input change.",
-            "estimate_btn":            "Show the estimated cost of the current prompt + settings before sending.",
-            "export_btn":              "Export the last response to a Markdown / HTML report.",
-            "tooltips_toggle_btn":     "Toggle hover tooltips across the entire app.",
-            "agent_title_label":       "Current agent. Click an agent in the left sidebar to switch.",
-            "agent_subtitle_label":    "What this agent does in one line.",
-            "agent_status_pill":       "Current agent status. ●  READY = idle; flips colour when a request is running or has errored.",
-        })
-
-        # ── Left panel ───────────────────────────────────────────────────
-        # Reuse agent_subtitles dict — set each agent button's tooltip to its description
-        subtitles_for_buttons = {
-            "chat":        "General-purpose conversation. Pick a tool, pick a model, talk.",
-            "osint":       "Light OSINT — structured research queries.",
-            "osint_heavy": "Deep OSINT investigation with five-section dossier.",
-            "wifi":        "Wireless recon, signal analysis, Kali command generation.",
-            "bug_bounty":  "Vulnerability triage + HackerOne-ready submission drafts.",
-            "nfl_bet":     "NFL prop bet analysis with EV and projection modelling.",
-            "fiverr":      "Logo gigs — DALL·E prompts, gig descriptions, delivery messages.",
-            "health":      "Nutrition, fitness, mental wellness guidance.",
-            "author":      "Long-form fiction drafting and book writing.",
-            "music":       "Spotify artist setup, distribution, income roadmap.",
-            "webdesign":   "Modern HTML / CSS / JavaScript generation.",
-            "audiobook":   "Convert ebooks (PDF / EPUB / TXT / MOBI) into MP3 audiobooks.",
-            "manager":     "Describe a new agent in plain language — Forge writes the code.",
-        }
-        if hasattr(self, "agent_buttons"):
-            for name, tip in subtitles_for_buttons.items():
-                btn = self.agent_buttons.get(name)
-                if btn is not None:
-                    btn.setToolTip(tip)
-        self._set_tooltips({
-            "history_search":   "Filter saved chats by typing here.",
-            "history_list":     "Click a saved chat to re-open it.",
-            "delete_chat_btn":  "Delete the currently selected saved chat.",
-            "new_chat_btn":     "Start a fresh conversation (clears the current context).",
-        })
-
-        # ── Right panel cards ────────────────────────────────────────────
-        self._set_tooltips({
-            "resource_label":           "Live RAM / CPU / SWAP / battery snapshot. Green = healthy, yellow = busy, red = stressed.",
-            "realtime_monitor_btn":     "(Coming soon) Live charts of system resource usage.",
-            "route_result_label":       "Last routing decision — which agent + provider + model was used.",
-            "recommendation_label":     "Recommendation for the current tool / agent — provider + model + reason.",
-            "live_estimate_label":      "Estimated cost of the current prompt at the selected provider + model.",
-            "last_request_label":       "Cost of the most recently completed request.",
-            "session_cost_label":       "Total spend since this app session started.",
-            "today_cost_label":         "Total spend today (resets at midnight local time).",
-            "request_count_label":      "Number of requests sent today and during this session.",
-            "budget_label":             "How much of the budget remains for this session and today.",
-            "session_budget_input":     "Maximum spend allowed for this session in euros.",
-            "daily_budget_input":       "Maximum spend allowed per day in euros.",
-            "save_budget_btn":          "Persist the budget limits to settings.",
-            "reset_session_budget_btn": "Reset the session spend counter back to zero.",
-            "cost_history_btn":         "Open the Cost History dialog (charts and tables of past spending).",
-            "run_log_btn":              "Open the Run Log dialog (every request with status, duration, cost).",
-            "settings_btn":             "Open the Settings dialog (pricing, agents, tools, EUR/USD rate).",
-            "openai_key_label":         "Whether an OpenAI API key is configured. Set OPENAI_API_KEY in .env or ~/.zshrc.",
-            "deepseek_key_label":       "Whether a DeepSeek API key is configured. Set DEEPSEEK_API_KEY in .env or ~/.zshrc.",
-            "kimi_key_label":           "Whether a Kimi (Moonshot AI) API key is configured. Set KIMI_API_KEY in .env or ~/.zshrc.",
-            "gemini_key_label":         "Whether a Google Gemini API key is configured. Set GOOGLE_API_KEY in .env or ~/.zshrc.",
-            "anthropic_key_label":      "Whether an Anthropic API key is configured. Set ANTHROPIC_API_KEY in .env or ~/.zshrc.",
-        })
-
-        # ── Per-agent panel tooltips ─────────────────────────────────────
-
-
-        # NFL Props (Playmaker)
-        self._set_tooltips({
-            "nfl_bet_player_input":   "Player or team the prop is on.",
-            "nfl_bet_prop_type_box":  "Which prop you're evaluating (Passing Yards, Receptions, etc.).",
-            "nfl_bet_line_input":     "The sportsbook line (e.g. 252.5).",
-            "nfl_bet_odds_input":     "American odds for the side you're considering (e.g. -110).",
-            "nfl_bet_context_input":  "Game context: opponent, week, weather, injuries.",
-            "nfl_bet_data_input":     "Paste raw stats / game logs / matchup data. The agent works from what you provide — it has no live data feed.",
-            "nfl_bet_analyse_btn":    "Run the prop bet analysis.",
-            "nfl_bet_stop_btn":       "Cancel the analysis.",
-            "nfl_model_player_input": "Player for season-long projection modelling.",
-            "nfl_model_stat_box":     "Stat category to project.",
-            "nfl_model_line_input":   "Optional prop line to evaluate against the projection.",
-            "nfl_model_log_input":    "Paste the player's season game log (numbers per game).",
-            "nfl_model_context_input":"Upcoming game context: opponent, week, weather, injuries.",
-            "nfl_model_build_btn":    "Compute season stats and project the next game.",
-            "nfl_model_stop_btn":     "Cancel the projection.",
-        })
-
-        # Health (Vitality)
-        self._set_tooltips({
-            "health_category_box":   "Health domain — nutrition, fitness, mental, weight management, etc.",
-            "health_goal_box":       "Primary goal for this consultation.",
-            "health_activity_box":   "Current activity level — affects calorie / training recommendations.",
-            "health_age_input":      "Optional — your age, helps tailor advice.",
-            "health_query_input":    "Describe your question, goal, or concern in detail.",
-            "health_provider_box":   "Provider for the analysis call.",
-            "health_model_box":      "Specific model.",
-            "health_analyse_btn":    "Generate the four-section wellness plan.",
-            "health_stop_btn":       "Cancel the request.",
-            "health_help_btn":       "Open the Vitality documentation section.",
-            "health_save_btn":       "Save the response to a .txt file.",
-            "health_clear_btn":      "Clear the form and tabs.",
-            "health_conf_label":     "Model's stated confidence in its recommendations.",
-        })
-
-        # Music (Maestro)
-        self._set_tooltips({
-            "music_provider_box":  "Provider for the analysis call.",
-            "music_model_box":     "Specific model. Claude works best for long structured plans.",
-            "music_analyse_btn":   "Generate the full five-section release plan.",
-            "music_stop_btn":      "Cancel the request.",
-            "music_help_btn":      "Open the Maestro documentation section.",
-            "music_save_btn":      "Save the full plan as a .txt file.",
-        })
-
-        # Author (Manuscript)
-        self._set_tooltips({
-            "author_write_btn":    "Generate the requested writing (outline / characters / scene / world).",
-            "author_continue_btn": "Continue from the last draft.",
-            "author_save_btn":     "Save the current draft to disk.",
-            "author_clear_btn":    "Clear the draft area and reset the form.",
-        })
-
-        # Web Design (Site Builder)
-        self._set_tooltips({
-            "webdesign_brief_input":  "Describe the page / component / layout you want generated.",
-            "webdesign_provider_box": "Provider for the generation call.",
-            "webdesign_model_box":    "Specific model.",
-            "webdesign_generate_btn": "Generate the HTML / CSS / JS code.",
-            "webdesign_stop_btn":     "Cancel the generation.",
-            "webdesign_save_btn":     "Save the generated code as a .html file.",
-        })
-
-        # Wi-Fi (Beacon)
-        self._set_tooltips({
-            "wifi_mode_box":          "What to run — Interface Info, Scan Networks, Signal Monitor, Ping Test, or Kali Command Builder.",
-            "wifi_interface_box":     "Which network interface to use (typically en0 on Mac).",
-            "wifi_target_input":      "Target host (only used by Ping Test mode).",
-            "wifi_run_btn":           "Run the selected mode.",
-            "wifi_stop_btn":          "Cancel the running scan / probe.",
-            "wifi_help_btn":          "Open the Beacon documentation section.",
-            "wifi_detect_btn":        "Scan USB for known compatible Wi-Fi adapters (TL-WN722N, AWUS036ACH, etc.).",
-            "wifi_save_btn":          "Save the raw output to a file.",
-        })
-
-        # Fiverr (Atelier)
-        self._set_tooltips({
-            "fiverr_provider_box":     "Provider for text generation (delivery / gig description / prompts).",
-            "fiverr_model_box":        "Specific model for text.",
-            "fiverr_generate_btn":     "Build a DALL·E logo prompt from the brief, then generate the logos.",
-            "fiverr_delivery_btn":     "Write a Fiverr delivery message based on the brief.",
-            "fiverr_gig_btn":          "Write a full Fiverr gig description.",
-            "fiverr_stop_btn":         "Cancel the running generation.",
-            "fiverr_save_images_btn":  "Save all generated logo images to disk.",
-            "fiverr_clear_btn":        "Clear the brief and outputs.",
-        })
-
-        # OSINT (Trace)
-        self._set_tooltips({
-            "osint_query_input":    "What you want to research — name, handle, domain, email, etc.",
-            "osint_provider_box":   "Provider for the analysis call.",
-            "osint_model_box":      "Specific model.",
-            "osint_analyse_btn":    "Run the structured OSINT query.",
-            "osint_stop_btn":       "Cancel the analysis.",
-        })
-
-        # OSINT Pro (Bloodhound)
-        self._set_tooltips({
-            "osint_heavy_target_input":     "Target identifier (person, username, domain, IP, organisation).",
-            "osint_heavy_type_box":         "Target type — guides which tools and pivots are used.",
-            "osint_heavy_scope_box":        "Investigation depth: Quick Scan / Standard / Deep Dive.",
-            "osint_heavy_objective_input":  "Investigation objective / context for the analyst.",
-            "osint_heavy_image_input":      "Optional — image to extract EXIF metadata from.",
-            "osint_heavy_investigate_btn":  "Generate the five-section investigation dossier.",
-            "osint_heavy_stop_btn":         "Cancel the investigation.",
-            "osint_heavy_save_btn":         "Save the full dossier to a .txt file.",
-            "osint_heavy_threat_bar":       "Threat level on a 0–10 scale, extracted from the dossier.",
-        })
-
-        # Bug Bounty (Bug Spray)
-        self._set_tooltips({
-            "bb_target_input":       "Target asset in scope of the bug bounty program.",
-            "bb_program_input":      "Name of the bug bounty program (HackerOne, Bugcrowd, etc.).",
-            "bb_scope_box":          "Scope category — Web, Mobile, API, Network, etc.",
-            "bb_findings_input":     "Paste raw findings: HTTP responses, Burp output, source snippets, recon notes.",
-            "bb_nmap_cmd_input":     "Nmap command to run (will execute via subprocess locally).",
-            "bb_nmap_run_btn":       "Run the Nmap command and capture output below.",
-            "bb_nmap_stop_btn":      "Kill the running Nmap process.",
-            "bb_nmap_output":        "Live Nmap subprocess output.",
-            "bb_analyse_btn":        "Produce a CWE-classified vulnerability report and HackerOne-ready submission.",
-            "bb_stop_btn":           "Cancel the analysis.",
-            "bb_save_btn":           "Save the full report to a .txt file.",
-            "bb_clear_btn":          "Clear inputs and outputs.",
-        })
-
-        # Audiobook (Narrator)
-        self._set_tooltips({
-            "audiobook_book_list":      "Books found in the configured input folder. Click one to select.",
-            "audiobook_refresh_btn":    "Rescan the input folder for new books.",
-            "audiobook_start_btn":      "Start converting the selected book to MP3 via OpenAI TTS.",
-            "audiobook_input_path":     "Folder where input ebooks live.",
-            "audiobook_output_path":    "Folder where generated MP3 files are saved.",
-            "audiobook_voice_box":      "OpenAI TTS voice to use.",
-            "audiobook_chunk_input":    "Tokens per TTS chunk. Higher = fewer API calls; lower = safer for limits.",
-            "tool_progress":            "Conversion progress.",
-            "audiobook_status_label":   "Current conversion status.",
-            "stop_btn":                 "Stop the running conversion.",
-        })
-
-        # Manager (Forge)
-        self._set_tooltips({
-            "manager_idea_input":   "Describe the agent you want to create in plain language.",
-            "manager_provider_box": "Provider used to generate the agent spec.",
-            "manager_model_box":    "Specific model.",
-            "manager_analyze_btn":  "Analyse the idea and produce a JSON spec for review.",
-            "manager_clear_btn":    "Clear the form.",
-            "manager_spec_display": "The generated spec — review before approving.",
-            "manager_approve_btn":  "Approve the spec — Forge will write the agent code and register it.",
-            "manager_reject_btn":   "Reject the spec and clear it.",
-            "manager_log":          "Log of spec generation, approval, and file creation events.",
-        })
+        seed_tooltips(self)
 
     def load_json(self, path: Path, default):
         if not path.exists():
@@ -1057,444 +491,14 @@ class GodAI(QWidget):
         return estimated_cost, approx_tokens, backend, model
     
     def show_cost_history(self):
-        entries = self.usage_tracker.load_log()
-
-        dialog = QDialog(self)
-        dialog.setWindowTitle("Cost History")
-        dialog.resize(1050, 650)
-
-        layout = QVBoxLayout(dialog)
-
-        filter_row = QHBoxLayout()
-
-        provider_filter = QComboBox()
-        provider_filter.addItems(["all", "ollama", "openai", "deepseek", "kimi", "gemini"])
-        filter_row.addWidget(QLabel("Provider:"))
-        filter_row.addWidget(provider_filter)
-
-        export_btn = QPushButton("Export CSV")
-        filter_row.addWidget(export_btn)
-
-        filter_row.addStretch()
-        layout.addLayout(filter_row)
-
-        summary_label = QLabel("")
-        layout.addWidget(summary_label)
-
-        browser = QTextBrowser()
-        layout.addWidget(browser)
-
-        def render():
-            provider = provider_filter.currentText()
-
-            filtered = entries
-            if provider != "all":
-                filtered = [e for e in entries if e.get("backend") == provider]
-
-            total_cost = sum(
-                float(e.get("cost_eur", e.get("estimated_cost", 0.0)))
-                for e in filtered
-            )
-            total_tokens = sum(int(e.get("total_tokens", 0)) for e in filtered)
-            total_requests = len(filtered)
-
-            summary_label.setText(
-                f"Requests: {total_requests} | "
-                f"Tokens: {total_tokens:,} | "
-                f"Total Cost: €{total_cost:.2f}"
-            )
-
-            if not filtered:
-                browser.setHtml("<h2>No cost history for this filter.</h2>")
-                return
-
-            rows = ""
-            for e in reversed(filtered[-200:]):
-                rows += f"""
-                <tr>
-                    <td>{e.get('timestamp', '')}</td>
-                    <td>{e.get('agent', '')}</td>
-                    <td>{e.get('backend', '')}</td>
-                    <td>{e.get('model', '')}</td>
-                    <td>{e.get('input_tokens', 0)}</td>
-                    <td>{e.get('output_tokens', 0)}</td>
-                    <td>{e.get('total_tokens', 0)}</td>
-                    <td>€{float(e.get('cost_eur', e.get('estimated_cost', 0.0))):.2f}</td>
-                    <td>{e.get('cost_type', '')}</td>
-                </tr>
-                """
-
-            browser.setHtml(f"""
-            <h2>Cost History</h2>
-            <table border="1" cellspacing="0" cellpadding="6">
-                <tr>
-                    <th>Time</th>
-                    <th>Agent</th>
-                    <th>Provider</th>
-                    <th>Model</th>
-                    <th>Input</th>
-                    <th>Output</th>
-                    <th>Total</th>
-                    <th>Cost</th>
-                    <th>Type</th>
-                </tr>
-                {rows}
-            </table>
-            """)
-
-        def export_csv():
-            provider = provider_filter.currentText()
-
-            filtered = entries
-            if provider != "all":
-                filtered = [e for e in entries if e.get("backend") == provider]
-
-            if not filtered:
-                QMessageBox.information(dialog, "No Data", "No entries to export.")
-                return
-
-            export_path, _ = QFileDialog.getSaveFileName(
-                dialog,
-                "Export Cost History",
-                "cost_history.csv",
-                "CSV Files (*.csv)"
-            )
-
-            if not export_path:
-                return
-
-            import csv
-
-            with open(export_path, "w", newline="", encoding="utf-8") as f:
-                writer = csv.writer(f)
-                writer.writerow([
-                    "timestamp",
-                    "agent",
-                    "backend",
-                    "model",
-                    "input_tokens",
-                    "output_tokens",
-                    "total_tokens",
-                    "cost_eur",
-                    "cost_type",
-                ])
-
-                for e in filtered:
-                    writer.writerow([
-                        e.get("timestamp", ""),
-                        e.get("agent", ""),
-                        e.get("backend", ""),
-                        e.get("model", ""),
-                        e.get("input_tokens", 0),
-                        e.get("output_tokens", 0),
-                        e.get("total_tokens", 0),
-                        float(e.get("cost_eur", e.get("estimated_cost", 0.0))),
-                        e.get("cost_type", ""),
-                    ])
-
-            QMessageBox.information(dialog, "Export Complete", f"Saved to:\n{export_path}")
-
-        provider_filter.currentTextChanged.connect(render)
-        export_btn.clicked.connect(export_csv)
-
-        render()
-        dialog.exec()
-
+        from ui.dialogs import show_cost_history as _show_cost_history
+        return _show_cost_history(self)
     def show_run_log(self):
-        entries = self.run_logger.load_recent(500)
-
-        dialog = QDialog(self)
-        dialog.setWindowTitle("Run Log")
-        dialog.resize(1050, 650)
-
-        layout = QVBoxLayout(dialog)
-
-        filter_row = QHBoxLayout()
-
-        status_filter = QComboBox()
-        status_filter.addItems(["all", "success", "error", "cancelled"])
-        filter_row.addWidget(QLabel("Status:"))
-        filter_row.addWidget(status_filter)
-
-        agent_filter = QComboBox()
-        agent_filter.addItems(["all"] + sorted({e.get("agent", "") for e in entries if e.get("agent")}))
-        filter_row.addWidget(QLabel("Agent:"))
-        filter_row.addWidget(agent_filter)
-
-        filter_row.addStretch()
-        layout.addLayout(filter_row)
-
-        summary_label = QLabel("")
-        layout.addWidget(summary_label)
-
-        browser = QTextBrowser()
-        layout.addWidget(browser)
-
-        def render():
-            status = status_filter.currentText()
-            agent = agent_filter.currentText()
-
-            filtered = entries
-            if status != "all":
-                filtered = [e for e in filtered if e.get("status") == status]
-            if agent != "all":
-                filtered = [e for e in filtered if e.get("agent") == agent]
-
-            total_runs = len(filtered)
-            total_cost = sum(float(e.get("cost_eur", 0.0)) for e in filtered)
-            errors = sum(1 for e in filtered if e.get("status") == "error")
-
-            summary_label.setText(
-                f"Runs: {total_runs} | Errors: {errors} | Total Cost: €{total_cost:.4f}"
-            )
-
-            if not filtered:
-                browser.setHtml("<h2>No runs match this filter.</h2>")
-                return
-
-            rows = ""
-            for e in reversed(filtered[-300:]):
-                status_val = e.get("status", "")
-                color = {"success": "#3cff88", "error": "#ff5555", "cancelled": "#ffaa00"}.get(status_val, "#ffffff")
-                error_cell = f'<span style="color:#ff5555">{e.get("error", "")}</span>' if e.get("error") else ""
-                rows += f"""
-                <tr>
-                    <td>{e.get("timestamp", "")}</td>
-                    <td>{e.get("run_id", "")}</td>
-                    <td>{e.get("agent", "")}</td>
-                    <td>{e.get("tool", "")}</td>
-                    <td>{e.get("provider", "")}</td>
-                    <td>{e.get("model", "")}</td>
-                    <td><span style="color:{color}">{status_val}</span></td>
-                    <td>{e.get("input_tokens", 0)}</td>
-                    <td>{e.get("output_tokens", 0)}</td>
-                    <td>€{float(e.get("cost_eur", 0.0)):.4f}</td>
-                    <td>{e.get("duration_sec", 0.0)}s</td>
-                    <td>{error_cell}</td>
-                </tr>
-                """
-
-            browser.setHtml(f"""
-            <h2>Run Log</h2>
-            <table border="1" cellspacing="0" cellpadding="5" style="font-size:11px">
-                <tr>
-                    <th>Time</th><th>Run ID</th><th>Agent</th><th>Tool</th>
-                    <th>Provider</th><th>Model</th><th>Status</th>
-                    <th>In</th><th>Out</th><th>Cost</th><th>Duration</th><th>Error</th>
-                </tr>
-                {rows}
-            </table>
-            """)
-
-        status_filter.currentTextChanged.connect(render)
-        agent_filter.currentTextChanged.connect(render)
-
-        render()
-        dialog.exec()
-
+        from ui.dialogs import show_run_log as _show_run_log
+        return _show_run_log(self)
     def show_settings(self):
-        dialog = QDialog(self)
-        dialog.setWindowTitle("Settings")
-        dialog.resize(720, 560)
-
-        outer = QVBoxLayout(dialog)
-        tabs = QTabWidget()
-        outer.addWidget(tabs)
-
-        btn_row = QHBoxLayout()
-        save_all_btn = QPushButton("Save All")
-        save_all_btn.setFixedHeight(32)
-        cancel_btn = QPushButton("Cancel")
-        cancel_btn.setFixedHeight(32)
-        cancel_btn.clicked.connect(dialog.reject)
-        btn_row.addStretch()
-        btn_row.addWidget(save_all_btn)
-        btn_row.addWidget(cancel_btn)
-        outer.addLayout(btn_row)
-
-        # ── Tab 1: General ────────────────────────────────────────────
-        general_tab = QWidget()
-        gl = QGridLayout(general_tab)
-        gl.setSpacing(10)
-        gl.setContentsMargins(16, 16, 16, 16)
-
-        gl.addWidget(QLabel("EUR / USD rate:"), 0, 0)
-        eur_input = QLineEdit(get_setting("eur_per_usd", "0.92"))
-        gl.addWidget(eur_input, 0, 1)
-
-        gl.addWidget(QLabel("Default session budget (€):"), 1, 0)
-        sess_input = QLineEdit(get_setting("session_budget_eur", str(self.session_budget_eur)))
-        gl.addWidget(sess_input, 1, 1)
-
-        gl.addWidget(QLabel("Default daily budget (€):"), 2, 0)
-        daily_input = QLineEdit(get_setting("daily_budget_eur", str(self.daily_budget_eur)))
-        gl.addWidget(daily_input, 2, 1)
-
-        gl.setRowStretch(3, 1)
-        tabs.addTab(general_tab, "General")
-
-        # ── Tab 2: Agents ─────────────────────────────────────────────
-        agents_tab = QWidget()
-        al = QVBoxLayout(agents_tab)
-        al.setContentsMargins(8, 8, 8, 8)
-
-        agents_grid = QGridLayout()
-        agents_grid.setSpacing(6)
-        agents_grid.addWidget(QLabel("<b>Agent</b>"), 0, 0)
-        agents_grid.addWidget(QLabel("<b>Enabled</b>"), 0, 1)
-        agents_grid.addWidget(QLabel("<b>Budget cap (€, blank = none)</b>"), 0, 2)
-
-        agent_widgets = {}
-        for i, agent in enumerate(self.registry.list_agents(), start=1):
-            lbl = QLabel(agent["label"] or agent["name"])
-            chk = QCheckBox()
-            chk.setChecked(agent.get("enabled", True))
-            budget_val = agent.get("budget_limit_eur")
-            budget_edit = QLineEdit("" if budget_val is None else str(budget_val))
-            budget_edit.setPlaceholderText("no limit")
-            budget_edit.setMaximumWidth(120)
-            agents_grid.addWidget(lbl, i, 0)
-            agents_grid.addWidget(chk, i, 1)
-            agents_grid.addWidget(budget_edit, i, 2)
-            agent_widgets[agent["name"]] = (chk, budget_edit)
-
-        al.addLayout(agents_grid)
-        al.addStretch()
-        tabs.addTab(agents_tab, "Agents")
-
-        # ── Tab 3: Tools ──────────────────────────────────────────────
-        tools_tab = QWidget()
-        tl = QVBoxLayout(tools_tab)
-        tl.setContentsMargins(8, 8, 8, 8)
-
-        tools_grid = QGridLayout()
-        tools_grid.setSpacing(6)
-        tools_grid.addWidget(QLabel("<b>Tool</b>"), 0, 0)
-        tools_grid.addWidget(QLabel("<b>Enabled</b>"), 0, 1)
-        tools_grid.addWidget(QLabel("<b>System Prompt (first 80 chars)</b>"), 0, 2)
-
-        tool_widgets = {}
-        for i, tool in enumerate(self.registry.list_tools(), start=1):
-            lbl = QLabel(tool["name"])
-            chk = QCheckBox()
-            chk.setChecked(tool.get("enabled", True))
-            prompt_preview = QLabel((tool.get("system_prompt") or "")[:80])
-            prompt_preview.setStyleSheet("color: #888; font-size: 11px;")
-            tools_grid.addWidget(lbl, i, 0)
-            tools_grid.addWidget(chk, i, 1)
-            tools_grid.addWidget(prompt_preview, i, 2)
-            tool_widgets[tool["name"]] = chk
-
-        tl.addLayout(tools_grid)
-        tl.addStretch()
-        tabs.addTab(tools_tab, "Tools")
-
-        # ── Tab 4: Pricing ────────────────────────────────────────────
-        pricing_tab = QWidget()
-        pl = QVBoxLayout(pricing_tab)
-        pl.setContentsMargins(8, 8, 8, 8)
-
-        pl.addWidget(QLabel("Model pricing (USD per 1M tokens):"))
-
-        pricing_grid = QGridLayout()
-        pricing_grid.setSpacing(6)
-        for col, hdr in enumerate(["Provider", "Model", "Input /1M USD", "Output /1M USD"]):
-            pricing_grid.addWidget(QLabel(f"<b>{hdr}</b>"), 0, col)
-
-        pricing_widgets = {}
-        with get_connection() as conn:
-            pricing_rows = conn.execute(
-                "SELECT backend, model, input_per_1m_usd, output_per_1m_usd FROM pricing ORDER BY backend, model"
-            ).fetchall()
-
-        for i, row in enumerate(pricing_rows, start=1):
-            key = (row["backend"], row["model"])
-            pricing_grid.addWidget(QLabel(row["backend"]), i, 0)
-            pricing_grid.addWidget(QLabel(row["model"]), i, 1)
-            in_edit = QLineEdit(str(row["input_per_1m_usd"]))
-            in_edit.setMaximumWidth(100)
-            out_edit = QLineEdit(str(row["output_per_1m_usd"]))
-            out_edit.setMaximumWidth(100)
-            pricing_grid.addWidget(in_edit, i, 2)
-            pricing_grid.addWidget(out_edit, i, 3)
-            pricing_widgets[key] = (in_edit, out_edit)
-
-        pl.addLayout(pricing_grid)
-        pl.addStretch()
-        tabs.addTab(pricing_tab, "Pricing")
-
-        # ── Save handler ──────────────────────────────────────────────
-        def save_all():
-            errors = []
-
-            # General
-            try:
-                eur = float(eur_input.text().strip())
-                sess = float(sess_input.text().strip())
-                daily = float(daily_input.text().strip())
-                save_setting("eur_per_usd", str(eur))
-                save_setting("session_budget_eur", str(sess))
-                save_setting("daily_budget_eur", str(daily))
-                self.session_budget_eur = sess
-                self.daily_budget_eur = daily
-                if hasattr(self, "session_budget_input"):
-                    self.session_budget_input.setText(str(sess))
-                if hasattr(self, "daily_budget_input"):
-                    self.daily_budget_input.setText(str(daily))
-            except ValueError:
-                errors.append("General: invalid number in EUR rate or budget fields.")
-
-            # Agents
-            with get_connection() as conn:
-                for name, (chk, budget_edit) in agent_widgets.items():
-                    raw = budget_edit.text().strip()
-                    try:
-                        budget = float(raw) if raw else None
-                    except ValueError:
-                        errors.append(f"Agent '{name}': invalid budget value '{raw}'.")
-                        continue
-                    conn.execute(
-                        "UPDATE agents SET enabled = ?, budget_limit_eur = ? WHERE name = ?",
-                        (1 if chk.isChecked() else 0, budget, name)
-                    )
-                conn.commit()
-
-            # Tools
-            with get_connection() as conn:
-                for name, chk in tool_widgets.items():
-                    conn.execute(
-                        "UPDATE tools SET enabled = ? WHERE name = ?",
-                        (1 if chk.isChecked() else 0, name)
-                    )
-                conn.commit()
-
-            # Pricing
-            with get_connection() as conn:
-                for (backend, model), (in_edit, out_edit) in pricing_widgets.items():
-                    try:
-                        in_val = float(in_edit.text().strip())
-                        out_val = float(out_edit.text().strip())
-                        conn.execute(
-                            "UPDATE pricing SET input_per_1m_usd = ?, output_per_1m_usd = ? WHERE backend = ? AND model = ?",
-                            (in_val, out_val, backend, model)
-                        )
-                    except ValueError:
-                        errors.append(f"Pricing {backend}/{model}: invalid number.")
-                conn.commit()
-
-            self.update_usage_labels()
-            self.registry = Registry()
-            self.validator = Validator(self.registry)
-
-            if errors:
-                QMessageBox.warning(dialog, "Saved with errors", "\n".join(errors))
-            else:
-                QMessageBox.information(dialog, "Saved", "All settings saved successfully.")
-                dialog.accept()
-
-        save_all_btn.clicked.connect(save_all)
-        dialog.exec()
-
+        from ui.dialogs import show_settings as _show_settings
+        return _show_settings(self)
     def update_live_cost_estimate(self):
         if not hasattr(self, "live_estimate_label"):
             return
@@ -2199,8 +1203,8 @@ class GodAI(QWidget):
         if callable(loader):
             try:
                 loader()
-            except Exception:
-                pass
+            except Exception as exc:
+                self._note_failure("apply recommendation: reload models", exc)
 
         if model_box is not None:
             idx = self._find_model_index(model_box, rec["model"])
@@ -2386,6 +1390,13 @@ class GodAI(QWidget):
         )
         left_layout.addWidget(saved_header)
 
+        # Narrow the list to one agent. Populated from the chats that exist, so
+        # it only ever offers agents you have actually used.
+        self.history_agent_filter = QComboBox()
+        self.history_agent_filter.addItem(ALL_AGENTS_FILTER)
+        self.history_agent_filter.currentTextChanged.connect(self.load_history_list)
+        left_layout.addWidget(self.history_agent_filter)
+
         self.history_search = QLineEdit()
         self.history_search.setPlaceholderText("Search saved chats...")
         self.history_search.textChanged.connect(self.load_history_list)
@@ -2393,6 +1404,9 @@ class GodAI(QWidget):
 
         self.history_list = QListWidget()
         self.history_list.itemClicked.connect(self.open_selected_chat)
+        # Double-click renames: chat_title_from_data already prefers a stored
+        # "title" over the truncated first prompt, it was just never written.
+        self.history_list.itemDoubleClicked.connect(self.rename_selected_chat)
         # Keep the saved-chats list bounded so the agents area always has room
         self.history_list.setMinimumHeight(120)
         self.history_list.setMaximumHeight(200)
@@ -2543,7 +1557,8 @@ class GodAI(QWidget):
         normal_layout.addLayout(top_row_1)
 
         # Row 2: provider, model, model tools
-        top_row_2 = QHBoxLayout()
+        top_row_2_container = QWidget()
+        top_row_2 = FlowLayout(top_row_2_container, spacing=6)
 
         self.provider_box = QComboBox()
         self.provider_box.addItems(["ollama", "openai", "deepseek", "kimi", "gemini", "anthropic", "qwen"])
@@ -2584,8 +1599,7 @@ class GodAI(QWidget):
         self.docs_btn.clicked.connect(self.show_docs)
         top_row_2.addWidget(self.docs_btn)
 
-        top_row_2.addStretch()
-        normal_layout.addLayout(top_row_2)
+        normal_layout.addWidget(top_row_2_container)
         
         self.model_box.currentTextChanged.connect(self.save_provider_model_preference)
 
@@ -3044,7 +2058,8 @@ class GodAI(QWidget):
         layout.addWidget(setup_group)
 
         # ── Provider row ────────────────────────────────────────────────────
-        provider_row = QHBoxLayout()
+        provider_row_container = QWidget()
+        provider_row = FlowLayout(provider_row_container, spacing=6)
 
         self.health_provider_box = QComboBox()
         self.health_provider_box.addItems(["ollama", "openai", "deepseek", "kimi", "gemini", "anthropic", "qwen"])
@@ -3075,8 +2090,7 @@ class GodAI(QWidget):
         self.health_help_btn.clicked.connect(self.show_agent_docs)
         provider_row.addWidget(self.health_help_btn)
 
-        provider_row.addStretch()
-        layout.addLayout(provider_row)
+        layout.addWidget(provider_row_container)
 
         # ── Results area (tabs + sidebar) ───────────────────────────────────
         results_splitter = QSplitter(Qt.Horizontal)
@@ -3178,8 +2192,8 @@ class GodAI(QWidget):
                 models = []
             for m in models:
                 self.health_model_box.addItem(m)
-        except Exception:
-            pass
+        except Exception as exc:
+            self._note_failure("health: load models", exc, self.health_model_box)
 
     def health_analyse(self):
         category = self.health_category_box.currentText()
@@ -3226,9 +2240,12 @@ class GodAI(QWidget):
         self.health_stop_btn.setEnabled(True)
         self.health_save_btn.setEnabled(False)
 
+        if not self.authorize_request("health", provider, model, prompt):
+            return
         self.health_worker = ChatWorker(self.run_backend, provider, model, messages, prompt)
         self.health_worker.token_signal.connect(self._health_on_token)
         self.health_worker.finished_signal.connect(self._health_on_finished)
+        self.health_worker.usage_signal.connect(lambda u: self.note_request_usage("health", u))
         self.health_worker.error_signal.connect(self._health_on_error)
         self.health_worker.start()
 
@@ -3238,6 +2255,7 @@ class GodAI(QWidget):
         self.health_overview_box.moveCursor(QTextCursor.End)
 
     def _health_on_finished(self, full_response: str):
+        self.record_request("health", full_response)
         self._last_health_response = full_response
         self._populate_health_tabs(full_response)
         self._update_health_indicators(full_response)
@@ -3247,6 +2265,7 @@ class GodAI(QWidget):
         self.health_save_btn.setEnabled(True)
 
     def _health_on_error(self, error: str):
+        self.abandon_request("health")
         self.health_overview_box.setPlainText(f"[Error] {error}")
         self.health_status_label.setText("Error.")
         self.health_analyse_btn.setEnabled(True)
@@ -3332,7 +2351,7 @@ class GodAI(QWidget):
         # ── Project bar ──────────────────────────────────────────────────────
         project_bar = QWidget()
         project_bar.setObjectName("AuthorProjectBar")
-        pb_layout = QHBoxLayout(project_bar)
+        pb_layout = FlowLayout(project_bar, spacing=8)
         pb_layout.setContentsMargins(4, 4, 4, 4)
         pb_layout.setSpacing(8)
 
@@ -3377,7 +2396,6 @@ class GodAI(QWidget):
             "Third Person Omniscient", "Second Person",
         ])
         pb_layout.addWidget(self.author_pov_box)
-        pb_layout.addStretch()
 
         layout.addWidget(project_bar)
 
@@ -3938,7 +2956,8 @@ class GodAI(QWidget):
         layout.addWidget(setup_group)
 
         # ── Provider row ────────────────────────────────────────────────────
-        provider_row = QHBoxLayout()
+        provider_row_container = QWidget()
+        provider_row = FlowLayout(provider_row_container, spacing=6)
 
         self.music_provider_box = QComboBox()
         self.music_provider_box.addItems(["ollama", "openai", "deepseek", "kimi", "gemini", "anthropic", "qwen"])
@@ -3969,8 +2988,7 @@ class GodAI(QWidget):
         self.music_help_btn.clicked.connect(self.show_agent_docs)
         provider_row.addWidget(self.music_help_btn)
 
-        provider_row.addStretch()
-        layout.addLayout(provider_row)
+        layout.addWidget(provider_row_container)
 
         # ── Results area (tabs + sidebar) ───────────────────────────────────
         results_splitter = QSplitter(Qt.Horizontal)
@@ -4119,7 +3137,8 @@ class GodAI(QWidget):
         self.nfl_bet_data_input.setMinimumHeight(100)
         setup_layout.addWidget(self.nfl_bet_data_input, 3, 1, 1, 3)
 
-        provider_row = QHBoxLayout()
+        provider_row_container = QWidget()
+        provider_row = FlowLayout(provider_row_container, spacing=6)
         provider_row.addWidget(QLabel("Provider:"))
         self.nfl_bet_provider_box = QComboBox()
         self.nfl_bet_provider_box.addItems(["ollama", "openai", "deepseek", "kimi", "gemini", "anthropic", "qwen"])
@@ -4131,7 +3150,6 @@ class GodAI(QWidget):
         self.nfl_bet_model_box.setMinimumWidth(200)
         provider_row.addWidget(self.nfl_bet_model_box)
 
-        provider_row.addStretch()
 
         self.nfl_bet_analyse_btn = QPushButton("Analyse Prop")
         self.nfl_bet_analyse_btn.setMinimumWidth(140)
@@ -4145,7 +3163,7 @@ class GodAI(QWidget):
         self.nfl_bet_stop_btn.clicked.connect(self.nfl_bet_stop)
         provider_row.addWidget(self.nfl_bet_stop_btn)
 
-        setup_layout.addLayout(provider_row, 4, 0, 1, 4)
+        setup_layout.addWidget(provider_row_container, 4, 0, 1, 4)
         layout.addWidget(setup_group)
 
         # ── Season Predictive Model ──────────────────────────────────────────
@@ -4333,7 +3351,8 @@ class GodAI(QWidget):
         ])
         setup_layout.addWidget(self.osint_type_box, 1, 1)
 
-        provider_row = QHBoxLayout()
+        provider_row_container = QWidget()
+        provider_row = FlowLayout(provider_row_container, spacing=6)
         provider_row.addWidget(QLabel("Provider:"))
         self.osint_provider_box = QComboBox()
         self.osint_provider_box.addItems(["ollama", "openai", "deepseek", "kimi", "gemini", "anthropic", "qwen"])
@@ -4345,7 +3364,6 @@ class GodAI(QWidget):
         self.osint_model_box.setMinimumWidth(200)
         provider_row.addWidget(self.osint_model_box)
 
-        provider_row.addStretch()
 
         self.osint_analyse_btn = QPushButton("Structure Query")
         self.osint_analyse_btn.setMinimumWidth(150)
@@ -4359,7 +3377,7 @@ class GodAI(QWidget):
         self.osint_stop_btn.clicked.connect(self.osint_stop)
         provider_row.addWidget(self.osint_stop_btn)
 
-        setup_layout.addLayout(provider_row, 2, 0, 1, 4)
+        setup_layout.addWidget(provider_row_container, 2, 0, 1, 4)
         layout.addWidget(setup_group)
 
         # ── Output tabs ───────────────────────────────────────────────────────
@@ -4451,7 +3469,8 @@ class GodAI(QWidget):
         self.osint_heavy_objective_input.setFixedHeight(60)
         brief_layout.addWidget(self.osint_heavy_objective_input, 2, 1, 1, 3)
 
-        provider_row = QHBoxLayout()
+        provider_row_container = QWidget()
+        provider_row = FlowLayout(provider_row_container, spacing=6)
         provider_row.addWidget(QLabel("Provider:"))
         self.osint_heavy_provider_box = QComboBox()
         self.osint_heavy_provider_box.addItems(["ollama", "openai", "deepseek", "kimi", "gemini", "anthropic", "qwen"])
@@ -4463,7 +3482,6 @@ class GodAI(QWidget):
         self.osint_heavy_model_box.setMinimumWidth(200)
         provider_row.addWidget(self.osint_heavy_model_box)
 
-        provider_row.addStretch()
 
         self.osint_heavy_investigate_btn = QPushButton("Investigate")
         self.osint_heavy_investigate_btn.setMinimumWidth(140)
@@ -4477,7 +3495,7 @@ class GodAI(QWidget):
         self.osint_heavy_stop_btn.clicked.connect(self.osint_heavy_stop)
         provider_row.addWidget(self.osint_heavy_stop_btn)
 
-        brief_layout.addLayout(provider_row, 3, 0, 1, 4)
+        brief_layout.addWidget(provider_row_container, 3, 0, 1, 4)
         layout.addWidget(brief_group)
 
         # ── Target Image (optional) ──────────────────────────────────────────
@@ -4646,8 +3664,8 @@ class GodAI(QWidget):
                 models = []
             for m in models:
                 self.osint_model_box.addItem(m)
-        except Exception:
-            pass
+        except Exception as exc:
+            self._note_failure("osint: load models", exc, self.osint_model_box)
 
     def osint_analyse(self):
         target = self.osint_target_input.text().strip()
@@ -4665,6 +3683,9 @@ class GodAI(QWidget):
         agent = self.agent_instances["osint"]
         messages = agent.build_messages(target, query_type)
 
+        if not self.authorize_request("osint", provider, model, target, label=query_type):
+            return
+
         self._osint_clear_tabs()
         self._last_osint_response = ""
         self.osint_status_label.setText("Structuring query…")
@@ -4674,6 +3695,7 @@ class GodAI(QWidget):
         self.osint_worker = ChatWorker(self.run_backend, provider, model, messages, target)
         self.osint_worker.token_signal.connect(self._osint_on_token)
         self.osint_worker.finished_signal.connect(self._osint_on_finished)
+        self.osint_worker.usage_signal.connect(lambda u: self.note_request_usage("osint", u))
         self.osint_worker.error_signal.connect(self._osint_on_error)
         self.osint_worker.start()
 
@@ -4684,12 +3706,14 @@ class GodAI(QWidget):
 
     def _osint_on_finished(self, full_response: str):
         self._last_osint_response = full_response
+        self.record_request("osint", full_response)
         self._populate_osint_tabs(full_response)
         self.osint_status_label.setText("Done.")
         self.osint_analyse_btn.setEnabled(True)
         self.osint_stop_btn.setEnabled(False)
 
     def _osint_on_error(self, error: str):
+        self.abandon_request("osint")
         separator = "─" * 50
         self.osint_structure_box.setPlainText(
             f"⚠  ERROR\n{separator}\n{error}\n{separator}"
@@ -4770,8 +3794,8 @@ class GodAI(QWidget):
                 models = []
             for m in models:
                 self.osint_heavy_model_box.addItem(m)
-        except Exception:
-            pass
+        except Exception as exc:
+            self._note_failure("osint_heavy: load models", exc, self.osint_heavy_model_box)
 
     def osint_heavy_investigate(self):
         target = self.osint_heavy_target_input.text().strip()
@@ -4803,9 +3827,12 @@ class GodAI(QWidget):
         self.osint_heavy_stop_btn.setEnabled(True)
         self.osint_heavy_save_btn.setEnabled(False)
 
+        if not self.authorize_request("osint_heavy", provider, model, target):
+            return
         self.osint_heavy_worker = ChatWorker(self.run_backend, provider, model, messages, target)
         self.osint_heavy_worker.token_signal.connect(self._osint_heavy_on_token)
         self.osint_heavy_worker.finished_signal.connect(self._osint_heavy_on_finished)
+        self.osint_heavy_worker.usage_signal.connect(lambda u: self.note_request_usage("osint_heavy", u))
         self.osint_heavy_worker.error_signal.connect(self._osint_heavy_on_error)
         self.osint_heavy_worker.start()
 
@@ -4815,6 +3842,7 @@ class GodAI(QWidget):
         self.osint_heavy_dossier_box.moveCursor(QTextCursor.End)
 
     def _osint_heavy_on_finished(self, full_response: str):
+        self.record_request("osint_heavy", full_response)
         self._last_osint_heavy_response = full_response
         self._populate_osint_heavy_tabs(full_response)
         self._update_osint_heavy_indicators(full_response)
@@ -4825,6 +3853,7 @@ class GodAI(QWidget):
         self.osint_heavy_tabs.setCurrentIndex(0)
 
     def _osint_heavy_on_error(self, error: str):
+        self.abandon_request("osint_heavy")
         self.osint_heavy_dossier_box.setPlainText(f"[Error] {error}")
         self.osint_heavy_status_label.setText("Error.")
         self.osint_heavy_investigate_btn.setEnabled(True)
@@ -5100,7 +4129,8 @@ class GodAI(QWidget):
         self.webdesign_brief_input.setFixedHeight(70)
         setup_layout.addWidget(self.webdesign_brief_input, 2, 1, 1, 3)
 
-        provider_row = QHBoxLayout()
+        provider_row_container = QWidget()
+        provider_row = FlowLayout(provider_row_container, spacing=6)
         provider_row.addWidget(QLabel("Provider:"))
         self.webdesign_provider_box = QComboBox()
         self.webdesign_provider_box.addItems(["ollama", "openai", "deepseek", "kimi", "gemini", "anthropic", "qwen"])
@@ -5112,7 +4142,6 @@ class GodAI(QWidget):
         self.webdesign_model_box.setMinimumWidth(200)
         provider_row.addWidget(self.webdesign_model_box)
 
-        provider_row.addStretch()
 
         self.webdesign_generate_btn = QPushButton("Generate")
         self.webdesign_generate_btn.setMinimumWidth(140)
@@ -5126,7 +4155,7 @@ class GodAI(QWidget):
         self.webdesign_stop_btn.clicked.connect(self.webdesign_stop)
         provider_row.addWidget(self.webdesign_stop_btn)
 
-        setup_layout.addLayout(provider_row, 3, 0, 1, 4)
+        setup_layout.addWidget(provider_row_container, 3, 0, 1, 4)
         layout.addWidget(setup_group)
 
         # ── Results: tabs left, sidebar right ───────────────────────
@@ -5288,7 +4317,8 @@ class GodAI(QWidget):
         self.wifi_kali_group.hide()
 
         # ── Provider / action row ────────────────────────────────────────────
-        provider_row = QHBoxLayout()
+        provider_row_container = QWidget()
+        provider_row = FlowLayout(provider_row_container, spacing=6)
 
         self.wifi_provider_box = QComboBox()
         self.wifi_provider_box.addItems(["ollama", "openai", "deepseek", "kimi", "gemini", "anthropic", "qwen"])
@@ -5323,8 +4353,7 @@ class GodAI(QWidget):
         self.wifi_help_btn.clicked.connect(self.show_agent_docs)
         provider_row.addWidget(self.wifi_help_btn)
 
-        provider_row.addStretch()
-        layout.addLayout(provider_row)
+        layout.addWidget(provider_row_container)
 
         ai_row = QHBoxLayout()
         self.wifi_ai_checkbox = QCheckBox("AI Analysis — feed results to LLM for interpretation")
@@ -5581,9 +4610,12 @@ class GodAI(QWidget):
                 prompt = f"Explain the following Kali Linux Wi-Fi attack command sequence for an authorised penetration test. Break down what each step does and what to watch for:\n\n{cmds}"
                 agent = self.agent_instances["wifi"]
                 messages = agent.build_messages(prompt)
+                if not self.authorize_request("wifi", provider, model, prompt):
+                    return
                 self.wifi_worker = ChatWorker(self.run_backend, provider, model, messages, prompt)
                 self.wifi_worker.token_signal.connect(self._wifi_on_token)
                 self.wifi_worker.finished_signal.connect(self._wifi_on_finished)
+                self.wifi_worker.usage_signal.connect(lambda u: self.note_request_usage("wifi", u))
                 self.wifi_worker.error_signal.connect(self._wifi_on_error)
                 self.wifi_worker.start()
                 self.wifi_tabs.setCurrentIndex(1)
@@ -5604,9 +4636,12 @@ class GodAI(QWidget):
             prompt = f"Mode: {mode}\n\nRaw output:\n{raw}\n\nAnalyse this Wi-Fi scan result."
             agent = self.agent_instances["wifi"]
             messages = agent.build_messages(prompt)
+            if not self.authorize_request("wifi", provider, model, prompt):
+                return
             self.wifi_worker = ChatWorker(self.run_backend, provider, model, messages, prompt)
             self.wifi_worker.token_signal.connect(self._wifi_on_token)
             self.wifi_worker.finished_signal.connect(self._wifi_on_finished)
+            self.wifi_worker.usage_signal.connect(lambda u: self.note_request_usage("wifi", u))
             self.wifi_worker.error_signal.connect(self._wifi_on_error)
             self.wifi_worker.start()
             self.wifi_tabs.setCurrentIndex(1)
@@ -5629,6 +4664,7 @@ class GodAI(QWidget):
         self.wifi_analysis_box.moveCursor(QTextCursor.End)
 
     def _wifi_on_finished(self, full_response: str):
+        self.record_request("wifi", full_response)
         self._last_wifi_response = full_response
         self.wifi_analysis_box.setPlainText(full_response)
         self.wifi_status_label.setText("Analysis complete.")
@@ -5637,6 +4673,7 @@ class GodAI(QWidget):
         self.wifi_save_btn.setEnabled(True)
 
     def _wifi_on_error(self, error: str):
+        self.abandon_request("wifi")
         self.wifi_analysis_box.setPlainText(f"[Error] {error}")
         self.wifi_status_label.setText("Error.")
         self.wifi_run_btn.setEnabled(True)
@@ -5731,8 +4768,8 @@ class GodAI(QWidget):
                 models = []
             for m in models:
                 self.webdesign_model_box.addItem(m)
-        except Exception:
-            pass
+        except Exception as exc:
+            self._note_failure("webdesign: load models", exc, self.webdesign_model_box)
 
     def webdesign_generate(self):
         page_type = self.webdesign_type_box.currentText()
@@ -5771,9 +4808,12 @@ class GodAI(QWidget):
         self.webdesign_save_btn.setEnabled(False)
         self.webdesign_copy_btn.setEnabled(False)
 
+        if not self.authorize_request("webdesign", provider, model, prompt):
+            return
         self.webdesign_worker = ChatWorker(self.run_backend, provider, model, messages, prompt)
         self.webdesign_worker.token_signal.connect(self._webdesign_on_token)
         self.webdesign_worker.finished_signal.connect(self._webdesign_on_finished)
+        self.webdesign_worker.usage_signal.connect(lambda u: self.note_request_usage("webdesign", u))
         self.webdesign_worker.error_signal.connect(self._webdesign_on_error)
         self.webdesign_worker.start()
 
@@ -5783,6 +4823,7 @@ class GodAI(QWidget):
         self.webdesign_html_box.moveCursor(QTextCursor.End)
 
     def _webdesign_on_finished(self, full_response: str):
+        self.record_request("webdesign", full_response)
         self._last_webdesign_response = full_response
         self._populate_webdesign_tabs(full_response)
         self._update_webdesign_indicators(full_response)
@@ -5793,6 +4834,7 @@ class GodAI(QWidget):
         self.webdesign_copy_btn.setEnabled(True)
 
     def _webdesign_on_error(self, error: str):
+        self.abandon_request("webdesign")
         self.webdesign_html_box.setPlainText(f"[Error] {error}")
         self.webdesign_status_label.setText("Error.")
         self.webdesign_generate_btn.setEnabled(True)
@@ -5901,8 +4943,8 @@ class GodAI(QWidget):
                 models = []
             for m in models:
                 self.nfl_bet_model_box.addItem(m)
-        except Exception:
-            pass
+        except Exception as exc:
+            self._note_failure("nfl_bet: load models", exc, self.nfl_bet_model_box)
 
     def nfl_bet_analyse(self):
         player = self.nfl_bet_player_input.text().strip()
@@ -5945,9 +4987,12 @@ class GodAI(QWidget):
         self.nfl_bet_stop_btn.setEnabled(True)
         self.nfl_bet_save_btn.setEnabled(False)
 
+        if not self.authorize_request("nfl_bet", provider, model, prompt):
+            return
         self.nfl_bet_worker = ChatWorker(self.run_backend, provider, model, messages, prompt)
         self.nfl_bet_worker.token_signal.connect(self._nfl_bet_on_token)
         self.nfl_bet_worker.finished_signal.connect(self._nfl_bet_on_finished)
+        self.nfl_bet_worker.usage_signal.connect(lambda u: self.note_request_usage("nfl_bet", u))
         self.nfl_bet_worker.error_signal.connect(self._nfl_bet_on_error)
         self.nfl_bet_worker.start()
 
@@ -5957,6 +5002,7 @@ class GodAI(QWidget):
         self.nfl_bet_analysis_box.moveCursor(QTextCursor.End)
 
     def _nfl_bet_on_finished(self, full_response: str):
+        self.record_request("nfl_bet", full_response)
         self._last_nfl_bet_response = full_response
         self._populate_nfl_bet_tabs(full_response)
         self._update_nfl_bet_indicators(full_response)
@@ -5966,6 +5012,7 @@ class GodAI(QWidget):
         self.nfl_bet_save_btn.setEnabled(True)
 
     def _nfl_bet_on_error(self, error: str):
+        self.abandon_request("nfl_bet")
         self.nfl_bet_analysis_box.setPlainText(f"[Error] {error}")
         self.nfl_bet_status_label.setText("Error.")
         self.nfl_bet_analyse_btn.setEnabled(True)
@@ -6118,9 +5165,12 @@ class GodAI(QWidget):
         self.nfl_model_build_btn.setEnabled(False)
         self.nfl_model_stop_btn.setEnabled(True)
 
+        if not self.authorize_request("nfl_bet", provider, model, messages[-1]["content"] if messages else ""):
+            return
         self.nfl_model_worker = ChatWorker(self.run_backend, provider, model, messages, "season_model")
         self.nfl_model_worker.token_signal.connect(self._nfl_model_on_token)
         self.nfl_model_worker.finished_signal.connect(self._nfl_model_on_finished)
+        self.nfl_model_worker.usage_signal.connect(lambda u: self.note_request_usage("nfl_bet", u))
         self.nfl_model_worker.error_signal.connect(self._nfl_model_on_error)
         self.nfl_model_worker.start()
 
@@ -6130,6 +5180,7 @@ class GodAI(QWidget):
         self.nfl_bet_projection_box.moveCursor(QTextCursor.End)
 
     def _nfl_model_on_finished(self, full_response: str):
+        self.record_request("nfl_bet", full_response)
         self._last_nfl_model_response = full_response
         self._populate_nfl_model_tabs(full_response)
         self.nfl_bet_status_label.setText("Projection complete.")
@@ -6139,6 +5190,7 @@ class GodAI(QWidget):
         self._last_nfl_bet_response = full_response
 
     def _nfl_model_on_error(self, error: str):
+        self.abandon_request("nfl_bet")
         self.nfl_bet_projection_box.setPlainText(f"[Error] {error}")
         self.nfl_bet_status_label.setText("Error.")
         self.nfl_model_build_btn.setEnabled(True)
@@ -6224,7 +5276,8 @@ class GodAI(QWidget):
         brief_layout.addWidget(self.fiverr_notes_input, 3, 1, 1, 3)
 
         # Row 1: Provider + Model (their own row so they don't squeeze the action buttons)
-        provider_row = QHBoxLayout()
+        provider_row_container = QWidget()
+        provider_row = FlowLayout(provider_row_container, spacing=6)
         provider_row.addWidget(QLabel("Text Provider:"))
         self.fiverr_provider_box = QComboBox()
         self.fiverr_provider_box.addItems(["anthropic", "openai", "deepseek", "kimi", "gemini", "qwen", "ollama"])
@@ -6235,7 +5288,7 @@ class GodAI(QWidget):
         self.fiverr_model_box = QComboBox()
         self.fiverr_model_box.setMinimumWidth(180)
         provider_row.addWidget(self.fiverr_model_box, 1)
-        brief_layout.addLayout(provider_row, 4, 0, 1, 4)
+        brief_layout.addWidget(provider_row_container, 4, 0, 1, 4)
 
         # Row 2: All four action buttons get their own row with full width
         action_row = QHBoxLayout()
@@ -6275,16 +5328,16 @@ class GodAI(QWidget):
         preview_layout = QVBoxLayout(preview_widget)
         preview_layout.setContentsMargins(4, 4, 4, 4)
         preview_layout.setSpacing(6)
-        preview_top = QHBoxLayout()
+        preview_top_container = QWidget()
+        preview_top = FlowLayout(preview_top_container, spacing=6)
         self.fiverr_preview_status = QLabel("No logos generated yet.")
         self.fiverr_preview_status.setStyleSheet("color: #888; font-style: italic;")
         preview_top.addWidget(self.fiverr_preview_status)
-        preview_top.addStretch()
         self.fiverr_save_images_btn = QPushButton("Save All Images")
         self.fiverr_save_images_btn.setEnabled(False)
         self.fiverr_save_images_btn.clicked.connect(self.fiverr_save_images)
         preview_top.addWidget(self.fiverr_save_images_btn)
-        preview_layout.addLayout(preview_top)
+        preview_layout.addWidget(preview_top_container)
         self.fiverr_logo_grid = QWidget()
         self.fiverr_logo_grid_layout = QHBoxLayout(self.fiverr_logo_grid)
         self.fiverr_logo_grid_layout.setContentsMargins(0, 0, 0, 0)
@@ -6384,8 +5437,8 @@ class GodAI(QWidget):
                 models = []
             for m in models:
                 self.fiverr_model_box.addItem(m)
-        except Exception:
-            pass
+        except Exception as exc:
+            self._note_failure("fiverr: load models", exc, self.fiverr_model_box)
 
     def _fiverr_get_brief(self) -> dict:
         return {
@@ -6419,14 +5472,18 @@ class GodAI(QWidget):
         self.fiverr_stop_btn.setEnabled(True)
         self._fiverr_clear_logo_grid()
 
+        if not self.authorize_request("fiverr", provider, model, messages[-1]["content"] if messages else ""):
+            return
         self.fiverr_text_worker = ChatWorker(self.run_backend, provider, model, messages, "")
         self.fiverr_text_worker.finished_signal.connect(self._fiverr_on_prompt_ready)
+        self.fiverr_text_worker.usage_signal.connect(lambda u: self.note_request_usage("fiverr", u))
         self.fiverr_text_worker.error_signal.connect(self._fiverr_on_text_error)
         self.fiverr_text_worker.start()
         self._fiverr_pending_count = count
         self._fiverr_pending_brief = brief
 
     def _fiverr_on_prompt_ready(self, image_prompt: str):
+        self.record_request("fiverr", image_prompt)
         image_prompt = image_prompt.strip()
         count = self._fiverr_pending_count
         brief = self._fiverr_pending_brief
@@ -6489,6 +5546,7 @@ class GodAI(QWidget):
             self.fiverr_order_table.setItem(self._fiverr_order_row, 2, QTableWidgetItem("Error"))
 
     def _fiverr_on_text_error(self, error: str):
+        self.abandon_request("fiverr")
         self.fiverr_status_label.setText(f"Error: {error}")
         self.fiverr_generate_btn.setEnabled(True)
         self.fiverr_delivery_btn.setEnabled(True)
@@ -6511,9 +5569,12 @@ class GodAI(QWidget):
         self.fiverr_gig_btn.setEnabled(False)
         self.fiverr_stop_btn.setEnabled(True)
         self.fiverr_tabs.setCurrentIndex(1)
+        if not self.authorize_request("fiverr", provider, model, messages[-1]["content"] if messages else ""):
+            return
         self.fiverr_text_worker = ChatWorker(self.run_backend, provider, model, messages, "")
         self.fiverr_text_worker.token_signal.connect(self._fiverr_on_delivery_token)
         self.fiverr_text_worker.finished_signal.connect(self._fiverr_on_delivery_done)
+        self.fiverr_text_worker.usage_signal.connect(lambda u: self.note_request_usage("fiverr", u))
         self.fiverr_text_worker.error_signal.connect(self._fiverr_on_text_error)
         self.fiverr_text_worker.start()
 
@@ -6522,6 +5583,7 @@ class GodAI(QWidget):
         self.fiverr_delivery_box.insertPlainText(token)
 
     def _fiverr_on_delivery_done(self, _full: str):
+        self.record_request("fiverr", _full)
         self.fiverr_status_label.setText("Delivery message ready.")
         self.fiverr_generate_btn.setEnabled(True)
         self.fiverr_delivery_btn.setEnabled(True)
@@ -6544,9 +5606,12 @@ class GodAI(QWidget):
         self.fiverr_gig_btn.setEnabled(False)
         self.fiverr_stop_btn.setEnabled(True)
         self.fiverr_tabs.setCurrentIndex(2)
+        if not self.authorize_request("fiverr", provider, model, messages[-1]["content"] if messages else ""):
+            return
         self.fiverr_text_worker = ChatWorker(self.run_backend, provider, model, messages, "")
         self.fiverr_text_worker.token_signal.connect(self._fiverr_on_gig_token)
         self.fiverr_text_worker.finished_signal.connect(self._fiverr_on_gig_done)
+        self.fiverr_text_worker.usage_signal.connect(lambda u: self.note_request_usage("fiverr", u))
         self.fiverr_text_worker.error_signal.connect(self._fiverr_on_text_error)
         self.fiverr_text_worker.start()
 
@@ -6555,6 +5620,7 @@ class GodAI(QWidget):
         self.fiverr_gig_box.insertPlainText(token)
 
     def _fiverr_on_gig_done(self, _full: str):
+        self.record_request("fiverr", _full)
         self.fiverr_status_label.setText("Gig description ready.")
         self.fiverr_generate_btn.setEnabled(True)
         self.fiverr_delivery_btn.setEnabled(True)
@@ -6621,8 +5687,8 @@ class GodAI(QWidget):
                 models = []
             for m in models:
                 self.author_model_box.addItem(m)
-        except Exception:
-            pass
+        except Exception as exc:
+            self._note_failure("author: load models", exc, self.author_model_box)
 
     def _author_on_content_type_changed(self, content_type: str):
         fiction_tasks = [
@@ -6836,9 +5902,12 @@ class GodAI(QWidget):
         self.author_write_btn.setEnabled(False)
         self.author_continue_btn.setEnabled(False)
         self.author_stop_btn.setEnabled(True)
+        if not self.authorize_request("author", provider, model, prompt):
+            return
         self.author_worker = ChatWorker(self.run_backend, provider, model, messages, prompt)
         self.author_worker.token_signal.connect(self._author_on_token)
         self.author_worker.finished_signal.connect(self._author_on_finished)
+        self.author_worker.usage_signal.connect(lambda u: self.note_request_usage("author", u))
         self.author_worker.error_signal.connect(self._author_on_error)
         self.author_worker.start()
 
@@ -6906,6 +5975,7 @@ class GodAI(QWidget):
         self.author_scene_count_label.setText(str(scene_count))
 
     def _author_on_finished(self, full_response: str):
+        self.record_request("author", full_response)
         self._populate_author_tabs(full_response)
         word_count = len(self.author_draft_box.toPlainText().split())
         self.author_status_label.setText(f"[Done] {word_count:,} words")
@@ -6916,6 +5986,7 @@ class GodAI(QWidget):
         self._refresh_next_step_tip()
 
     def _author_on_error(self, error: str):
+        self.abandon_request("author")
         self.author_status_label.setText(f"[Error] {error}")
         self.author_write_btn.setEnabled(True)
         self.author_continue_btn.setEnabled(True)
@@ -7121,9 +6192,12 @@ class GodAI(QWidget):
         self.author_pub_stop_btn.setEnabled(True)
         self.author_pub_save_btn.setEnabled(False)
 
+        if not self.authorize_request("author", provider, model, prompt):
+            return
         self.author_pub_worker = ChatWorker(self.run_backend, provider, model, messages, prompt)
         self.author_pub_worker.token_signal.connect(self._author_pub_on_token)
         self.author_pub_worker.finished_signal.connect(self._author_pub_on_finished)
+        self.author_pub_worker.usage_signal.connect(lambda u: self.note_request_usage("author", u))
         self.author_pub_worker.error_signal.connect(self._author_pub_on_error)
         self.author_pub_worker.start()
 
@@ -7134,6 +6208,7 @@ class GodAI(QWidget):
         self.author_pub_output.setTextCursor(cursor)
 
     def _author_pub_on_finished(self, full_response: str):
+        self.record_request("author", full_response)
         self.author_status_label.setText(
             f"[Done] {self.author_pub_type_box.currentText()} generated"
         )
@@ -7142,6 +6217,7 @@ class GodAI(QWidget):
         self.author_pub_save_btn.setEnabled(True)
 
     def _author_pub_on_error(self, error: str):
+        self.abandon_request("author")
         self.author_status_label.setText(f"[Error] {error}")
         self.author_pub_generate_btn.setEnabled(True)
         self.author_pub_stop_btn.setEnabled(False)
@@ -7212,9 +6288,12 @@ class GodAI(QWidget):
         self.author_mkt_stop_btn.setEnabled(True)
         self.author_mkt_save_btn.setEnabled(False)
 
+        if not self.authorize_request("author", provider, model, prompt):
+            return
         self.author_mkt_worker = ChatWorker(self.run_backend, provider, model, messages, prompt)
         self.author_mkt_worker.token_signal.connect(self._author_mkt_on_token)
         self.author_mkt_worker.finished_signal.connect(self._author_mkt_on_finished)
+        self.author_mkt_worker.usage_signal.connect(lambda u: self.note_request_usage("author", u))
         self.author_mkt_worker.error_signal.connect(self._author_mkt_on_error)
         self.author_mkt_worker.start()
 
@@ -7225,6 +6304,7 @@ class GodAI(QWidget):
         self.author_mkt_output.setTextCursor(cursor)
 
     def _author_mkt_on_finished(self, full_response: str):
+        self.record_request("author", full_response)
         self.author_status_label.setText(
             f"[Done] {self.author_mkt_platform_box.currentText()} copy generated"
         )
@@ -7233,6 +6313,7 @@ class GodAI(QWidget):
         self.author_mkt_save_btn.setEnabled(True)
 
     def _author_mkt_on_error(self, error: str):
+        self.abandon_request("author")
         self.author_status_label.setText(f"[Error] {error}")
         self.author_mkt_generate_btn.setEnabled(True)
         self.author_mkt_stop_btn.setEnabled(False)
@@ -7437,7 +6518,8 @@ class GodAI(QWidget):
         load_row.addStretch()
         layout.addLayout(load_row)
 
-        settings_row = QHBoxLayout()
+        settings_row_container = QWidget()
+        settings_row = FlowLayout(settings_row_container, spacing=6)
         settings_row.addWidget(QLabel("Quotes:"))
         self.quote_finder_count_box = QComboBox()
         self.quote_finder_count_box.addItems(["5", "10", "15", "20"])
@@ -7445,13 +6527,11 @@ class GodAI(QWidget):
         settings_row.addWidget(self.quote_finder_count_box)
 
         settings_row.addWidget(QLabel("Theme:"))
-        self.quote_finder_theme_box = QComboBox()
-        self.quote_finder_theme_box.addItems(["Midnight", "Blush", "Zodiac"])
+        self.quote_finder_theme_box = make_theme_box()
         settings_row.addWidget(self.quote_finder_theme_box)
 
         settings_row.addWidget(QLabel("Voice:"))
-        self.quote_finder_voice_source_box = QComboBox()
-        self.quote_finder_voice_source_box.addItems(["System (Free)", "ElevenLabs"])
+        self.quote_finder_voice_source_box = make_voice_source_box()
         self.quote_finder_voice_source_box.currentTextChanged.connect(self.quote_finder_load_voices)
         settings_row.addWidget(self.quote_finder_voice_source_box)
 
@@ -7463,8 +6543,7 @@ class GodAI(QWidget):
         self.quote_finder_attribution.setPlaceholderText("You Don't Chase")
         settings_row.addWidget(self.quote_finder_attribution)
 
-        settings_row.addStretch()
-        layout.addLayout(settings_row)
+        layout.addWidget(settings_row_container)
 
         self.quote_finder_suggest_btn = QPushButton("🔍  Suggest Quotes")
         self.quote_finder_suggest_btn.setMinimumHeight(34)
@@ -7504,13 +6583,11 @@ class GodAI(QWidget):
         cl.addWidget(self.quote_graphic_attribution)
 
         cl.addWidget(QLabel("Theme:"))
-        self.quote_graphic_theme_box = QComboBox()
-        self.quote_graphic_theme_box.addItems(["Midnight", "Blush", "Zodiac"])
+        self.quote_graphic_theme_box = make_theme_box()
         cl.addWidget(self.quote_graphic_theme_box)
 
         cl.addWidget(QLabel("Size:"))
-        self.quote_graphic_size_box = QComboBox()
-        self.quote_graphic_size_box.addItems(["Square (1080×1080)", "Story / Reel / Pin (1080×1920)"])
+        self.quote_graphic_size_box = make_size_box()
         cl.addWidget(self.quote_graphic_size_box)
 
         self.quote_graphic_generate_btn = QPushButton("✨  Generate Graphic")
@@ -7559,13 +6636,11 @@ class GodAI(QWidget):
         cl.addWidget(self.shorts_attribution)
 
         cl.addWidget(QLabel("Theme:"))
-        self.shorts_theme_box = QComboBox()
-        self.shorts_theme_box.addItems(["Midnight", "Blush", "Zodiac"])
+        self.shorts_theme_box = make_theme_box()
         cl.addWidget(self.shorts_theme_box)
 
         cl.addWidget(QLabel("Voice source:"))
-        self.shorts_voice_source_box = QComboBox()
-        self.shorts_voice_source_box.addItems(["System (Free)", "ElevenLabs"])
+        self.shorts_voice_source_box = make_voice_source_box()
         self.shorts_voice_source_box.currentTextChanged.connect(self.shorts_load_voices)
         cl.addWidget(self.shorts_voice_source_box)
 
@@ -7644,13 +6719,11 @@ class GodAI(QWidget):
 
         settings_row2 = QHBoxLayout()
         settings_row2.addWidget(QLabel("Theme:"))
-        self.calendar_theme_box = QComboBox()
-        self.calendar_theme_box.addItems(["Midnight", "Blush", "Zodiac"])
+        self.calendar_theme_box = make_theme_box()
         settings_row2.addWidget(self.calendar_theme_box)
 
         settings_row2.addWidget(QLabel("Voice:"))
-        self.calendar_voice_source_box = QComboBox()
-        self.calendar_voice_source_box.addItems(["System (Free)", "ElevenLabs"])
+        self.calendar_voice_source_box = make_voice_source_box()
         self.calendar_voice_source_box.currentTextChanged.connect(self.calendar_load_voices)
         settings_row2.addWidget(self.calendar_voice_source_box)
 
@@ -7710,8 +6783,8 @@ class GodAI(QWidget):
                 models = []
             for m in models:
                 self.manuscript_model_box.addItem(m)
-        except Exception:
-            pass
+        except Exception as exc:
+            self._note_failure("manuscript: load models", exc, self.manuscript_model_box)
 
     def _refresh_connections_status(self):
         """Shows which 3rd-party API keys are actually configured (checked from the running
@@ -7794,9 +6867,12 @@ class GodAI(QWidget):
         messages = agent.build_messages(query, context_json=self._manuscript_last_data)
         self.manuscript_status_label.setText("[Thinking…]")
         self.manuscript_ask_btn.setEnabled(False)
+        if not self.authorize_request("manuscript", provider, model, query):
+            return
         self.manuscript_worker = ChatWorker(self.run_backend, provider, model, messages, query)
         self.manuscript_worker.token_signal.connect(self._manuscript_on_token)
         self.manuscript_worker.finished_signal.connect(self._manuscript_on_finished)
+        self.manuscript_worker.usage_signal.connect(lambda u: self.note_request_usage("manuscript", u))
         self.manuscript_worker.error_signal.connect(self._manuscript_on_error)
         self.manuscript_worker.start()
 
@@ -7807,10 +6883,12 @@ class GodAI(QWidget):
         self.manuscript_metrics_box.setTextCursor(cursor)
 
     def _manuscript_on_finished(self, _full_response: str):
+        self.record_request("manuscript", _full_response)
         self.manuscript_status_label.setText("[Done]")
         self.manuscript_ask_btn.setEnabled(True)
 
     def _manuscript_on_error(self, error: str):
+        self.abandon_request("manuscript")
         self.manuscript_status_label.setText(f"[Error] {error}")
         self.manuscript_ask_btn.setEnabled(True)
 
@@ -7877,9 +6955,9 @@ class GodAI(QWidget):
         import time
 
         attribution = self.quote_graphic_attribution.text().strip()
-        theme = self.quote_graphic_theme_box.currentText().lower()
-        size_name = "square" if "Square" in self.quote_graphic_size_box.currentText() else "vertical"
-        output_path = GRAPHICS_DIR / f"quote_{int(time.time())}.png"
+        theme = theme_key(self.quote_graphic_theme_box)
+        size_name = size_key(self.quote_graphic_size_box)
+        output_path = unique_output_path(GRAPHICS_DIR, "quote", ".png")
         try:
             render_quote_graphic(quote, output_path, theme=theme, size_name=size_name, attribution=attribution)
             pixmap = QPixmap(str(output_path))
@@ -7894,19 +6972,8 @@ class GodAI(QWidget):
         QDesktopServices.openUrl(QUrl.fromLocalFile(str(GRAPHICS_DIR)))
 
     def shorts_load_voices(self):
-        self.shorts_voice_box.clear()
-        source = self.shorts_voice_source_box.currentText()
-        try:
-            if source == "ElevenLabs":
-                from providers.voice.elevenlabs import ElevenLabsProvider
-                voices = ElevenLabsProvider().list_voices()
-            else:
-                from providers.voice.mock import MockVoiceProvider
-                voices = MockVoiceProvider().list_voices()
-            for v in voices:
-                self.shorts_voice_box.addItem(v["name"], v["id"])
-        except Exception:
-            self.shorts_voice_box.addItem("(ElevenLabs key not set)", "default")
+        from ui.book_widgets import populate_voice_box
+        populate_voice_box(self.shorts_voice_box, self.shorts_voice_source_box.currentText())
 
     def manuscript_generate_short(self):
         quote = self.shorts_quote_text.toPlainText().strip()
@@ -7919,13 +6986,12 @@ class GodAI(QWidget):
         import time
 
         attribution = self.shorts_attribution.text().strip()
-        theme = self.shorts_theme_box.currentText().lower()
+        theme = theme_key(self.shorts_theme_box)
         use_elevenlabs = self.shorts_voice_source_box.currentText() == "ElevenLabs"
         voice_id = self.shorts_voice_box.currentData() or "default"
 
-        ts = int(time.time())
-        image_path = SHORTS_DIR / f"short_{ts}.png"
-        output_path = SHORTS_DIR / f"short_{ts}.mp4"
+        output_path = unique_output_path(SHORTS_DIR, "short", ".mp4")
+        image_path = output_path.with_suffix(".png")
 
         try:
             render_quote_graphic(quote, image_path, theme=theme, size_name="vertical", attribution=attribution)
@@ -7967,19 +7033,8 @@ class GodAI(QWidget):
 
     # ── Quote Finder handlers ─────────────────────────────────────────────────
     def quote_finder_load_voices(self):
-        self.quote_finder_voice_box.clear()
-        source = self.quote_finder_voice_source_box.currentText()
-        try:
-            if source == "ElevenLabs":
-                from providers.voice.elevenlabs import ElevenLabsProvider
-                voices = ElevenLabsProvider().list_voices()
-            else:
-                from providers.voice.mock import MockVoiceProvider
-                voices = MockVoiceProvider().list_voices()
-            for v in voices:
-                self.quote_finder_voice_box.addItem(v["name"], v["id"])
-        except Exception:
-            self.quote_finder_voice_box.addItem("(ElevenLabs key not set)", "default")
+        from ui.book_widgets import populate_voice_box
+        populate_voice_box(self.quote_finder_voice_box, self.quote_finder_voice_source_box.currentText())
 
     def quote_finder_load_file(self):
         path, _ = QFileDialog.getOpenFileName(
@@ -8014,12 +7069,16 @@ class GodAI(QWidget):
         messages = agent.build_quote_suggestions_messages(truncated, count=count)
         self.manuscript_status_label.setText("[Finding quotes…]")
         self.quote_finder_suggest_btn.setEnabled(False)
+        if not self.authorize_request("manuscript", provider, model, truncated):
+            return
         self.quote_finder_worker = ChatWorker(self.run_backend, provider, model, messages, truncated)
         self.quote_finder_worker.finished_signal.connect(self._quote_finder_on_finished)
+        self.quote_finder_worker.usage_signal.connect(lambda u: self.note_request_usage("manuscript", u))
         self.quote_finder_worker.error_signal.connect(self._quote_finder_on_error)
         self.quote_finder_worker.start()
 
     def _quote_finder_on_finished(self, full_response: str):
+        self.record_request("manuscript", full_response)
         self.quote_finder_suggest_btn.setEnabled(True)
         quotes = self._parse_quote_list(full_response)
         self.quote_finder_list.clear()
@@ -8036,6 +7095,7 @@ class GodAI(QWidget):
         self.manuscript_status_label.setText(f"[Done] Found {len(quotes)} quotes.")
 
     def _quote_finder_on_error(self, error: str):
+        self.abandon_request("manuscript")
         self.quote_finder_suggest_btn.setEnabled(True)
         self.manuscript_status_label.setText(f"[Error] {error}")
 
@@ -8071,9 +7131,9 @@ class GodAI(QWidget):
     def quote_finder_generate_graphic(self, quote: str):
         from services.quote_graphics import render_quote_graphic, GRAPHICS_DIR
         import time
-        theme = self.quote_finder_theme_box.currentText().lower()
+        theme = theme_key(self.quote_finder_theme_box)
         attribution = self.quote_finder_attribution.text().strip()
-        output_path = GRAPHICS_DIR / f"quote_{int(time.time() * 1000)}.png"
+        output_path = unique_output_path(GRAPHICS_DIR, "quote", ".png")
         try:
             render_quote_graphic(quote, output_path, theme=theme, size_name="square", attribution=attribution)
             self.manuscript_status_label.setText(f"[Done] Saved {output_path.name}")
@@ -8088,14 +7148,13 @@ class GodAI(QWidget):
         from services.shorts_generator import SHORTS_DIR
         import time
 
-        theme = self.quote_finder_theme_box.currentText().lower()
+        theme = theme_key(self.quote_finder_theme_box)
         attribution = self.quote_finder_attribution.text().strip()
         use_elevenlabs = self.quote_finder_voice_source_box.currentText() == "ElevenLabs"
         voice_id = self.quote_finder_voice_box.currentData() or "default"
 
-        ts = int(time.time() * 1000)
-        image_path = SHORTS_DIR / f"short_{ts}.png"
-        output_path = SHORTS_DIR / f"short_{ts}.mp4"
+        output_path = unique_output_path(SHORTS_DIR, "short", ".mp4")
+        image_path = output_path.with_suffix(".png")
         try:
             render_quote_graphic(quote, image_path, theme=theme, size_name="vertical", attribution=attribution)
         except Exception as e:
@@ -8131,19 +7190,8 @@ class GodAI(QWidget):
 
     # ── Calendar handlers ─────────────────────────────────────────────────────
     def calendar_load_voices(self):
-        self.calendar_voice_box.clear()
-        source = self.calendar_voice_source_box.currentText()
-        try:
-            if source == "ElevenLabs":
-                from providers.voice.elevenlabs import ElevenLabsProvider
-                voices = ElevenLabsProvider().list_voices()
-            else:
-                from providers.voice.mock import MockVoiceProvider
-                voices = MockVoiceProvider().list_voices()
-            for v in voices:
-                self.calendar_voice_box.addItem(v["name"], v["id"])
-        except Exception:
-            self.calendar_voice_box.addItem("(ElevenLabs key not set)", "default")
+        from ui.book_widgets import populate_voice_box
+        populate_voice_box(self.calendar_voice_box, self.calendar_voice_source_box.currentText())
 
     def _calendar_quotes_from_finder(self) -> list:
         quotes = []
@@ -8194,12 +7242,16 @@ class GodAI(QWidget):
         messages = agent.build_calendar_caption_messages(items_json)
         self.manuscript_status_label.setText("[Writing captions…]")
         self.calendar_generate_btn.setEnabled(False)
+        if not self.authorize_request("manuscript", provider, model, items_json):
+            return
         self.calendar_worker = ChatWorker(self.run_backend, provider, model, messages, items_json)
         self.calendar_worker.finished_signal.connect(self._calendar_on_captions_done)
+        self.calendar_worker.usage_signal.connect(lambda u: self.note_request_usage("manuscript", u))
         self.calendar_worker.error_signal.connect(self._calendar_on_captions_error)
         self.calendar_worker.start()
 
     def _calendar_on_captions_done(self, full_response: str):
+        self.record_request("manuscript", full_response)
         self.calendar_generate_btn.setEnabled(True)
         captions = self._parse_quote_list(full_response)
         for i, slot in enumerate(self._calendar_slots):
@@ -8208,6 +7260,7 @@ class GodAI(QWidget):
         self.manuscript_status_label.setText(f"[Done] {len(self._calendar_slots)}-post calendar generated.")
 
     def _calendar_on_captions_error(self, error: str):
+        self.abandon_request("manuscript")
         self.calendar_generate_btn.setEnabled(True)
         self._populate_calendar_table()
         self.manuscript_status_label.setText(f"[Error] Captions failed ({error}) — schedule shown, captions blank.")
@@ -8235,12 +7288,12 @@ class GodAI(QWidget):
         from services.quote_graphics import render_quote_graphic
         import time
 
-        theme = self.calendar_theme_box.currentText().lower()
+        theme = theme_key(self.calendar_theme_box)
         attribution = self.calendar_attribution.text().strip()
 
         if slot.format == "graphic":
             from services.quote_graphics import GRAPHICS_DIR
-            output_path = GRAPHICS_DIR / f"quote_{int(time.time() * 1000)}.png"
+            output_path = unique_output_path(GRAPHICS_DIR, "quote", ".png")
             try:
                 render_quote_graphic(slot.quote, output_path, theme=theme, size_name="square", attribution=attribution)
                 self.manuscript_status_label.setText(f"[Done] Saved {output_path.name}")
@@ -8254,9 +7307,8 @@ class GodAI(QWidget):
         from services.shorts_generator import SHORTS_DIR
         use_elevenlabs = self.calendar_voice_source_box.currentText() == "ElevenLabs"
         voice_id = self.calendar_voice_box.currentData() or "default"
-        ts = int(time.time() * 1000)
-        image_path = SHORTS_DIR / f"short_{ts}.png"
-        output_path = SHORTS_DIR / f"short_{ts}.mp4"
+        output_path = unique_output_path(SHORTS_DIR, "short", ".mp4")
+        image_path = output_path.with_suffix(".png")
         try:
             render_quote_graphic(slot.quote, image_path, theme=theme, size_name="vertical", attribution=attribution)
         except Exception as e:
@@ -8368,9 +7420,12 @@ class GodAI(QWidget):
         self.music_stop_btn.setEnabled(True)
         self.music_save_btn.setEnabled(False)
 
+        if not self.authorize_request("music", provider, model, prompt):
+            return
         self.music_worker = ChatWorker(self.run_backend, provider, model, messages, prompt)
         self.music_worker.token_signal.connect(self._music_on_token)
         self.music_worker.finished_signal.connect(self._music_on_finished)
+        self.music_worker.usage_signal.connect(lambda u: self.note_request_usage("music", u))
         self.music_worker.error_signal.connect(self._music_on_error)
         self.music_worker.start()
 
@@ -8380,6 +7435,7 @@ class GodAI(QWidget):
         self.music_profile_box.moveCursor(QTextCursor.End)
 
     def _music_on_finished(self, full_response: str):
+        self.record_request("music", full_response)
         self._last_music_response = full_response
         self._populate_music_tabs(full_response)
         self.music_status_label.setText("Plan complete — tabs populated.")
@@ -8388,6 +7444,7 @@ class GodAI(QWidget):
         self.music_save_btn.setEnabled(True)
 
     def _music_on_error(self, error: str):
+        self.abandon_request("music")
         self.music_profile_box.setPlainText(f"[Error] {error}")
         self.music_status_label.setText("Error.")
         self.music_analyse_btn.setEnabled(True)
@@ -8879,317 +7936,8 @@ class GodAI(QWidget):
             self.output_box.append(f"[Settings Save Error] {e}")   
 
     def apply_global_style(self):
-        # ── VPN-Agent-inspired design system ─────────────────────────────
-        # Palette: #0f0f0f page · #181818 card · #161616 input · #262626 border
-        # Accent: #3cff88 (Sentinel green) for active/focused/title states
-        # Semantic: green (success) / red (danger) for primary actions
-        self.setStyleSheet("""
-        QWidget {
-            background-color: #0f0f0f;
-            color: #d8d8d8;
-            font-size: 13px;
-        }
+        self.setStyleSheet(GLOBAL_STYLESHEET)
 
-        /* ── Inputs ────────────────────────────────────────────────── */
-        QTextEdit, QTextBrowser, QListWidget {
-            background-color: #161616;
-            color: #e8e8e8;
-            border: 1px solid #262626;
-            border-radius: 8px;
-            padding: 8px 10px;
-            selection-background-color: rgba(60, 255, 136, 0.25);
-            selection-color: #ffffff;
-        }
-        QLineEdit, QComboBox {
-            background-color: #161616;
-            color: #e8e8e8;
-            border: 1px solid #262626;
-            border-radius: 8px;
-            padding: 4px 10px;
-            min-height: 22px;
-            selection-background-color: rgba(60, 255, 136, 0.25);
-            selection-color: #ffffff;
-        }
-        QTextEdit:focus, QTextBrowser:focus, QLineEdit:focus, QComboBox:focus {
-            border: 1px solid #3cff88;
-        }
-        QComboBox::drop-down {
-            border: none;
-            width: 22px;
-        }
-        QComboBox QAbstractItemView {
-            background-color: #181818;
-            border: 1px solid #262626;
-            border-radius: 6px;
-            selection-background-color: rgba(60, 255, 136, 0.15);
-            selection-color: #3cff88;
-            outline: none;
-            padding: 4px;
-        }
-
-        /* ── Buttons (default — neutral) ───────────────────────────── */
-        QPushButton {
-            background-color: #1a1a1a;
-            color: #d0d0d0;
-            border: 1px solid #2a2a2a;
-            border-radius: 8px;
-            padding: 9px 16px;
-            font-weight: 600;
-        }
-        QPushButton:hover {
-            background-color: #232323;
-            border: 1px solid #3a3a3a;
-            color: #ffffff;
-        }
-        QPushButton:pressed {
-            background-color: #0f0f0f;
-        }
-        QPushButton:checked {
-            background-color: rgba(60, 255, 136, 0.10);
-            border: 1px solid #3cff88;
-            color: #3cff88;
-        }
-        QPushButton:disabled {
-            color: #555555;
-            background-color: #161616;
-            border: 1px solid #1f1f1f;
-        }
-
-        /* ── Group boxes (card style with label above) ─────────────── */
-        QGroupBox {
-            background-color: #161616;
-            border: 1px solid #242424;
-            border-radius: 10px;
-            margin-top: 18px;
-            padding: 14px 12px 10px 12px;
-        }
-        QGroupBox::title {
-            subcontrol-origin: margin;
-            subcontrol-position: top left;
-            left: 4px;
-            top: 0px;
-            padding: 0 6px;
-            color: #707070;
-            background-color: transparent;
-            font-size: 10px;
-            font-weight: bold;
-            letter-spacing: 2px;
-        }
-
-        /* ── Tabs ──────────────────────────────────────────────────── */
-        QTabWidget::pane {
-            background-color: #161616;
-            border: 1px solid #242424;
-            border-radius: 8px;
-            top: -1px;
-        }
-        QTabBar {
-            background-color: transparent;
-        }
-        QTabBar::tab {
-            background-color: transparent;
-            color: #707070;
-            padding: 7px 12px;
-            border: none;
-            border-bottom: 2px solid transparent;
-            font-size: 12px;
-            font-weight: 500;
-        }
-        QTabBar::tab:hover {
-            color: #cccccc;
-        }
-        QTabBar::tab:selected {
-            color: #3cff88;
-            border-bottom: 2px solid #3cff88;
-        }
-
-        /* ── Checkboxes ────────────────────────────────────────────── */
-        QCheckBox {
-            color: #c0c0c0;
-            spacing: 8px;        /* indicator → its own label */
-            /* Trailing room so a checkbox's label never butts straight into the
-               next widget (another checkbox's indicator, or a button). Must be
-               padding, not margin: Qt ignores margin here, and the macOS style
-               eats ~11px of any layout spacing we'd set instead. Global, so
-               every agent tab gets it. */
-            padding-right: 14px;
-        }
-        QCheckBox::indicator {
-            width: 16px;
-            height: 16px;
-            border-radius: 4px;
-            border: 1px solid #2a2a2a;
-            background-color: #161616;
-        }
-        QCheckBox::indicator:hover {
-            border: 1px solid #4a4a4a;
-        }
-        QCheckBox::indicator:checked {
-            background-color: #3cff88;
-            border: 1px solid #3cff88;
-        }
-
-        /* ── Progress bars ─────────────────────────────────────────── */
-        QProgressBar {
-            background-color: #161616;
-            border: 1px solid #262626;
-            border-radius: 6px;
-            text-align: center;
-            color: #cccccc;
-            height: 10px;
-        }
-        QProgressBar::chunk {
-            background-color: #3cff88;
-            border-radius: 4px;
-        }
-
-        /* ── Scrollbars ────────────────────────────────────────────── */
-        QScrollBar:vertical {
-            background-color: transparent;
-            width: 8px;
-            border: none;
-            margin: 4px 2px;
-        }
-        QScrollBar::handle:vertical {
-            background-color: #2a2a2a;
-            border-radius: 4px;
-            min-height: 24px;
-        }
-        QScrollBar::handle:vertical:hover {
-            background-color: #444;
-        }
-        QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
-            height: 0;
-        }
-        QScrollBar:horizontal {
-            background-color: transparent;
-            height: 8px;
-            border: none;
-            margin: 2px 4px;
-        }
-        QScrollBar::handle:horizontal {
-            background-color: #2a2a2a;
-            border-radius: 4px;
-            min-width: 24px;
-        }
-        QScrollBar::handle:horizontal:hover {
-            background-color: #444;
-        }
-        QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {
-            width: 0;
-        }
-
-        /* ── Labels ────────────────────────────────────────────────── */
-        QLabel {
-            color: #c8c8c8;
-            background: transparent;
-        }
-
-        /* ── Tooltips ──────────────────────────────────────────────── */
-        QToolTip {
-            background-color: #161616;
-            color: #e8e8e8;
-            border: 1px solid #3cff88;
-            border-radius: 4px;
-            padding: 6px 10px;
-            font-size: 12px;
-        }
-
-        /* ── Sentinel agent title (big accent text) ───────────────── */
-        QLabel#AgentTitle {
-            color: #3cff88;
-            font-size: 22px;
-            font-weight: 800;
-            letter-spacing: 3px;
-            background: transparent;
-        }
-
-        /* ── Agent subtitle (one-line function description) ─────── */
-        QLabel#AgentSubtitle {
-            color: #888888;
-            font-size: 12px;
-            font-weight: 400;
-            background: transparent;
-            padding: 0 0 4px 1px;
-        }
-
-        /* ── Status pill (top-right) ──────────────────────────────── */
-        QLabel#StatusPill {
-            background-color: #161616;
-            border: 1px solid #262626;
-            border-radius: 12px;
-            padding: 4px 12px;
-            color: #3cff88;
-            font-size: 11px;
-            font-weight: 600;
-            letter-spacing: 1px;
-        }
-
-        /* ── Small "chip" buttons (Docs, Model Guide etc.) ────────── */
-        QPushButton#ChipBtn {
-            background-color: #161616;
-            border: 1px solid #262626;
-            border-radius: 12px;
-            padding: 4px 12px;
-            color: #aaaaaa;
-            font-size: 11px;
-            font-weight: 500;
-        }
-        QPushButton#ChipBtn:hover {
-            border: 1px solid #3cff88;
-            color: #3cff88;
-        }
-
-        /* ── Primary action (Send / Analyse / Generate) ──────────── */
-        QPushButton#PrimaryAction {
-            background-color: rgba(60, 255, 136, 0.10);
-            border: 1px solid #3cff88;
-            border-radius: 8px;
-            padding: 7px 14px;
-            color: #3cff88;
-            font-weight: 700;
-            font-size: 13px;
-            min-height: 18px;
-            min-width: 110px;
-        }
-        QPushButton#PrimaryAction:hover {
-            background-color: rgba(60, 255, 136, 0.18);
-            color: #ffffff;
-        }
-        QPushButton#PrimaryAction:pressed {
-            background-color: rgba(60, 255, 136, 0.30);
-        }
-        QPushButton#PrimaryAction:disabled {
-            color: #4a4a4a;
-            border: 1px solid #2a2a2a;
-            background-color: #161616;
-        }
-
-        /* ── Danger action (Stop / Disconnect) ────────────────────── */
-        QPushButton#DangerAction {
-            background-color: rgba(255, 85, 85, 0.10);
-            border: 1px solid #ff5555;
-            border-radius: 8px;
-            padding: 7px 14px;
-            color: #ff7070;
-            font-weight: 700;
-            font-size: 13px;
-            min-height: 18px;
-            min-width: 80px;
-        }
-        QPushButton#DangerAction:hover {
-            background-color: rgba(255, 85, 85, 0.18);
-            color: #ffffff;
-        }
-        QPushButton#DangerAction:disabled {
-            color: #4a4a4a;
-            border: 1px solid #2a2a2a;
-            background-color: #161616;
-        }
-        """)
-
-
-    # ── Bug Bounty Agent panel ───────────────────────────────────────────────
     def build_bug_bounty_panel(self):
         self.bug_bounty_panel = QWidget()
         self.bug_bounty_panel.setObjectName("BugBountyPanel")
@@ -9271,7 +8019,8 @@ class GodAI(QWidget):
         layout.addWidget(findings_group)
 
         # ── Provider row ─────────────────────────────────────────────────────
-        provider_row = QHBoxLayout()
+        provider_row_container = QWidget()
+        provider_row = FlowLayout(provider_row_container, spacing=6)
         provider_row.addWidget(QLabel("Provider:"))
         self.bb_provider_box = QComboBox()
         self.bb_provider_box.addItems(["ollama", "openai", "deepseek", "kimi", "gemini", "anthropic", "qwen"])
@@ -9281,7 +8030,6 @@ class GodAI(QWidget):
         self.bb_model_box = QComboBox()
         self.bb_model_box.setMinimumWidth(200)
         provider_row.addWidget(self.bb_model_box)
-        provider_row.addStretch()
 
         self.bb_analyse_btn = QPushButton("Analyse")
         self.bb_analyse_btn.setMinimumWidth(130)
@@ -9294,7 +8042,7 @@ class GodAI(QWidget):
         self.bb_stop_btn.setObjectName("DangerAction")
         self.bb_stop_btn.clicked.connect(self.bb_stop)
         provider_row.addWidget(self.bb_stop_btn)
-        layout.addLayout(provider_row)
+        layout.addWidget(provider_row_container)
 
         # ── Results: tabs + sidebar ───────────────────────────────────────────
         results_splitter = QSplitter(Qt.Horizontal)
@@ -9460,9 +8208,12 @@ class GodAI(QWidget):
         self.bb_stop_btn.setEnabled(True)
         self.bb_tabs.setCurrentIndex(0)
 
+        if not self.authorize_request("bug_bounty", provider, model, target or "bug_bounty"):
+            return
         self.bug_bounty_worker = ChatWorker(self.run_backend, provider, model, messages, target or "bug_bounty")
         self.bug_bounty_worker.token_signal.connect(self._bb_on_token)
         self.bug_bounty_worker.finished_signal.connect(self._bb_on_finished)
+        self.bug_bounty_worker.usage_signal.connect(lambda u: self.note_request_usage("bug_bounty", u))
         self.bug_bounty_worker.error_signal.connect(self._bb_on_error)
         self.bug_bounty_worker.start()
 
@@ -9472,6 +8223,7 @@ class GodAI(QWidget):
         self.bb_report_box.moveCursor(QTextCursor.End)
 
     def _bb_on_finished(self, full_response: str):
+        self.record_request("bug_bounty", full_response)
         self._last_bb_response = full_response
         self._bb_populate_tabs(full_response)
         self._bb_update_indicators(full_response)
@@ -9482,6 +8234,7 @@ class GodAI(QWidget):
         self.bb_tabs.setCurrentIndex(0)
 
     def _bb_on_error(self, error: str):
+        self.abandon_request("bug_bounty")
         self.bb_report_box.setPlainText(f"[Error] {error}")
         self.bb_status_label.setText("Error.")
         self.bb_analyse_btn.setEnabled(True)
@@ -9603,12 +8356,16 @@ class GodAI(QWidget):
         self.manager_reject_btn.setEnabled(False)
         self.pending_spec = None
 
+        if not self.authorize_request("manager", provider, model, idea):
+            return
         self.manager_worker = ChatWorker(self.run_backend, provider, model, messages, idea)
         self.manager_worker.finished_signal.connect(self._manager_on_finished)
+        self.manager_worker.usage_signal.connect(lambda u: self.note_request_usage("manager", u))
         self.manager_worker.error_signal.connect(self._manager_on_error)
         self.manager_worker.start()
 
     def _manager_on_finished(self, response: str):
+        self.record_request("manager", response)
         self.manager_analyze_btn.setEnabled(True)
         spec = self.manager_agent.parse_spec(response)
         if spec is None:
@@ -9626,6 +8383,7 @@ class GodAI(QWidget):
         self.manager_log.append("[Ready] Spec generated. Review and approve or reject.")
 
     def _manager_on_error(self, error: str):
+        self.abandon_request("manager")
         self.manager_analyze_btn.setEnabled(True)
         self.manager_spec_display.setPlainText(f"[Error]\n{error}")
         self.manager_log.append(f"[Error] {error}")
@@ -10147,8 +8905,8 @@ class GodAI(QWidget):
             if not updated:
                 new_lines.append(f"{env_key}={value}")
             env_path.write_text("\n".join(new_lines) + "\n", encoding="utf-8")
-        except Exception:
-            pass  # Non-fatal — key is still saved in DB
+        except Exception as exc:
+            self._note_failure("ops identity: write .env (key is still saved in the database)", exc)
 
     def _refresh_ops_progress(self):
         count = sum(
@@ -10769,6 +9527,145 @@ class GodAI(QWidget):
 
         return result == QMessageBox.Yes
 
+    # ── Shared request guard (TODO.md #1) ───────────────────────────────
+    # Any agent that can spend money must go through these. Only send_prompt()
+    # used to, so the budget caps, the spend counters, the paid-API prompt and
+    # Saved Chats all silently ignored every other agent.
+
+    def _note_failure(self, context, exc, widget=None):
+        """Record a swallowed exception instead of discarding it.
+
+        These paths deliberately must not raise into the UI, but a bare
+        `except: pass` made a failed model listing or history load look exactly
+        like "there is nothing here". stderr is captured by the app launcher in
+        /tmp/sentinelai_launch.log; when a widget is given, the reason is also
+        attached to it as a tooltip so it is visible without reading a log.
+        """
+        message = f"{context}: {type(exc).__name__}: {exc}"
+        print(f"[warn] {message}", file=sys.stderr)
+        if widget is not None:
+            try:
+                widget.setToolTip(f"Last error — {message}")
+            except Exception:
+                pass
+
+    def current_api_permissions(self) -> dict:
+        """The provider checkboxes, as the validator expects them."""
+        return {
+            "allow_openai": self.allow_openai_checkbox.isChecked(),
+            "allow_deepseek": self.allow_deepseek_checkbox.isChecked(),
+            "allow_kimi": self.allow_kimi_checkbox.isChecked(),
+            "allow_gemini": self.allow_gemini_checkbox.isChecked(),
+            "allow_anthropic": self.allow_anthropic_checkbox.isChecked(),
+            "allow_qwen": self.allow_qwen_checkbox.isChecked(),
+        }
+
+    def authorize_request(self, agent, provider, model, prompt, tool=None, label=None) -> bool:
+        """Budget-check and confirm one request. False means: do not send it.
+
+        `tool` is a registry tool name and is validated as one — pass it only
+        when the request really runs a registered tool (the chat panel does).
+        The agent panels pick their own mode ("Person", "Deep Scan", …), which
+        is not a registry entry: pass that as `label` instead, so it still shows
+        up in the run log and Saved Chats without failing the tool check.
+
+        On success the context record_request() needs is stashed per agent, so a
+        caller only has to pass the response back later.
+        """
+        estimated_cost, approx_tokens = self.estimate_chat_cost(provider, model, prompt)
+
+        validation = self.validator.validate(
+            agent_name=agent,
+            tool_name=tool,
+            provider=provider,
+            api_permissions=self.current_api_permissions(),
+            session_cost=self.session_cost_total,
+            session_budget=self.session_budget_eur,
+            daily_cost=self.usage_tracker.get_today_total(),
+            daily_budget=self.daily_budget_eur,
+            estimated_cost=estimated_cost,
+        )
+        if not validation.allowed:
+            QMessageBox.warning(self, "Request Blocked", validation.reason)
+            return False
+
+        if not self.confirm_external_api_request(provider, model, estimated_cost, approx_tokens):
+            return False
+
+        descriptor = label or tool or "-"
+        self._pending_requests[agent] = {
+            "agent": agent,
+            "tool": descriptor,
+            "provider": provider,
+            "model": model,
+            "prompt": prompt,
+            "usage": None,
+            "run_id": self.run_logger.start(
+                agent=agent,
+                tool=descriptor,
+                provider=provider,
+                model=model,
+                mode=self.execution_mode_box.currentText() if hasattr(self, "execution_mode_box") else "",
+                prompt_summary=prompt,
+            ),
+        }
+        return True
+
+    def note_request_usage(self, agent, usage):
+        """Real token counts from the worker, when it reports them."""
+        context = self._pending_requests.get(agent)
+        if context is not None:
+            context["usage"] = usage
+
+    def record_request(self, agent, response, messages=None):
+        """Bill, save and close out a request authorised by authorize_request()."""
+        context = self._pending_requests.pop(agent, None)
+        if context is None:          # never authorised (or already recorded)
+            return
+
+        entry = self.usage_tracker.log_request(
+            agent=context["agent"],
+            backend=context["provider"],
+            model=context["model"],
+            prompt_text=context["prompt"],
+            response_text=response,
+            usage=context["usage"],
+        )
+
+        self.last_request_cost = entry.get("cost_eur", entry.get("estimated_cost", 0.0))
+        self.last_tool_name = f"{context['agent']}/{context['tool']} - {context['provider']}"
+        self.session_cost_total += entry.get("estimated_cost", 0.0)
+        self.session_request_count += 1
+        self.update_usage_labels()
+
+        if messages is None:
+            messages = [{"role": "user", "content": context["prompt"]}]
+        self.history.save_chat(
+            agent=context["agent"],
+            backend=context["provider"],
+            model=context["model"],
+            command=context["tool"],
+            messages=messages + [{"role": "assistant", "content": response}],
+            response=response,
+        )
+
+        if context["run_id"]:
+            self.run_logger.finish(
+                run_id=context["run_id"],
+                status="success",
+                input_tokens=entry.get("input_tokens", 0),
+                output_tokens=entry.get("output_tokens", 0),
+                cost_eur=entry.get("cost_eur", 0.0),
+            )
+
+        self.load_history_list()
+
+    def abandon_request(self, agent, reason="error"):
+        """Drop a request that failed, so it is not billed and the log closes."""
+        context = self._pending_requests.pop(agent, None)
+        if context and context["run_id"]:
+            self.run_logger.finish(run_id=context["run_id"], status=reason)
+
     def run_backend(self, backend, model, messages, prompt):
         if backend == "ollama":
             # Runs on the worker thread, so this cannot prompt — it is the hard
@@ -11102,23 +9999,89 @@ class GodAI(QWidget):
             return path.stem
 
     def load_history_list(self):
+        """Fill the Saved Chats list, honouring the search box and agent filter.
+
+        Every file is read once here and reused for both the filter options and
+        the rows, so adding the filter costs no extra disk reads.
+        """
         self.history_list.clear()
         query = self.history_search.text().strip().lower() if hasattr(self, "history_search") else ""
         try:
-            files = sorted(CHATS_DIR.glob("*.json"), reverse=True)
-            for file in files:
+            loaded = []
+            for file in sorted(CHATS_DIR.glob("*.json"), reverse=True):
                 try:
                     data = self.history.load_chat(str(file))
                 except Exception:
                     data = {}
+                loaded.append((file, data))
+
+            self._refresh_history_agent_filter(loaded)
+            wanted = (self.history_agent_filter.currentText()
+                      if hasattr(self, "history_agent_filter") else ALL_AGENTS_FILTER)
+
+            for file, data in loaded:
+                if wanted != ALL_AGENTS_FILTER and data.get("agent", "chat") != wanted:
+                    continue
                 title = self.chat_title_from_data(file, data)
                 if query and query not in title.lower():
                     continue
                 item = QListWidgetItem(title)
                 item.setData(Qt.UserRole, str(file))
                 self.history_list.addItem(item)
-        except Exception:
-            pass
+        except Exception as exc:
+            self._note_failure("saved chats: load list", exc)
+
+    def _refresh_history_agent_filter(self, loaded):
+        """Keep the filter's options in step with the chats that exist.
+
+        Signals are blocked while repopulating: the combo's own change signal
+        calls back into load_history_list, which would recurse.
+        """
+        if not hasattr(self, "history_agent_filter"):
+            return
+        agents = sorted({data.get("agent", "chat") for _f, data in loaded})
+        options = [ALL_AGENTS_FILTER] + agents
+        current = self.history_agent_filter.currentText()
+        if options == [self.history_agent_filter.itemText(i)
+                       for i in range(self.history_agent_filter.count())]:
+            return                                   # nothing changed
+        self.history_agent_filter.blockSignals(True)
+        self.history_agent_filter.clear()
+        self.history_agent_filter.addItems(options)
+        # keep the user's selection when its agent still has chats
+        self.history_agent_filter.setCurrentText(
+            current if current in options else ALL_AGENTS_FILTER
+        )
+        self.history_agent_filter.blockSignals(False)
+
+    def rename_selected_chat(self, item):
+        """Give a saved chat a name of your own instead of its first prompt."""
+        path = item.data(Qt.UserRole) or item.text()
+        try:
+            data = self.history.load_chat(path)
+        except Exception as exc:
+            self._note_failure("saved chats: open for rename", exc)
+            return
+
+        current = data.get("title", "")
+        new_title, ok = QInputDialog.getText(
+            self, "Rename Chat", "Name for this chat:", text=current
+        )
+        if not ok:
+            return
+
+        new_title = new_title.strip()
+        if new_title:
+            data["title"] = new_title
+        else:
+            data.pop("title", None)      # cleared — fall back to the first prompt
+        try:
+            with open(path, "w", encoding="utf-8") as fh:
+                json.dump(data, fh, indent=2, ensure_ascii=False)
+        except Exception as exc:
+            self._note_failure("saved chats: save new name", exc)
+            return
+        self.load_history_list()
 
     def open_selected_chat(self, item):
         filepath = item.data(Qt.UserRole) or item.text()
@@ -11335,274 +10298,8 @@ class GodAI(QWidget):
         dialog.exec()
 
     def show_model_guide(self):
-        dialog = QDialog(self)
-        dialog.setWindowTitle("Model & Agent Control Panel")
-        dialog.resize(1050, 750)
-
-        layout = QVBoxLayout(dialog)
-
-        # =========================
-        # SEARCH BAR
-        # =========================
-        search_box = QLineEdit()
-        search_box.setPlaceholderText("Search guide: ollama, openai, coding, osint, cost, routing...")
-        layout.addWidget(search_box)
-
-        tabs = QTabWidget()
-        layout.addWidget(tabs)
-
-        # =========================
-        # DYNAMIC SYSTEM INFO
-        # =========================
-        try:
-            ollama_models = self.ollama.list_models()
-        except Exception:
-            ollama_models = []
-
-        openai_status = "✅ Available" if OpenAIClientWrapper.key_available() else "❌ Not set"
-        deepseek_status = "✅ Available" if DeepSeekClientWrapper.key_available() else "❌ Not set"
-        kimi_status = "✅ Available" if KimiClientWrapper.key_available() else "❌ Not set"
-        gemini_status = "✅ Available" if GeminiClientWrapper.key_available() else "❌ Not set"
-        anthropic_status = "✅ Available" if AnthropicClientWrapper.key_available() else "❌ Not set"
-
-        current_mode = self.execution_mode_box.currentText() if hasattr(self, "execution_mode_box") else "Unknown"
-        current_provider = self.provider_box.currentText() if hasattr(self, "provider_box") else "Unknown"
-        current_model = self.model_box.currentText() if hasattr(self, "model_box") else "Unknown"
-
-        ollama_html = "<br>".join(ollama_models) if ollama_models else "No local Ollama models detected."
-
-        # =========================
-        # SIMPLE RECOMMENDATION ENGINE
-        # =========================
-        def get_recommendation():
-            agent = self.agent_box.currentText() if hasattr(self, "agent_box") else "chat"
-            command = self.command_box.currentText() if hasattr(self, "command_box") else "General Chat"
-
-            text = f"{agent} {command}".lower()
-
-            if "audiobook" in text:
-                return "Use Audiobook Agent. Provider/model selection is ignored because audiobook conversion uses OpenAI TTS."
-            if "coding" in text or "code" in text or "debug" in text:
-                return "Recommended: Claude Sonnet or DeepSeek for complex coding. Use Ollama for small/private fixes."
-            if "writing" in text or "rewrite" in text or "email" in text:
-                return "Recommended: Claude Sonnet or OpenAI for polished writing. Gemini is a good fallback. Ollama is fine for drafts."
-            if "osint" in text:
-                return "Recommended: DeepSeek or Gemini for analysis. Claude or OpenAI for polished final reports."
-            if current_mode == "Local only":
-                return "Current setup is privacy-safe and free: Local only with Ollama."
-            return "Recommended default: use Ollama for simple tasks, enable APIs only when quality or context length matters."
-
-        recommendation = get_recommendation()
-
-        # =========================
-        # TAB 1: MODELS
-        # =========================
-        model_tab = QTextBrowser()
-        model_tab.setHtml("""
-        <h2>Model Guide</h2>
-
-        <h3>Ollama / Local Models</h3>
-        <p><b>Best for:</b> private tasks, simple chat, drafts, quick analysis, offline usage.</p>
-        <p><b>Cost:</b> FREE — local execution. Uses your CPU/RAM instead of API credits.</p>
-        <p><b>Use when:</b> the task is not critical, not too complex, or you want privacy.</p>
-        <p><b>Popular models:</b> deepseek-r1:8b, deepseek-r1:1.5b, llama3, mistral, phi3</p>
-
-        <h3>Anthropic (Claude) API</h3>
-        <p><b>Best for:</b> coding, writing, reasoning, document analysis, nuanced instruction-following.</p>
-        <p><b>Key:</b> ANTHROPIC_API_KEY — get it at console.anthropic.com</p>
-        <p><b>Models:</b></p>
-        <ul>
-            <li><b>claude-opus-4-6</b> — Most capable. Best for complex reasoning, long documents, difficult coding. ~$15/$75 per 1M tokens.</li>
-            <li><b>claude-sonnet-4-6</b> — Best balance of quality and cost. Recommended for most tasks. ~$3/$15 per 1M tokens.</li>
-            <li><b>claude-haiku-4-5-20251001</b> — Fastest and cheapest. Good for simple tasks and high-volume use. ~$0.80/$4 per 1M tokens.</li>
-            <li><b>claude-3-5-sonnet-20241022</b> — Previous generation Sonnet. Still highly capable. ~$3/$15 per 1M tokens.</li>
-            <li><b>claude-3-5-haiku-20241022</b> — Previous generation Haiku. Fast and affordable. ~$0.80/$4 per 1M tokens.</li>
-            <li><b>claude-3-opus-20240229</b> — Previous generation Opus. ~$15/$75 per 1M tokens.</li>
-        </ul>
-        <p><b>Use when:</b> you need high-quality, nuanced responses — especially for coding, writing, and analysis.</p>
-
-        <h3>OpenAI API</h3>
-        <p><b>Best for:</b> coding, difficult reasoning, polished writing, professional documents, complex planning.</p>
-        <p><b>Key:</b> OPENAI_API_KEY — get it at platform.openai.com</p>
-        <p><b>Models:</b></p>
-        <ul>
-            <li><b>gpt-4o-mini</b> — Fast and affordable. Good for most everyday tasks.</li>
-            <li><b>gpt-4.1-mini</b> — Improved mini model. Better reasoning than gpt-4o-mini.</li>
-            <li><b>gpt-4.1</b> — Full model. Best for demanding tasks where quality is critical.</li>
-            <li><b>o1 / o3 / o4-mini</b> — Reasoning models. Slow but excellent for hard logic problems.</li>
-        </ul>
-        <p><b>Use when:</b> quality matters more than cost, or you need access to the OpenAI TTS API for Audiobook.</p>
-
-        <h3>DeepSeek API</h3>
-        <p><b>Best for:</b> structured analysis, coding support, OSINT-style reasoning, long analytical tasks.</p>
-        <p><b>Key:</b> DEEPSEEK_API_KEY — get it at platform.deepseek.com</p>
-        <p><b>Models:</b></p>
-        <ul>
-            <li><b>deepseek-chat</b> — General-purpose. Strong for coding and analysis.</li>
-            <li><b>deepseek-reasoner</b> — Extended reasoning model. Good for multi-step logic.</li>
-            <li><b>deepseek-coder</b> — Specialised for code generation and debugging.</li>
-        </ul>
-        <p><b>Use when:</b> you want strong analysis and coding at potentially lower cost than OpenAI.</p>
-
-        <h3>Kimi API (Moonshot AI)</h3>
-        <p><b>Best for:</b> coding and long-context agentic/tool-use tasks (OSINT-style multi-step work).</p>
-        <p><b>Key:</b> KIMI_API_KEY — get it at platform.kimi.ai</p>
-        <p><b>Models:</b></p>
-        <ul>
-            <li><b>kimi-k2.7-code</b> — Dedicated coding model, 256k context. Default Kimi model here.</li>
-            <li><b>kimi-k2.7-code-highspeed</b> — Same model, faster output.</li>
-            <li><b>kimi-k2.6</b> — General dialogue/agent model, visual + text input, 256k context.</li>
-            <li><b>kimi-k3</b> — Flagship model, 1M token context, strongest reasoning.</li>
-        </ul>
-        <p><b>Use when:</b> the task is coding-heavy or involves many chained tool calls / long context.</p>
-
-        <h3>Gemini API</h3>
-        <p><b>Best for:</b> general fallback, broad summaries, mixed tasks, long-context tasks.</p>
-        <p><b>Key:</b> GOOGLE_API_KEY — get it at console.cloud.google.com</p>
-        <p><b>Models:</b></p>
-        <ul>
-            <li><b>gemini-2.5-pro</b> — Most capable Gemini. Excellent long-context handling.</li>
-            <li><b>gemini-2.5-flash</b> — Fast and cost-effective. Good for summaries and drafts.</li>
-            <li><b>gemini-2.0-flash</b> — Previous generation Flash. Still solid for general use.</li>
-            <li><b>gemini-1.5-pro</b> — 1M token context window. Best for very long documents.</li>
-            <li><b>gemini-1.5-flash</b> — Affordable. Good fallback for most tasks.</li>
-        </ul>
-        <p><b>Use when:</b> you need very long context or a cost-effective alternative to OpenAI/Claude.</p>
-
-        <h3>Audiobook Mode</h3>
-        <p>Uses OpenAI TTS only. Provider/model selection in the main panel is ignored for audiobook conversion.</p>
-        """)
-        tabs.addTab(model_tab, "Models")
-
-        # =========================
-        # TAB 2: AGENTS
-        # =========================
-        agent_tab = QTextBrowser()
-        agent_tab.setHtml("""
-        <h2>Agent Guide</h2>
-
-        <h3>Chat Agent</h3>
-        <p><b>Use for:</b> general questions, explanations, planning, brainstorming.</p>
-        <p><b>Recommended:</b> Ollama for simple/private tasks. Claude Sonnet, OpenAI, or Gemini for higher-quality answers.</p>
-
-        <h3>Writing Agent</h3>
-        <p><b>Use for:</b> emails, documentation, CVs, professional writing, rewriting.</p>
-        <p><b>Recommended:</b> Claude Sonnet (best for nuanced writing). OpenAI as alternative. Ollama for drafts.</p>
-
-        <h3>Coding Agent</h3>
-        <p><b>Use for:</b> debugging, code generation, refactoring, explaining errors.</p>
-        <p><b>Recommended:</b> Claude Sonnet or DeepSeek for complex code. Ollama for small fixes and private testing.</p>
-
-        <h3>OSINT Agent</h3>
-        <p><b>Use for:</b> legal/defensive OSINT summaries, public-source analysis, report structuring.</p>
-        <p><b>Recommended:</b> DeepSeek or Gemini for broad analysis. Claude or OpenAI for polished final reports.</p>
-
-        <h3>Audiobook Agent</h3>
-        <p><b>Use for:</b> converting ebooks in your audiobook input folder into MP3 audiobooks.</p>
-        <p><b>Recommended:</b> OpenAI TTS only. This can cost real API money, so check the estimate first.</p>
-
-        <h3>Manager Agent</h3>
-        <p><b>Use for:</b> designing and creating new agents from a plain-language description.</p>
-        <p><b>Recommended:</b> Claude Sonnet or DeepSeek for spec generation. The Manager Agent writes the code and DB entry automatically.</p>
-        """)
-        tabs.addTab(agent_tab, "Agents")
-
-        # =========================
-        # TAB 3: ROUTING
-        # =========================
-        routing_tab = QTextBrowser()
-        routing_tab.setHtml("""
-        <h2>Routing & API Permissions</h2>
-
-        <h3>Execution Mode</h3>
-        <p><b>Local only:</b> always use Ollama/local model. No API cost.</p>
-        <p><b>Hybrid allowed:</b> use selected provider, but APIs must be explicitly enabled via checkbox.</p>
-        <p><b>Cloud only:</b> force a cloud provider (OpenAI, DeepSeek, Gemini, or Anthropic). API checkbox must be enabled.</p>
-
-        <h3>API Checkboxes</h3>
-        <p>Each cloud provider has a checkbox: <b>OpenAI · DeepSeek · Gemini · Anthropic</b>.</p>
-        <p>If a checkbox is not ticked, that API will be blocked even if selected as provider.</p>
-        <p>This prevents accidental API usage and unexpected costs.</p>
-
-        <h3>Recommended Setup by Task</h3>
-        <ul>
-            <li><b>Private / simple tasks:</b> Local only + Ollama</li>
-            <li><b>Coding / debugging:</b> Hybrid + Anthropic (Claude Sonnet) or DeepSeek</li>
-            <li><b>Writing / documents:</b> Hybrid + Anthropic (Claude Sonnet) or OpenAI</li>
-            <li><b>OSINT / analysis:</b> Hybrid + DeepSeek or Gemini</li>
-            <li><b>Audiobook conversion:</b> OpenAI TTS (automatic, no mode selection needed)</li>
-        </ul>
-        """)
-        tabs.addTab(routing_tab, "Routing")
-
-        # =========================
-        # TAB 4: SYSTEM / DYNAMIC INFO
-        # =========================
-        system_tab = QTextBrowser()
-        system_tab.setHtml(f"""
-        <h2>Current System & Model Status</h2>
-
-        <h3>Current Selection</h3>
-        <p><b>Execution Mode:</b> {current_mode}</p>
-        <p><b>Provider:</b> {current_provider}</p>
-        <p><b>Model:</b> {current_model}</p>
-
-        <h3>API Key Status</h3>
-        <p><b>OpenAI:</b> {openai_status}</p>
-        <p><b>DeepSeek:</b> {deepseek_status}</p>
-        <p><b>Kimi:</b> {kimi_status}</p>
-        <p><b>Gemini:</b> {gemini_status}</p>
-        <p><b>Anthropic:</b> {anthropic_status}</p>
-
-        <h3>Installed Ollama Models</h3>
-        <p>{ollama_html}</p>
-
-        <h3>Recommendation</h3>
-        <p><b>{recommendation}</b></p>
-        """)
-        tabs.addTab(system_tab, "System")
-
-        # =========================
-        # SEARCH FUNCTION
-        # =========================
-        all_tabs = {
-            "Models": model_tab,
-            "Agents": agent_tab,
-            "Routing": routing_tab,
-            "System": system_tab,
-        }
-
-        original_html = {
-            "Models": model_tab.toHtml(),
-            "Agents": agent_tab.toHtml(),
-            "Routing": routing_tab.toHtml(),
-            "System": system_tab.toHtml(),
-        }
-
-        def apply_search():
-            query = search_box.text().strip().lower()
-
-            if not query:
-                for name, widget in all_tabs.items():
-                    widget.setHtml(original_html[name])
-                return
-
-            for name, widget in all_tabs.items():
-                html = original_html[name]
-                plain = widget.toPlainText().lower()
-
-                if query in plain:
-                    widget.setHtml(html)
-                else:
-                    widget.setHtml(
-                        f"<h2>{name}</h2>"
-                        f"<p>No matches for: <b>{query}</b></p>"
-                    )
-
-        search_box.textChanged.connect(apply_search)
-
-        dialog.exec()
-
+        from ui.dialogs import show_model_guide as _show_model_guide
+        return _show_model_guide(self)
     def show_docs(self, anchor: str = ""):
         dialog = QDialog(self)
         dialog.setWindowTitle("Documentation")
@@ -11640,8 +10337,8 @@ class GodAI(QWidget):
                 self.chat_worker.cancel()
                 self.chat_worker.terminate()
                 self.chat_worker.wait(1000)
-        except Exception:
-            pass
+        except Exception as exc:
+            self._note_failure("shutdown: stop background work", exc)
         event.accept()
 
 SINGLE_INSTANCE_KEY = "sentinel-ai.single-instance"
