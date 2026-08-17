@@ -102,7 +102,7 @@ would not have.
 |---|---:|---|
 | `ui/dialogs.py` | 735 | `show_cost_history` 144 · `show_run_log` 92 · `show_settings` 203 · `show_model_guide` 269 |
 
-`main.py` 11,007 → **10,311** lines (−696). Each moved body is byte-identical to
+A net **−696** lines in `main.py`. Each moved body is byte-identical to
 the original after `self`→`app` and one dedent — verified by diffing the
 transformed original against the extracted function, not by eye. `GodAI` keeps
 four three-line wrappers so every call site and the Docs/Settings buttons are
@@ -155,9 +155,15 @@ is the actual fix and is what makes panels testable in isolation.
 Recommendation: composition. The coupling numbers above say the cost is
 affordable, and mixins would leave #2 half-done while looking finished.
 
-**Phases 1–2 are complete**: `main.py` 11,902 → 10,311 (−1,591), with no design
-commitment made. Phases 3–5 are the real refactor and want a clear run — the
-mixins-vs-composition decision above is still open and should be settled first.
+**Phases 1–2 are complete**: **−1,591 lines** out of `main.py` (895 in Phase 1,
+696 in Phase 2), with no design commitment made.
+
+Measure the phase delta, not the file total. The absolute count drifts upward
+while other work lands — `main.py` read 10,391 at the Phase 2 commit and 10,394
+one autosync commit later, so a total quoted here is stale by the time it is read.
+
+Phases 3–5 are the real refactor and want a clear run. The mixins-vs-composition
+decision above is still open and should be settled first.
 
 ## Risks
 

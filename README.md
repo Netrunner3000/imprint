@@ -2495,48 +2495,133 @@ Key-value store for application settings.
 
 ```
 sentinel_ai/
-├── main.py                        # Application entry point, GodAI class (~2450 lines)
+├── main.py                        # Entry point + GodAI window (~10,300 lines — see
+│                                  #   docs/refactor_plan.md, TODO.md #2)
 ├── README.md                      # This documentation file
+├── TODO.md                        # Prioritised engineering backlog
+├── requirements.txt
 │
-├── agents/                        # Agent classes
-│   ├── chat_agent.py
-│   ├── writing_agent.py
-│   ├── coding_agent.py
-│   ├── osint_agent.py
-│   ├── audiobook_connector.py
-│   ├── manager_agent.py           # LLM spec generator for the Manager workflow
-│   └── router_agent.py
+├── agents/                        # One module per agent: prompts + build_*_messages()
+│   ├── router_agent.py            # Keyword routing to an agent
+│   ├── chat_agent.py  writing_agent.py  coding_agent.py
+│   ├── osint_agent.py  osint_heavy_agent.py  wifi_agent.py  bug_bounty_agent.py
+│   ├── author_agent.py            # Write (fiction + non-fiction) / Publish / Market
+│   ├── manuscript_agent.py        # Publisher: sales Q&A, quote extraction, captions
+│   ├── music_agent.py  webdesign_agent.py  fiverr_agent.py  course_agent.py
+│   ├── health_agent.py  nfl_bet_agent.py  nfl_stats_parser.py
+│   ├── manager_agent.py           # Forge — LLM spec generator for new agents
+│   └── audiobook_connector.py
 │
-├── services/                      # Business logic and integrations
-│   ├── database.py                # SQLite schema, connection, migration
-│   ├── registry.py                # Agent/tool registry queries
-│   ├── validator.py               # 10-check permission gate
-│   ├── usage_tracker.py           # Cost logging and queries
+├── ui/                            # Extracted from main.py (refactor Phases 1–2)
+│   ├── workers.py                 # ChatWorker, SubprocessWorker, ModelPullWorker,
+│   │                              #   FiverrImageWorker, ShortsWorker
+│   ├── widgets.py                 # FlowLayout, CollapsibleSection
+│   ├── style.py                   # GLOBAL_STYLESHEET
+│   ├── tooltips.py                # seed_tooltips(app)
+│   ├── dialogs.py                 # show_settings / show_model_guide /
+│   │                              #   show_cost_history / show_run_log
+│   └── book_widgets.py            # Shared theme/size/voice controls + asset paths
+│
+├── services/                      # Non-UI logic
+│   ├── database.py                # SQLite schema, connection, migration, seeding
+│   ├── registry.py                # Agent/tool registry queries (DB-backed)
+│   ├── validator.py               # 10-check permission and budget gate
+│   ├── usage_tracker.py           # Token/cost accounting and queries
 │   ├── run_logger.py              # Run lifecycle logging
-│   ├── agent_factory.py           # Code and DB entry creation for new agents
-│   ├── ollama_client.py
-│   ├── openai_client.py
-│   ├── deepseek_client.py
-│   ├── gemini_client.py
-│   ├── history_store.py           # Chat file persistence
-│   ├── report_exporter.py         # Export output to text files
-│   ├── resource_monitor.py        # CPU / RAM / battery via psutil
-│   ├── tool_runner.py             # Tool configuration loader
-│   └── model_router.py
+│   ├── api_limits.py              # Shared timeout/retry values for paid clients
+│   ├── llm_parsing.py             # Tolerant parsing of LLM list responses
+│   ├── ollama_client.py  openai_client.py  deepseek_client.py
+│   ├── kimi_client.py  gemini_client.py  anthropic_client.py  qwen_client.py
+│   ├── book_exporter.py           # Chapter detection + EPUB/DOCX/PDF export
+│   ├── quote_graphics.py          # Pillow quote-graphic renderer
+│   ├── shorts_generator.py        # TTS + ffmpeg vertical shorts
+│   ├── content_calendar.py        # Posting-schedule generation
+│   ├── publishdrive_client.py     # PublishDrive REST wrapper
+│   ├── kdp_csv_parser.py          # KDP sales CSV ingestion + todo seeding
+│   ├── narrator/converter.py      # Ebook → MP3 (Narrator agent)
+│   ├── course/                    # Course generator (content, slides, video, packaging)
+│   ├── agent_factory.py  history_store.py  report_exporter.py
+│   ├── resource_monitor.py  tool_runner.py  model_router.py  runtime_paths.py
 │
-├── config/                        # Legacy JSON backups (DB is source of truth)
-│   ├── registry.json
-│   ├── tool_prompts.json
-│   ├── pricing.json
-│   ├── settings.json
-│   └── commands.json              # Command prefix definitions
+├── providers/                     # Pluggable external capabilities
+│   ├── voice/                     # base.py, mock.py (free system TTS),
+│   │                              #   elevenlabs.py, registry.py
+│   └── avatar/                    # base.py, mock.py, heygen.py, synthesia.py
+│
+├── tests/                         # 219 tests — see §15.1
+│   ├── test_agents_scenarios.py   # 98 — agent prompt construction
+│   ├── test_cost_and_limits.py    # 31 — Validator gates + token/cost maths
+│   ├── test_request_guard.py      # 30 — authorize/record/abandon_request
+│   ├── test_book_pipeline.py      # 60 — export, calendar, KDP CSV, parsing
+│   └── manual_test_cases.md
+│
+├── docs/
+│   ├── agents/*.md                # One reference page per agent (the 📖 Docs button)
+│   ├── refactor_plan.md           # main.py split — phases, measurements, decisions
+│   ├── projects_roadmap.md
+│   └── *_HANDOVER.md              # Historical build plans
+│
+├── config/                        # Seed JSON — the DB is the source of truth
+│   ├── registry.json  agents.json  tools.json
+│   ├── tool_prompts.json  pricing.json  settings.json  commands.json
+│
+├── scripts/                       # build_app.sh, install_app.sh, make_icon.py
+├── assets/                        # Icons
 │
 └── data/
     ├── sentinel.db                # Primary data store (SQLite)
     ├── chats/                     # Saved conversation JSON files
     ├── logs/                      # Legacy run log (superseded by DB)
-    └── reports/                   # Exported report text files
+    ├── reports/                   # Exported report text files
+    ├── kdp_reports/               # Drop KDP sales CSVs here to ingest
+    ├── quote_graphics/            # Generated quote PNGs
+    └── shorts/                    # Generated vertical MP4s
 ```
+
+> `output/` is gitignored. Anything you want to keep — exported books, launch
+> copy — should be saved outside it. The `You Don't Chase` launch assets live
+> with the manuscript, not in the repo.
+
+---
+
+### 15.1 Tests
+
+```bash
+QT_QPA_PLATFORM=offscreen python3 -m pytest tests/ -q
+```
+
+219 tests, ~11s. `QT_QPA_PLATFORM=offscreen` is required — some tests construct
+the real `GodAI` window.
+
+| File | Covers |
+|------|--------|
+| `test_agents_scenarios.py` | Every agent builds a correctly structured message list with the right system prompt and all user input embedded. |
+| `test_cost_and_limits.py` | `Validator`'s ten rules (agent/tool enabled, provider permissions, per-agent/session/daily budgets, approval) and `UsageTracker` token/cost accounting. Owns these — do not duplicate elsewhere. |
+| `test_request_guard.py` | `authorize_request` / `record_request` / `abandon_request`. Blocked requests open no run; recording without authorising bills nothing; double-record bills once; abandoned requests stay unbilled. |
+| `test_book_pipeline.py` | Chapter detection and offsets, EPUB/DOCX/PDF export, calendar scheduling, KDP CSV summarisation, LLM list parsing, collision-proof asset paths. |
+
+Two conventions worth keeping:
+
+- **Tests never touch real state.** `test_request_guard.py` fakes the usage
+  tracker, chat history and run logger, so no test bills a request or writes into
+  `data/chats/`. Verified by comparing row and file counts either side of a run.
+- **New tests are mutation-checked.** Break the code the test claims to cover and
+  confirm that test fails, then revert. A test that passes against broken code is
+  worse than no test.
+
+There is **no automated UI coverage**. The only check that a panel still
+constructs is building the window offscreen:
+
+```bash
+QT_QPA_PLATFORM=offscreen python3 -c "
+from PySide6.QtWidgets import QApplication; import main
+app = QApplication([]); w = main.GodAI()
+for a in ['author','manuscript','chat','osint']: w.update_agent_ui(a)
+print('OK')"
+```
+
+Run it after any UI move — import success is not enough. Missing imports and
+`hasattr(self, …)` rewrites both fail only at runtime.
 
 ---
 

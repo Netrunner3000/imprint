@@ -61,7 +61,7 @@ simultaneous runs of the *same* agent would overwrite each other's context. The
 panels disable their run button while a request is in flight, so this is not
 reachable today — but keyed-by-run-id would be more robust.
 
-## 2. `main.py` is too big — IN PROGRESS (11,902 → 10,311 lines)
+## 2. `main.py` is too big — IN PROGRESS (11,902 → ~10,400 lines)
 
 One file holds 17 agent UIs, routing, cost logic, history and styling. The cost
 is concrete: a checkbox-spacing fix had to go in the global stylesheet because
@@ -84,7 +84,7 @@ the request guard from #1, `run_backend`, `agent_instances`, `_note_failure`).
 applied and tooltips are live.
 
 **Phase 2 is DONE (2026-08-12):** the four `show_*` dialogs moved to
-`ui/dialogs.py` (735 lines); `main.py` 11,007 → 10,311. `GodAI` keeps four
+`ui/dialogs.py` (735 lines), a net −696 in `main.py`. `GodAI` keeps four
 three-line wrappers, so no call site changed. Each body is byte-identical to the
 original after `self`→`app` and one dedent — diff-verified rather than eyeballed.
 
