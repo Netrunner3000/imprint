@@ -10374,7 +10374,10 @@ if __name__ == "__main__":
     instance_server.listen(SINGLE_INSTANCE_KEY)
 
     window = GodAI()
-    window.show()
+    # Always open filling the screen. The three panes need ~1000px before the
+    # splitter starts squeezing panels, so a small default window is the state
+    # the layout looks worst in.
+    window.showMaximized()
 
     def _raise_existing_window():
         instance_server.nextPendingConnection()      # drain the pending connection
