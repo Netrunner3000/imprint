@@ -170,7 +170,6 @@ def _sync_agent_labels(conn: sqlite3.Connection) -> None:
         "bug_bounty":  "Bug Spray",
         "nfl_bet":     "Playmaker",
         "fiverr":      "Atelier",
-        "health":      "Vitality",
         "author":      "Manuscript",
         "manuscript":  "Publisher",
         "music":       "Maestro",
@@ -262,17 +261,6 @@ def _seed_default_agents(conn: sqlite3.Connection) -> None:
     # to the SONAR app, and their panels and agent modules were removed here.
     # Re-adding them would resurrect orphaned registry rows on every launch.
     agents = [
-        {
-            "name": "health",
-            "label": "Health",
-            "description": "Nutrition, fitness, mental wellness, and lifestyle guidance.",
-            "allowed_providers": json.dumps([]),
-            "allowed_tools": None,
-            "budget_limit_eur": None,
-            "requires_approval": 0,
-            "log_path": "data/logs/runs.jsonl",
-            "auto_generated": 0,
-        },
         {
             "name": "author",
             "label": "Author",
