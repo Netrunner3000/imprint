@@ -18,7 +18,7 @@ def seed_tooltips(app):
         "model_box":               "Specific model under the chosen provider. Larger models cost more but produce stronger output.",
         "refresh_models_btn":      "Re-fetch the model list from the selected provider.",
         "model_guide_btn":         "Open the in-app Model Guide with current models, pricing, and recommendations.",
-        "docs_btn":                "Open the full Sentinel AI documentation.",
+        "docs_btn":                "Open the full Create & Publish documentation.",
         "agent_docs_btn":          "Open the documentation for the currently active agent.",
         "execution_mode_box":      "Local-only: only Ollama. Hybrid: pick best of local/cloud. Cloud-only: only paid providers.",
         "allow_openai_checkbox":   "Allow this request to use the OpenAI API (paid).",

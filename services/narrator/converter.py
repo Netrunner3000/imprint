@@ -44,24 +44,24 @@ USD_PER_1M_OUTPUT_AUDIO_TOKENS = 12.00
 EUR_PER_USD_FALLBACK = 0.855
 
 # Lazy OpenAI client: importing this module must have NO side effects so it can
-# be bundled into Sentinel (and PyInstaller) without needing a key at import time.
+# be bundled into the host app (and PyInstaller) without needing a key at import time.
 _ENV_PATH = BASE_DIR / ".env"
 client = None
 
 
 def get_client():
-    """Create the OpenAI client on first use. Reads OPENAI_API_KEY from Sentinel's
-    environment, falling back to a .env in the cwd, then to one beside this module."""
+    """Create the OpenAI client on first use. Reads OPENAI_API_KEY from the host
+    app's environment, falling back to a .env in the cwd, then to one beside this module."""
     global client
     if client is None:
         if not os.getenv("OPENAI_API_KEY"):
-            load_dotenv(override=False)  # e.g. Sentinel project root .env
+            load_dotenv(override=False)  # e.g. the project root .env
         if not os.getenv("OPENAI_API_KEY") and _ENV_PATH.exists():
             load_dotenv(dotenv_path=_ENV_PATH, override=False)
         api_key = os.getenv("OPENAI_API_KEY")
         if not api_key:
             raise RuntimeError(
-                "OPENAI_API_KEY not found. Set it in Sentinel's environment or in a "
+                "OPENAI_API_KEY not found. Set it in the app's environment or in a "
                 f".env file (cwd or {_ENV_PATH})."
             )
         client = OpenAI(api_key=api_key)
@@ -667,7 +667,7 @@ def parse_args():
 def convert(input=None, output=None, voice=None, chunk_tokens=None, force_rebuild=None):
     """Convert one ebook file, or a folder of ebooks, into MP3 audiobook(s).
 
-    Importable in-process entry point used by Sentinel's ToolRunner and GUI.
+    Importable in-process entry point used by the app's ToolRunner and GUI.
     Returns True on full success, False if it failed / paused / found nothing.
     """
     global TTS_VOICE, MAX_INPUT_TOKENS_PER_CHUNK  # allow callers to override global defaults

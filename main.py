@@ -83,7 +83,7 @@ from ui.book_widgets import (
 )
 
 
-# Writable base = project root in dev, ~/Library/Application Support/Sentinel AI when frozen.
+# Writable base = project root in dev, ~/Library/Application Support/Create & Publish when frozen.
 BASE_DIR = user_data_base()
 # Read-only bundled resources (README, config defaults) = project root in dev, bundle when frozen.
 RESOURCE_DIR = resource_base()
@@ -230,7 +230,7 @@ class GodAI(QWidget):
     def __init__(self):
         super().__init__()
 
-        self.setWindowTitle("GOD_AI")
+        self.setWindowTitle("Create & Publish")
         self.resize(1400, 900)
         self.setMinimumSize(1000, 600)
         self.showMaximized()
@@ -550,7 +550,7 @@ class GodAI(QWidget):
     # runtime overhead. 1.15 is a deliberately mild allowance: the aim is to
     # catch "this will thrash", not to model llama.cpp allocation exactly.
     MEMORY_OVERHEAD_FACTOR = 1.15
-    # Leave room for the OS and Sentinel itself rather than letting a model take
+    # Leave room for the OS and the app itself rather than letting a model take
     # every last byte of physical RAM.
     MEMORY_HEADROOM_GB = 3.0
 
@@ -8320,7 +8320,7 @@ class GodAI(QWidget):
                 "OPENAI_API_KEY is not set.\n\n"
                 "Add your key to the .env file in the project root:\n"
                 "    OPENAI_API_KEY=sk-...\n\n"
-                "then restart Sentinel and try again. "
+                "then restart Create & Publish and try again. "
                 "Get a key at platform.openai.com/api-keys.",
             )
             return
@@ -8363,7 +8363,7 @@ class GodAI(QWidget):
         self.audiobook_process = QProcess(self)
         self.audiobook_process.setProcessChannelMode(QProcess.MergedChannels)
         # Run from the project root so "-m services.narrator.converter" resolves,
-        # using Sentinel's own interpreter (no separate venv -> PyInstaller-friendly).
+        # using the app's own interpreter (no separate venv -> PyInstaller-friendly).
         self.audiobook_process.setWorkingDirectory(project_root)
 
         program = sys.executable
@@ -9531,7 +9531,9 @@ class GodAI(QWidget):
             self._note_failure("shutdown: stop background work", exc)
         event.accept()
 
-SINGLE_INSTANCE_KEY = "sentinel-ai.single-instance"
+# Must differ from Sentinel AI's key: a shared socket name would make launching
+# this app hand focus to Sentinel instead of opening a window.
+SINGLE_INSTANCE_KEY = "create-and-publish.single-instance"
 
 
 def _hand_off_to_running_instance() -> bool:

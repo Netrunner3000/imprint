@@ -24,7 +24,7 @@ def muse_glimmer_default(total_ram_gb: float | None = None) -> tuple[str, int]:
 
     The MLX build is the fast path on Apple silicon, but it is 3 GB larger. On a
     machine that is already tight on memory the smaller GGUF build leaves more
-    room for the OS and Sentinel itself, so prefer it under 32 GB of RAM.
+    room for the OS and the app itself, so prefer it under 32 GB of RAM.
     """
     is_apple_silicon = platform.system() == "Darwin" and platform.machine() == "arm64"
 

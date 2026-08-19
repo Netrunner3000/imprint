@@ -6,7 +6,7 @@ single Qt style sheet string with no application state in it.
 
 # ── VPN-Agent-inspired design system ─────────────────────────────
 # Palette: #0f0f0f page · #181818 card · #161616 input · #262626 border
-# Accent: #3cff88 (Sentinel green) for active/focused/title states
+# Accent: #3cff88 (signature green) for active/focused/title states
 # Semantic: green (success) / red (danger) for primary actions
 
 GLOBAL_STYLESHEET = """
@@ -221,7 +221,7 @@ GLOBAL_STYLESHEET = """
             font-size: 12px;
         }
 
-        /* ── Sentinel agent title (big accent text) ───────────────── */
+        /* ── Agent title (big accent text) ────────────────────────── */
         QLabel#AgentTitle {
             color: #3cff88;
             font-size: 22px;

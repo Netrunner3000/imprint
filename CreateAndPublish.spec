@@ -1,8 +1,8 @@
 # -*- mode: python ; coding: utf-8 -*-
-"""PyInstaller spec for Sentinel AI — self-contained macOS .app bundle.
+"""PyInstaller spec for Create & Publish — self-contained macOS .app bundle.
 
-Build:   .venv/bin/pyinstaller --noconfirm SentinelAI.spec
-Output:  dist/Sentinel AI.app
+Build:   .venv/bin/pyinstaller --noconfirm CreateAndPublish.spec
+Output:  dist/Create & Publish.app
 """
 from PyInstaller.utils.hooks import collect_all, collect_submodules
 
@@ -57,7 +57,7 @@ exe = EXE(
     a.scripts,
     [],
     exclude_binaries=True,
-    name="Sentinel AI",
+    name="Create & Publish",
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
@@ -77,26 +77,26 @@ coll = COLLECT(
     strip=False,
     upx=False,
     upx_exclude=[],
-    name="Sentinel AI",
+    name="Create & Publish",
 )
 
 app = BUNDLE(
     coll,
-    name="Sentinel AI.app",
+    name="Create & Publish.app",
     icon="assets/icon.icns",
-    bundle_identifier="com.netrunner3000.sentinelai",
+    bundle_identifier="com.netrunner3000.createandpublish",
     info_plist={
-        "CFBundleName": "Sentinel AI",
-        "CFBundleDisplayName": "Sentinel AI",
+        "CFBundleName": "Create & Publish",
+        "CFBundleDisplayName": "Create & Publish",
         "CFBundleShortVersionString": "1.0.0",
         "CFBundleVersion": "1.0.0",
         "NSHighResolutionCapable": True,
         "NSRequiresAquaSystemAppearance": False,   # allow dark mode
         "LSMinimumSystemVersion": "12.0",
-        "LSApplicationCategoryType": "public.app-category.developer-tools",
+        "LSApplicationCategoryType": "public.app-category.productivity",
         # App writes only to ~/Library/Application Support, but it reads the
         # user's ebook folder etc. — declare a usage string for Documents access.
-        "NSDesktopFolderUsageDescription": "Sentinel AI reads ebooks and saves outputs you choose.",
-        "NSDocumentsFolderUsageDescription": "Sentinel AI reads ebooks and saves outputs you choose.",
+        "NSDesktopFolderUsageDescription": "Create & Publish reads ebooks and saves outputs you choose.",
+        "NSDocumentsFolderUsageDescription": "Create & Publish reads ebooks and saves outputs you choose.",
     },
 )

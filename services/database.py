@@ -4,9 +4,9 @@ from pathlib import Path
 
 from services.runtime_paths import user_data_base
 
-# Writable base: project root in dev, ~/Library/Application Support/Sentinel AI when frozen.
+# Writable base: project root in dev, ~/Library/Application Support/Create & Publish when frozen.
 BASE_DIR = user_data_base()
-DB_PATH = BASE_DIR / "data" / "sentinel.db"
+DB_PATH = BASE_DIR / "data" / "create_and_publish.db"
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS agents (

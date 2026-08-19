@@ -7,7 +7,7 @@ from services.api_limits import REQUEST_TIMEOUT_MS
 
 def _gemini_api_key():
     """Read the Gemini key, accepting either name. Google's own SDK uses
-    GOOGLE_API_KEY; Sentinel historically referenced GEMINI_API_KEY. Support
+    GOOGLE_API_KEY; this app historically referenced GEMINI_API_KEY. Support
     both so whichever is set in .env works."""
     return os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
 

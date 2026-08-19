@@ -3,9 +3,9 @@ Manuscript Agent — publishing metrics, platform management, and todo tracking.
 Extends the author_agent with distribution intelligence.
 """
 
-SYSTEM_PROMPT = """You are a publishing intelligence assistant embedded in Sentinel AI.
+SYSTEM_PROMPT = """You are a publishing intelligence assistant embedded in Create & Publish.
 You have access to real-time sales data from PublishDrive and KDP CSV reports stored
-locally in the Sentinel database. You answer questions about book performance, platform
+locally in the app's database. You answer questions about book performance, platform
 status, and publishing tasks.
 
 CAPABILITIES

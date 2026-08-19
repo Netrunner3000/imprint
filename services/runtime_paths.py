@@ -1,21 +1,24 @@
-"""Central path resolution for Sentinel AI.
+"""Central path resolution for Create & Publish.
 
 In development (running `python main.py`) every path resolves to the project
 root exactly as before — behaviour is unchanged.
 
 When frozen by PyInstaller (`sys.frozen` is set) the app bundle is read-only,
 so writable state (SQLite DB, saved chats, logs, editable config, .env) is
-redirected to  ~/Library/Application Support/Sentinel AI/  and seeded from the
-read-only copies bundled inside the .app on first launch.
+redirected to  ~/Library/Application Support/Create & Publish/  and seeded from
+the read-only copies bundled inside the .app on first launch.
 
 Both main.py and services/database.py import from here so they always agree on
 where the writable data lives.
+
+APP_NAME decides that directory, so it must differ from Sentinel AI's — the two
+apps are separate forks and sharing the name would mean sharing state.
 """
 import sys
 import shutil
 from pathlib import Path
 
-APP_NAME = "Sentinel AI"
+APP_NAME = "Create & Publish"
 
 
 def is_frozen() -> bool:
@@ -40,7 +43,7 @@ def resource_base() -> Path:
 def user_data_base() -> Path:
     """Writable base directory.
 
-    Frozen: ~/Library/Application Support/Sentinel AI  (created if missing).
+    Frozen: ~/Library/Application Support/Create & Publish  (created if missing).
     Dev:    the project root, so `python main.py` keeps writing in-place.
     """
     if is_frozen():

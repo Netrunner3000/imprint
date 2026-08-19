@@ -1,5 +1,5 @@
 """
-PublishDrive REST API client for Sentinel AI.
+PublishDrive REST API client for Create & Publish.
 API docs: https://publishdrive.com/api-documentation
 
 Required env var:  PUBLISHDRIVE_API_KEY   (add to .env)
