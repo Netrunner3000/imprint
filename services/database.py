@@ -156,26 +156,39 @@ def init_db() -> None:
     _seed_missing_pricing(conn)
     _correct_stale_pricing(conn)
     _seed_default_agents(conn)
+    _purge_split_agents(conn)
     _sync_agent_labels(conn)
     conn.close()
+
+
+def _purge_split_agents(conn: sqlite3.Connection) -> None:
+    """Drop rows for the agents that stayed with the security half of the split.
+
+    Registry reads the database, not config/registry.json — the JSON is only a
+    seed. Removing an agent's panel and module therefore leaves a live row
+    behind, which keeps it in the registry and in Settings as an agent with
+    nothing behind it. Any database created before the split carries those rows.
+
+    Safe to run on every launch: it names only agents this app does not build,
+    so it cannot delete one a user has since added through the registry.
+    """
+    gone = ("osint", "osint_heavy", "wifi", "bug_bounty", "nfl_bet", "manager")
+    conn.executemany(
+        "DELETE FROM agents WHERE name = ?", [(n,) for n in gone]
+    )
+    conn.commit()
 
 
 def _sync_agent_labels(conn: sqlite3.Connection) -> None:
     """Ensure built-in agents' DB labels match the current brand names shown in the GUI."""
     rename_map = {
         "chat":        "Chat",
-        "osint":       "Trace",
-        "osint_heavy": "Bloodhound",
-        "wifi":        "Beacon",
-        "bug_bounty":  "Bug Spray",
-        "nfl_bet":     "Playmaker",
         "fiverr":      "Atelier",
         "author":      "Manuscript",
         "manuscript":  "Publisher",
         "music":       "Maestro",
         "webdesign":   "Site Builder",
         "audiobook":   "Narrator",
-        "manager":     "Forge",
     }
     for name, label in rename_map.items():
         conn.execute("UPDATE agents SET label = ? WHERE name = ?", (label, name))
@@ -260,6 +273,10 @@ def _seed_default_agents(conn: sqlite3.Connection) -> None:
     # Quick ROI and Oracle (investment) are deliberately absent: that work moved
     # to the SONAR app, and their panels and agent modules were removed here.
     # Re-adding them would resurrect orphaned registry rows on every launch.
+    #
+    # For the same reason nfl_bet, wifi, osint_heavy and bug_bounty are absent:
+    # this app is the creative/publishing half of the Sentinel split, and those
+    # four stayed behind with the security half.
     agents = [
         {
             "name": "author",
@@ -295,39 +312,6 @@ def _seed_default_agents(conn: sqlite3.Connection) -> None:
             "auto_generated": 0,
         },
         {
-            "name": "nfl_bet",
-            "label": "NFL Props",
-            "description": "NFL prop bet evaluation — player and team props analysed from user-supplied stats data.",
-            "allowed_providers": json.dumps([]),
-            "allowed_tools": None,
-            "budget_limit_eur": None,
-            "requires_approval": 0,
-            "log_path": "data/logs/runs.jsonl",
-            "auto_generated": 0,
-        },
-        {
-            "name": "wifi",
-            "label": "Wi-Fi Adapter",
-            "description": "Wi-Fi diagnostics, network scanning, signal monitoring, and Kali Linux aircrack-ng command generation for authorised wireless testing.",
-            "allowed_providers": json.dumps([]),
-            "allowed_tools": None,
-            "budget_limit_eur": None,
-            "requires_approval": 0,
-            "log_path": "data/logs/runs.jsonl",
-            "auto_generated": 0,
-        },
-        {
-            "name": "osint_heavy",
-            "label": "OSINT Pro",
-            "description": "Deep structured investigation dossier — entity profiling, digital footprint, infrastructure mapping, breach exposure, and curated tool methodology.",
-            "allowed_providers": json.dumps([]),
-            "allowed_tools": None,
-            "budget_limit_eur": None,
-            "requires_approval": 0,
-            "log_path": "data/logs/runs.jsonl",
-            "auto_generated": 0,
-        },
-        {
             "name": "fiverr",
             "label": "Fiverr",
             "description": "Fiverr freelancer agent — generates logo concepts via DALL-E 3, writes professional delivery messages, and creates Fiverr gig descriptions.",
@@ -345,17 +329,6 @@ def _seed_default_agents(conn: sqlite3.Connection) -> None:
             "allowed_providers": json.dumps(["anthropic", "openai", "deepseek", "gemini"]),
             "allowed_tools": json.dumps(["General Chat", "Summarize"]),
             "budget_limit_eur": 2.0,
-            "requires_approval": 0,
-            "log_path": "data/logs/runs.jsonl",
-            "auto_generated": 0,
-        },
-        {
-            "name": "bug_bounty",
-            "label": "Bug Bounty",
-            "description": "Vulnerability research, code review, nmap recon, Burp Suite analysis, and professional bug bounty report generation for authorized programs.",
-            "allowed_providers": json.dumps([]),
-            "allowed_tools": None,
-            "budget_limit_eur": None,
             "requires_approval": 0,
             "log_path": "data/logs/runs.jsonl",
             "auto_generated": 0,

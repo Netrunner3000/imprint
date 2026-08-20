@@ -28,30 +28,6 @@
       "log_path": "data/logs/runs.jsonl"
     },
     {
-      "name": "osint",
-      "type": "agent",
-      "label": "OSINT",
-      "enabled": true,
-      "version": "1.0",
-      "allowed_providers": [
-        "ollama",
-        "openai",
-        "deepseek",
-        "kimi",
-        "gemini",
-        "qwen",
-        "anthropic"
-      ],
-      "allowed_tools": [
-        "General Chat",
-        "Summarize"
-      ],
-      "budget_limit_eur": 2.0,
-      "requires_approval": false,
-      "description": "Open-source intelligence research and investigation agent.",
-      "log_path": "data/logs/runs.jsonl"
-    },
-    {
       "name": "audiobook",
       "type": "agent",
       "label": "Audiobook",
@@ -89,27 +65,6 @@
       "budget_limit_eur": 2.0,
       "requires_approval": false,
       "description": "Book publishing metrics, platform distribution tracking, and todo management.",
-      "log_path": "data/logs/runs.jsonl"
-    },
-    {
-      "name": "manager",
-      "type": "agent",
-      "label": "Forge",
-      "enabled": true,
-      "version": "1.0",
-      "allowed_providers": [
-        "ollama",
-        "openai",
-        "deepseek",
-        "kimi",
-        "gemini",
-        "anthropic",
-        "qwen"
-      ],
-      "allowed_tools": [],
-      "budget_limit_eur": null,
-      "requires_approval": false,
-      "description": "Builds and reviews new agents and tools.",
       "log_path": "data/logs/runs.jsonl"
     }
   ],
