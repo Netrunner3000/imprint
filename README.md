@@ -1,9 +1,13 @@
-# GOD_AI — Sentinel AI Documentation
+# Create & Publish — Documentation
 
 
 ![Screenshot](docs/screenshot.png)
 **Version:** 1.0  
-**Stack:** Python 3.11+ · PySide6 · SQLite · Ollama · OpenAI · DeepSeek · Gemini
+**Stack:** Python 3.11+ · PySide6 · SQLite · Ollama · Anthropic · OpenAI · DeepSeek · Gemini
+
+Forked from `sentinel_ai` and stripped down to the creative/publishing agents —
+see [FORK_PLAN.md](FORK_PLAN.md) for the split rationale and what has and
+hasn't been done.
 
 ---
 
@@ -22,25 +26,20 @@
    - 4.7 [Output Box](#47-output-box)
 5. [Agents](#5-agents)
    - 5.1 [Chat Agent](#51-chat-agent)
-   - 5.2 [Trace Agent](#52-trace-agent)
-   - 5.3 [Bloodhound Agent](#53-bloodhound-agent)
-   - 5.4 [Beacon Agent](#54-beacon-agent)
-   - 5.5 [Bug Spray Agent](#55-bug-spray-agent)
-   - 5.6 [Playmaker Agent](#56-playmaker-agent)
-   - 5.7 [Atelier Agent](#57-atelier-agent)
-   - 5.8 [Vitality Agent](#58-vitality-agent)
-   - 5.9 [Manuscript Agent](#59-manuscript-agent)
-   - 5.10 [Maestro Agent](#510-maestro-agent)
-   - 5.11 [Site Builder Agent](#511-site-builder-agent)
-   - 5.12 [Narrator Agent](#512-narrator-agent)
-   - 5.13 [Forge Agent](#513-forge-agent)
-   - 5.14 [Publisher Agent](#514-publisher-agent)
+   - 5.2 [Atelier Agent](#52-atelier-agent)
+   - 5.3 [Manuscript Agent](#53-manuscript-agent)
+   - 5.4 [Maestro Agent](#54-maestro-agent)
+   - 5.5 [Site Builder Agent](#55-site-builder-agent)
+   - 5.6 [Narrator Agent](#56-narrator-agent)
+   - 5.7 [Publisher Agent](#57-publisher-agent)
+   - 5.8 [Course Generator (CLI)](#58-course-generator-cli)
 6. [Tools](#6-tools)
 7. [Providers & Models](#7-providers--models)
    - 7.1 [Ollama (Local)](#71-ollama-local)
-   - 7.2 [OpenAI](#72-openai)
-   - 7.3 [DeepSeek](#73-deepseek)
-   - 7.4 [Gemini](#74-gemini)
+   - 7.2 [Anthropic (Claude)](#72-anthropic-claude)
+   - 7.3 [OpenAI](#73-openai)
+   - 7.4 [DeepSeek](#74-deepseek)
+   - 7.5 [Gemini](#75-gemini)
 8. [Routing & Execution Logic](#8-routing--execution-logic)
 9. [Validation & Permission System](#9-validation--permission-system)
 10. [Cost Tracking & Budgeting](#10-cost-tracking--budgeting)
@@ -56,29 +55,34 @@
 15. [File & Directory Structure](#15-file--directory-structure)
 16. [First-Run & Migration](#16-first-run--migration)
 17. [Configuration Reference](#17-configuration-reference)
-18. [Earning Income with Sentinel AI](#18-earning-income-with-sentinel-ai)
+18. [Earning Income with Create & Publish](#18-earning-income-with-create--publish)
     - 18.1 [Service-Based Income (Fiverr, Web Design, Author)](#181-service-based-income-fiverr-web-design-author)
-    - 18.2 [Recurring Revenue (Music, Audiobook)](#182-recurring-revenue-music-audiobook)
-    - 18.3 [Speculative Income (Playmaker)](#183-speculative-income-playmaker)
-    - 18.4 [Bounty & Research Income (Bug Spray, Trace)](#184-bounty--research-income-bug-spray-trace)
-    - 18.5 [Required External Accounts & Tools](#185-required-external-accounts--tools)
-    - 18.6 [Realistic Earnings Expectations](#186-realistic-earnings-expectations)
+    - 18.2 [Recurring Revenue (Music, Audiobook, Courses)](#182-recurring-revenue-music-audiobook-courses)
+    - 18.3 [Required External Accounts & Tools](#183-required-external-accounts--tools)
+    - 18.4 [Realistic Earnings Expectations](#184-realistic-earnings-expectations)
 
 ---
 
 ## 1. Overview
 
-GOD_AI (also referred to as Sentinel AI) is a PySide6 desktop application that acts as a unified command centre for interacting with multiple AI providers — local (Ollama) and cloud (Anthropic, OpenAI, DeepSeek, Gemini). It provides:
+Create & Publish is a PySide6 desktop application for the creative/publishing
+half of a wider split: it was forked from `sentinel_ai` (the full history is
+still in `git log`), which kept the research/security agents, while this app
+kept everything to do with writing, publishing, and selling creative work. It
+acts as a unified command centre for interacting with multiple AI providers —
+local (Ollama) and cloud (Anthropic, OpenAI, DeepSeek, Gemini). It provides:
 
-- A multi-agent interface with specialised agents for different task categories.
-- A permission and validation gate that enforces provider restrictions, tool rules, and cost budgets before any request is sent.
+- A multi-agent interface with specialised agents for different creative and
+  publishing workflows.
+- A permission and validation gate that enforces provider restrictions, tool
+  rules, and cost budgets before any request is sent.
 - Real-time cost estimation and post-request cost logging.
 - A run log that records the full lifecycle of every AI request.
-- A **Forge** agent (the agent factory) that autonomously designs new agents from a plain-language idea and writes their code with one click.
 - A **Narrator** agent that converts ebooks to MP3 using OpenAI TTS, with progress tracking and quota-failure detection.
+- A standalone, GUI-less **Course Generator** (`run_course.py`) that turns a topic into a packaged mini-course — slides, narration, and an avatar-presented video (see §5.8).
 - A full Settings panel for configuring pricing, budgets, agents, and tools without touching any file.
 
-The application is entirely self-contained: no server, no web interface, no external database. All data is stored in a local SQLite database (`data/sentinel.db`).
+The application is entirely self-contained: no server, no web interface, no external database. All data is stored in a local SQLite database (`data/create_and_publish.db`).
 
 ---
 
@@ -100,21 +104,26 @@ The window always opens maximised. The splitter widths are the default starting 
 
 ### Agent Buttons
 
-Four buttons appear at the top of the left panel, one per top-level workflow:
+The left panel groups agents into collapsible categories (each starts
+collapsed — launch shows just the category list):
 
-| Button | Agent | Description |
-|--------|-------|-------------|
-| 💬 Chat | `chat` | General-purpose AI conversation |
-| 👹 Trace | `osint` | Open-source intelligence and research analysis |
-| 🎧 Narrator | `audiobook` | Ebook-to-MP3 conversion via OpenAI TTS |
-| 🏗 Forge | `manager` | LLM-guided agent creation workflow |
+| Category | Agents |
+|----------|--------|
+| **General** | 💬 Chat |
+| **Creative** | ✍️ Manuscript (author), 📚 Publisher (manuscript), 🎵 Maestro (music), 🎨 Site Builder (webdesign), 🎧 Narrator (audiobook) |
+| **Gigs** | 💼 Atelier (fiverr) |
 
-Clicking a button:
+Clicking an agent button:
 1. Highlights the button (green border, checked state).
 2. Updates the hidden `agent_box` combo to match the selected agent name.
 3. Calls `update_agent_ui()` which shows or hides the correct centre panel.
 
-**Note:** The Writing and Coding agents exist as Python classes (`WritingAgent`, `CodingAgent`) and can be selected via the `agent_box` combo box, but do not have dedicated left-panel buttons. They are accessible through the Chat workflow by changing the Tool selection.
+**Note:** "Writing" and "Coding" are **Tool** selections inside the Chat
+agent's Tool combo (see Chapter 6) — they frame the same Chat panel with a
+different system prompt, not separate agent classes. Dedicated
+`WritingAgent`/`CodingAgent` classes existed before the fork's "strip the
+security verticals" commit removed them along with the six deleted agents;
+the Tool-based framing is what's left and still works.
 
 ---
 
@@ -134,11 +143,15 @@ Below the agent buttons:
 
 ## 4. Centre Panel — Main Workspace
 
-The centre panel contains three sub-panels that are mutually exclusive:
+The centre panel contains one sub-panel per agent, mutually exclusive:
 
-- **Normal panel** — shown for Chat, OSINT, Writing, and Coding agents.
-- **Audiobook panel** — shown when the Audiobook agent is active.
-- **Manager panel** — shown when the Manager agent is active.
+- **Normal panel** — shown for the Chat agent (any Tool, including Writing/Coding).
+- **Audiobook panel** — shown when the Narrator (audiobook) agent is active.
+- **Author panel** — shown when the Manuscript (author) writing-studio agent is active.
+- **Music panel** — shown when the Maestro (music) agent is active.
+- **Web Design panel** — shown when the Site Builder (webdesign) agent is active.
+- **Fiverr panel** — shown when the Atelier (fiverr) agent is active.
+- **Manuscript panel** — shown when the Publisher (manuscript) agent is active.
 
 Below whichever sub-panel is active, the output area is always visible.
 
@@ -254,7 +267,7 @@ The output box is also used by the Audiobook agent to display conversion logs an
 
 ## 5. Agents
 
-Sentinel AI ships with 15 first-party agents, each defined by its own Python class in `agents/` and a tailored system prompt. The left-panel navigator groups them by category (General, Finance & Business, Research, Security, Creative, Wellness, System); clicking an agent button either loads its standard chat panel or swaps the centre area for a fully custom GUI built for that workflow. Every agent supports all five providers (Ollama local, Anthropic, OpenAI, DeepSeek, Gemini), and most expose a Help button that opens this documentation at the relevant section. Anthropic Claude (Sonnet or Opus) typically gives the most structured, parser-friendly output for the analytical agents; Ollama works offline at no cost; the other cloud providers are interchangeable and chosen by taste, latency, or budget.
+Create & Publish ships with 7 first-party GUI agents, each defined by its own Python class in `agents/` and a tailored system prompt, plus one CLI-only Course Generator with no left-panel entry at all (§5.8). The left-panel navigator groups the GUI agents into three collapsible categories — General, Creative, Gigs; clicking an agent button either loads the standard Chat panel or swaps the centre area for a fully custom GUI built for that workflow. Most agents support all of Ollama (local), Anthropic, OpenAI, DeepSeek, and Gemini — Narrator is the exception, since it only ever calls OpenAI TTS (§5.6) — and most expose a Help button that opens this documentation at the relevant section. Anthropic Claude (Sonnet or Opus) typically gives the most structured output for the writing/publishing agents; Ollama works offline at no cost; the other cloud providers are interchangeable and chosen by taste, latency, or budget.
 
 ### 5.1 Chat Agent
 
@@ -310,7 +323,7 @@ Chat uses the **standard `normal_panel`** described in Chapter 4 (no custom GUI)
 
 #### Tips & Limitations
 
-> The Chat agent has no built-in tool-use, web browsing, or file uploads — it is plain text in, plain text out. For research-style workflows, use the Trace or Bloodhound agents instead.
+> The Chat agent has no built-in tool-use, web browsing, or file uploads — it is plain text in, plain text out. There is no dedicated research/investigation agent in this fork (that stayed with `sentinel_ai`); Chat with the Writing or Coding tool is as close as this app gets.
 
 > Long conversations grow `current_messages` linearly; the entire history is re-sent on each turn. Use **New Chat** liberally to keep token costs down on paid providers.
 
@@ -329,594 +342,9 @@ Chat uses the **standard `normal_panel`** described in Chapter 4 (no custom GUI)
 
 ---
 
-### 5.2 Trace Agent
+### 5.2 Atelier Agent
 
-**Left-panel button:** 👹 Trace  (category: **Research**)
-
-A lightweight open-source-intelligence helper. Given a target — a name, username, email, domain, company, phone, or IP — the agent produces a four-section structured plan you can act on with external tools. It does **not** perform live lookups; it structures the query, suggests Google dorks, lists relevant public sources, and proposes prioritised next steps. Use it as a planning surface before you reach for Maltego, Sherlock, Shodan, or the browser.
-
----
-
-#### What the Trace Agent Does
-
-The system prompt forces the model into a fixed four-section format the panel can parse into tabs:
-
-1. **Query Structure** — query type, searchable components, ambiguities and aliases.
-2. **Google Dorks** — 8–12 ready-to-paste search strings using advanced operators.
-3. **Public Sources** — 8–12 sources tailored to the target type with URL hints and one-line notes.
-4. **Summary & Next Steps** — what a trace will likely surface, what is probably unavailable, and 3–5 prioritised actions.
-
----
-
-#### OSINT Panel Layout
-
-When OSINT is selected the centre panel swaps in `osint_panel`.
-
-##### Target (form group)
-
-| Field | Description |
-|-------|-------------|
-| **Target** | Free-text identifier — name, handle, email, domain, IP, etc. **Required.** |
-| **Query Type** | Auto-detect / Person / Username / Email / Domain / Company / Phone / IP Address. Hints the model toward the right framing. |
-| **Provider** | Defaults to Anthropic. |
-| **Model** | Auto-populated. |
-
-##### Action Buttons
-
-| Button | Action |
-|--------|--------|
-| **Structure Query** | Sends the structured prompt to the model. |
-| **Stop** | Cancels the in-flight request. |
-| **Clear** (bottom row) | Clears the target field and all four tabs. |
-
-##### Results Tabs
-
-| Tab | Content |
-|-----|---------|
-| **Query Structure** | Section 1. Also receives the live-streaming raw response. |
-| **Google Dorks** | Section 2 — plus a **Copy Dorks** button that copies the dorks block to the clipboard. |
-| **Public Sources** | Section 3. |
-| **Summary & Next Steps** | Section 4. |
-
-A small **status** label at the bottom shows `Idle`, `Structuring query…`, or error messages.
-
----
-
-#### How to Use — Step by Step
-
-1. Click **👹 Trace** under **Research**.
-2. Enter the **Target** identifier.
-3. Pick the **Query Type** (Auto-detect works for most cases).
-4. Choose **Provider** and **Model**.
-5. Click **Structure Query**.
-6. Watch the response stream into the Query Structure tab; when finished, all four tabs populate.
-7. Use **Copy Dorks** to paste the dork list straight into Google.
-8. Work through the prioritised next steps in section 4 with external OSINT tools.
-9. **Clear** to start a new target.
-
----
-
-#### External Requirements
-
-- No API beyond the chosen LLM provider.
-- The dorks and source recommendations point you at third-party tools — for serious work, install Sherlock, theHarvester, Recon-ng, and have accounts on Have I Been Pwned, Hunter.io, Shodan (free tier), and Wayback Machine.
-
----
-
-#### Tips & Limitations
-
-> The OSINT agent reasons over its training corpus. It does not browse, pivot, or fetch real records. Treat its output as a plan, not evidence.
-
-> For deep, evidence-style dossiers (with threat levels, image OSINT, methodology tooling), use **Bloodhound** (5.3) instead.
-
----
-
-#### Agent Class Reference
-
-| Property | Value |
-|----------|-------|
-| Agent class | `agents/osint_agent.py` — `OSINTAgent` |
-| Agent name (DB) | `osint` |
-| Label | Trace |
-| Default provider | Anthropic |
-| System prompt | Four-section structured plan; defensive/legal framing; no fabrication |
-
----
-
-### 5.3 Bloodhound Agent
-
-**Left-panel button:** 🔍 Bloodhound  (category: **Research**)
-
-A deep-dive investigation agent built for analysts who need a full structured dossier with curated tradecraft. Bloodhound takes a richer brief than the light Trace agent (target type, scope, objective, optional image with EXIF) and produces a five-section dossier with quantitative indicators (Threat Level, Confidence, Sources Referenced). It accepts an optional **target image** — the panel parses EXIF metadata locally and feeds it back into the model's prompt.
-
----
-
-#### What the Bloodhound Agent Does
-
-The model is forced into the exact section layout below (the parser depends on the headers):
-
-1. **OVERVIEW** — target profile, key facts, scope, plus the load-bearing lines `THREAT LEVEL: X/10`, `CONFIDENCE: X%`, `SOURCES REFERENCED: X`.
-2. **DIGITAL FOOTPRINT** — online presence, breaches, public records, dark web, certificates, subdomains (target-type dependent).
-3. **INFRASTRUCTURE / SOCIAL PROFILE** — social graph for people, DNS/ports/ASN for domains/IPs.
-4. **RISK & RED FLAGS** — anomalies, fraud indicators, legal/ethical caveats.
-5. **METHODOLOGY & TOOLS** — 15–20 curated tools from a built-in library covering People, Username, Email, Domain/IP, Breach Data, Phone, Image/Face, Web Archive, Geolocation, Social Media, Google Dorking, and OSINT Frameworks.
-
----
-
-#### Bloodhound Panel Layout
-
-##### Investigation Brief (form group)
-
-| Field | Description |
-|-------|-------------|
-| **Target** | Identifier — name, username, email, domain, IP, phone, or org. **Required.** |
-| **Target Type** | Person / Username / Email Address / Domain / IP / Organisation / Phone Number / Auto-detect. |
-| **Scope** | Quick Scan (3–5 bullets per section), Standard Investigation (8–12), or Deep Dive (exhaustive). |
-| **Objective** | Free-text — what you are trying to establish. Drives the model's framing. |
-| **Provider / Model** | Default Anthropic. |
-
-##### Target Image (optional group)
-
-| Element | Purpose |
-|---------|---------|
-| **Browse…** | Pick an image file. The panel runs a local EXIF extraction and inserts the metadata into the prompt. |
-| **Clear Image** | Removes the image and EXIF block. |
-| **EXIF display** | Monospace, read-only preview of extracted fields (camera, GPS coords, timestamp, etc.). |
-
-##### Action Buttons
-
-| Button | Action |
-|--------|--------|
-| **Investigate** | Sends the brief (and EXIF if present) to the model. |
-| **Stop** | Cancels the in-flight request. |
-| **Save Report** | Exports the full dossier to a `.txt` file. Default name `osint_<target>_<timestamp>.txt`. |
-| **Clear** | Resets the brief and clears all tabs and indicators. |
-
-##### Results Tabs
-
-| Tab | Content |
-|-----|---------|
-| **Overview** | Section 1 (+ live stream). |
-| **Digital Footprint** | Section 2. |
-| **Infra / Social** | Section 3. |
-| **Risk & Red Flags** | Section 4. |
-| **Methodology** | Section 5 — clickable URLs to tools. |
-| **Full Dossier** | The complete response in one place. |
-| **Image OSINT** | When an image is supplied, this tab shows the rendered EXIF report and reverse-search/face-search links. |
-
-##### Indicators Sidebar
-
-| Indicator | Description |
-|-----------|-------------|
-| **Threat Level** | 0–10 progress bar, parsed from the `THREAT LEVEL` line. |
-| **Confidence** | Percentage from the `CONFIDENCE` line. |
-| **Sources** | Count from the `SOURCES REFERENCED` line. |
-| **Depth** | Echoes the Scope you selected. |
-
----
-
-#### How to Use — Step by Step
-
-1. Click **🔍 Bloodhound** under **Research**.
-2. Enter the **Target** and pick the **Target Type**.
-3. Choose **Scope** — Standard Investigation is the right default; Deep Dive is slow and verbose.
-4. Write a one-line **Objective** (e.g. "verify identity and map breach exposure").
-5. Optional: click **Browse…** to attach a target image — the EXIF panel populates immediately.
-6. Pick **Provider** and **Model** (Claude Sonnet/Opus strongly recommended for parser compliance).
-7. Click **Investigate**.
-8. Watch the Overview tab stream; when complete, all tabs and indicators populate.
-9. Work through the Methodology tab — the clickable links jump straight to the recommended tools.
-10. Click **Save Report** to archive the dossier as a `.txt`.
-11. **Clear** before starting a new target.
-
----
-
-#### External Requirements
-
-- API key for the chosen LLM provider.
-- The methodology section recommends paid and free tools — Shodan (free tier), Censys, Hunter.io, IntelX, Dehashed (paid), GHunt, Sherlock (free), PimEyes (paid). None are required for the agent to run; they are the targets of the produced plan.
-- For local EXIF parsing the app uses standard image libraries — no external service required.
-
----
-
-#### Tips & Limitations
-
-> The agent will not fabricate findings, but it will infer what a real OSINT trace would surface. Treat the output as a research plan and corroborate evidence with real lookups.
-
-> Indicators are parsed from exact lines (`THREAT LEVEL: X/10`, etc.). Smaller local models often deviate from the format, leaving the indicators at `—`. Use Claude for reliable parsing.
-
-> Image OSINT only extracts metadata locally — it does not run reverse-image searches itself; it generates the links for you to click.
-
----
-
-#### Agent Class Reference
-
-| Property | Value |
-|----------|-------|
-| Agent class | `agents/osint_heavy_agent.py` — `OsintHeavyAgent` |
-| Agent name (DB) | `osint_heavy` |
-| Label | Bloodhound |
-| Default provider | Anthropic |
-| System prompt | Five-section dossier, mandatory indicator lines, curated tool library, scope-aware depth guidance |
-
----
-
-### 5.4 Beacon Agent
-
-**Left-panel button:** 📡 Beacon  (category: **Research**)
-
-A wireless-security workbench for macOS. The Wi-Fi agent combines real local commands (macOS `airport`, `system_profiler` USB enumeration, `ping`) with an LLM-driven analysis layer and a Kali command generator that produces ready-to-paste aircrack-ng/hcxdumptool sequences for authorised penetration testing.
-
-> ⚠️ Offensive Wi-Fi commands generated by this agent are intended **only** for networks you own or have written authorisation to test. The agent's prompt embeds this warning into every output.
-
----
-
-#### What the Wi-Fi Agent Does
-
-Two distinct modes:
-
-1. **Local recon (mac side)** — runs `airport`/`system_profiler`/`ping` and feeds the raw output to the LLM, which returns a four-section analysis: Summary, Network Findings, Security Observations, Recommendations.
-2. **Kali Command Builder** — given an adapter profile, BSSID, channel and ESSID, generates numbered aircrack-ng / aireplay-ng / hcxdumptool sequences for Handshake Capture, Deauth Attack, WPS Audit, or PMKID Attack — with the correct injection-capability checks per adapter.
-
-The panel also **detects connected USB Wi-Fi adapters** by VID/PID and reports their chipset, monitor-mode support, injection support, and driver notes for the three supported models (TL-WN722N AR9271, AWUS036ACH RTL8812AU, TL-WN725N V3 RTL8188EU).
-
----
-
-#### Wi-Fi Panel Layout
-
-##### Quick Setup (form group)
-
-| Field | Description |
-|-------|-------------|
-| **Mode** | Interface Info / Scan Networks / Signal Monitor / Ping Test / Kali Command Builder. |
-| **Interface** | en0 / en1 / en2 / en3. |
-| **Target Host** | IP or hostname for the Ping Test mode. |
-
-##### Kali Command Builder (sub-form, shown only in Kali mode)
-
-| Field | Description |
-|-------|-------------|
-| **Operation** | Handshake Capture / Deauth Attack / WPS Audit / PMKID Attack. |
-| **Adapter** | TL-WN722N / AWUS036ACH / TL-WN725N V3 — drives the injection checks and driver notes. |
-| **BSSID** | Target AP MAC (`AA:BB:CC:DD:EE:FF`). |
-| **Channel** | Target channel. |
-| **ESSID** | Target network name. |
-
-##### Action Row
-
-| Button | Action |
-|--------|--------|
-| **Run** | Executes the selected mode (local command or Kali generator) and optionally feeds output to the LLM. |
-| **Detect Adapters** | Scans USB bus for known Wi-Fi adapters; populates the indicators sidebar. |
-| **Stop** | Cancels the in-flight job. |
-| **Help** | Opens this documentation. |
-| **AI Analysis** checkbox | If enabled, raw scan output is sent to the LLM for interpretation. |
-
-##### Results Tabs
-
-| Tab | Content |
-|-----|---------|
-| **Raw Output** | Direct stdout from the macOS command (or the generator). |
-| **AI Analysis** | The four-section structured analysis from the LLM. |
-| **Kali Commands** | The generated numbered command sequence (Kali mode). |
-
-##### Sidebar Indicators
-
-| Indicator | Description |
-|-----------|-------------|
-| **Adapter** | Friendly name from USB detection. |
-| **Chipset** | e.g. AR9271, RTL8812AU. |
-| **Capabilities** | Monitor mode ✓/✗, Injection ✓/✗. |
-| **Signal (RSSI)** | 0–100 % bar, converted from dBm via `quality = 2 × (RSSI + 100)`. |
-| **Security** | Detected encryption (Open / WEP / WPA / WPA2 / WPA3). |
-
----
-
-#### How to Use — Step by Step
-
-1. Click **📡 Beacon** under **Research**.
-2. (Optional) Plug in a USB Wi-Fi adapter and click **Detect Adapters** — the sidebar updates with chipset and capability flags.
-3. Choose **Mode**. Start with **Scan Networks** to see what's around you.
-4. Pick the active **Interface** (usually `en0`).
-5. Tick **AI Analysis** if you want the LLM to interpret results.
-6. Click **Run**. Raw output appears immediately in the Raw Output tab; AI Analysis populates when the model finishes.
-7. For offensive work, switch Mode to **Kali Command Builder**, pick **Operation** and **Adapter**, fill in BSSID/channel/ESSID from your earlier scan, and click **Run** to generate the command sequence.
-8. Click **Save Output** to keep the raw and analysed results.
-
----
-
-#### External Requirements
-
-- **macOS** — the panel uses `/System/Library/PrivateFrameworks/Apple80211.framework/.../airport` and `system_profiler SPUSBDataType`. Recent macOS releases have deprecated `airport`; scans may need `sudo` or an alternative tool.
-- **Kali Linux** (separate machine or VM) to actually run the generated aircrack-ng / hcxdumptool / reaver / bully commands.
-- **Supported USB Wi-Fi adapter** for injection — TL-WN722N (best entry-level), AWUS036ACH (dual-band, install `realtek-rtl88xxau-dkms` on Kali), TL-WN725N V3 (passive only).
-- Wordlist for cracking captured handshakes — `/usr/share/wordlists/rockyou.txt` on Kali by default.
-
----
-
-#### Tips & Limitations
-
-> The Mac side only reads — it never injects or deauths. All offensive operations are emitted as Kali commands for you to run on the appropriate hardware.
-
-> If `airport` returns nothing useful on newer macOS, use the AI Analysis checkbox to interpret partial output, or switch to a third-party scanner and paste its output.
-
-> Adapter detection only recognises the three hard-coded VID/PID pairs. Unknown adapters won't be reported even if plugged in.
-
----
-
-#### Agent Class Reference
-
-| Property | Value |
-|----------|-------|
-| Agent class | `agents/wifi_agent.py` — `WiFiAgent` |
-| Agent name (DB) | `wifi` |
-| Label | Beacon |
-| Default provider | Anthropic |
-| Helpers | `detect_usb_adapters()`, `build_kali_commands()` — both module-level functions in the same file |
-| System prompt | Wireless security analyst; four-section format; mandatory authorisation warning on offensive commands |
-
----
-
-### 5.5 Bug Spray Agent
-
-**Left-panel button:** 🐛 Bug Spray  (category: **Security**)
-
-A vulnerability triage and report-drafting agent for authorised bug bounty researchers. Bug Spray takes recon data, HTTP responses, Burp Suite output, and an optional embedded nmap scan, and emits a professional **Vulnerability Report** plus a polished **Submission Draft** ready to paste into HackerOne or Bugcrowd.
-
----
-
-#### What the Bug Spray Agent Does
-
-For every analysis the model produces two top-level blocks:
-
-1. **VULNERABILITY REPORT** — Title (CWE-classified), Severity + CVSS v3.1, Target, Description, Proof of Concept (reproducible from supplied data), Impact, Remediation (with code examples), References (OWASP/CVE/CWE/Hacktivity).
-2. **SUBMISSION DRAFT** — A clean, platform-ready writeup including title, severity, vulnerability type, affected asset, description, PoC, impact, and remediation.
-
-The panel also runs **nmap directly** via a subprocess (`QProcess`) so you can perform recon and analysis in the same workflow.
-
----
-
-#### Bug Spray Panel Layout
-
-##### Target & Program (form group)
-
-| Field | Description |
-|-------|-------------|
-| **Target URL / IP** | The in-scope target. |
-| **Program** | Free text — e.g. `HackerOne — Acme Corp`. |
-| **Scope Type** | Web Application / API / Mobile (Android/iOS) / Network / Source Code Review / Cloud Config / Other. |
-| **Severity Target** | Critical (P1) → Informational. |
-
-##### Nmap Recon Scan (group)
-
-| Element | Purpose |
-|---------|---------|
-| **Command input** | Defaults to `nmap -sV -sC -T4 --open <target>` when empty. |
-| **Run Nmap** | Executes nmap as a `QProcess` and streams output to the panel. |
-| **Kill** | Terminates the running nmap process. |
-| **Output box** | Live stdout from nmap. |
-
-##### Findings / Burp Output / Notes (group)
-
-A large paste area for HTTP request/response, Burp output, manual observations, error messages, and source code snippets.
-
-##### Provider Row
-
-| Button | Action |
-|--------|--------|
-| **Analyse** | Sends program + scope + target + nmap output + findings to the LLM. |
-| **Stop** | Cancels the LLM request. |
-
-##### Results Tabs
-
-| Tab | Content |
-|-----|---------|
-| **Full Report** | The complete response with both blocks. |
-| **Vulnerability** | Just the Vulnerability Report block. |
-| **PoC Draft** | The proof-of-concept reproduction steps. |
-| **Remediation** | The fix guidance with code examples. |
-| **Submission** | The HackerOne/Bugcrowd-ready writeup. |
-
-##### Sidebar Indicators
-
-| Indicator | Description |
-|-----------|-------------|
-| **Severity** | Critical / High / Medium / Low / Informational (parsed from the report). |
-| **CVSS Score** | Numeric score from the report. |
-| **Bounty Estimate** | Heuristic dollar range derived from severity. |
-
-##### Bottom Buttons
-
-**Save Report** exports the full response to a `.txt`. **Clear** resets the form and results.
-
----
-
-#### How to Use — Step by Step
-
-1. Click **🐛 Bug Spray** under **Security**.
-2. Enter **Target URL / IP**, **Program**, **Scope Type**, and **Severity Target**.
-3. (Optional) Tweak the nmap command and click **Run Nmap**. The output streams into the recon box.
-4. Paste your Burp Suite output, HTTP responses, source-code snippets, or manual notes into the **Findings** box.
-5. Pick **Provider** and **Model**.
-6. Click **Analyse**.
-7. Review the **Vulnerability** tab for the CVE-classified writeup, **PoC Draft** for reproduction steps, and **Remediation** for the developer-facing fix.
-8. Copy the **Submission** tab content straight into your bug bounty platform.
-9. Click **Save Report** to keep an archived copy.
-
----
-
-#### External Requirements
-
-- **nmap** installed and on `PATH` (`brew install nmap` on macOS). The panel shells out directly.
-- A bug bounty platform account — **HackerOne** (https://hackerone.com), **Bugcrowd** (https://bugcrowd.com), or Intigriti — and a target that is **in-scope and authorised**.
-- Optional: **Burp Suite Community** (free) or **Pro** for HTTP interception (https://portswigger.net/burp).
-- API key for the LLM provider.
-
----
-
-#### Tips & Limitations
-
-> The agent's system prompt explicitly states it will only analyse targets the user states are in-scope. Do not use it for unauthorised reconnaissance.
-
-> nmap inside the panel runs under your user; some scan types (`-sS` SYN scans) require `sudo`. Either prepend `sudo` to the command or use connect scans (`-sT`).
-
-> The **Bounty Estimate** sidebar widget is heuristic — programs vary wildly. Always check the program's actual payout table.
-
-> Earning monetisation guidance is intentionally not duplicated here — see **Chapter 18** for the income-generation playbook covering bug bounty submissions.
-
----
-
-#### Agent Class Reference
-
-| Property | Value |
-|----------|-------|
-| Agent class | `agents/bug_bounty_agent.py` — `BugBountyAgent` |
-| Agent name (DB) | `bug_bounty` |
-| Label | Bug Spray |
-| Default provider | Anthropic |
-| External processes | `nmap` via `QProcess` |
-| System prompt | Authorised-scope guardrails, CWE-classified report + platform submission draft |
-
----
-
-### 5.6 Playmaker Agent
-
-**Left-panel button:** 🏈 Playmaker  (category: **Finance & Business**)
-
-An NFL prop bet analyst that evaluates player and team props from supplied stats. The panel exposes **two distinct workflows**: a single-prop analyser (lean, EV, unit size) and a **Season Predictive Model** sub-feature that parses a player's season game log, computes descriptive statistics locally, and then asks the LLM to project the next game.
-
-> ⚠️ Analytical output only, not betting advice. The agent will not invent statistics.
-
----
-
-#### What the Playmaker Agent Does
-
-**Single-prop analysis** (five sections):
-
-1. **PROP OVERVIEW** — player/team, prop type and line, odds, game context.
-2. **OVER CASE** — supporting factors, splits, target pace.
-3. **UNDER CASE** — opposing factors, risk indicators.
-4. **EDGE ASSESSMENT** — OVER / UNDER / NO EDGE, confidence, EV (when odds supplied), suggested unit size (0 / 0.5 / 1 / 2).
-5. **ACTIONABLE RECOMMENDATION** — direction with caveats, game-time factors to monitor, line-movement triggers.
-
-**Season Predictive Model** (five sections, separate prompt):
-
-1. **SEASON SUMMARY** — interpretation of computed stats (trend, consistency, floor/ceiling, weighted projection).
-2. **TREND ANALYSIS** — improving / peaking / declining; consistency assessment.
-3. **PROJECTION — NEXT GAME** — point estimate, realistic low/mid/high range, assumptions.
-4. **PROP LINE EVALUATION** — over/under lean when a line is supplied.
-5. **MODEL CONFIDENCE & LIMITATIONS** — sample size, missing data, situational flags.
-
-The descriptive statistics (recency-weighted projection, floor, ceiling, mean) are computed in Python via `agents/nfl_stats_parser.py` from comma-, space- or labelled game-log input before the LLM is invoked, so the model interprets ground-truth numbers rather than fabricating them.
-
----
-
-#### Playmaker Panel Layout
-
-##### Prop Bet Setup (top form group)
-
-| Field | Description |
-|-------|-------------|
-| **Player / Team** | e.g. Patrick Mahomes, Tyreek Hill, Kansas City Chiefs. |
-| **Prop Type** | 22 options across passing, rushing, receiving, defence, team, game. |
-| **Line** | e.g. 252.5. |
-| **Odds (American)** | e.g. -110, +115. Required for EV computation. |
-| **Game Context** | Opponent, week, weather, injuries. |
-| **Stats / Data** | Multi-line paste area for game logs, target share, defensive rankings, snap counts, etc. |
-| **Provider / Model** | Default Anthropic. |
-
-Buttons: **Analyse Prop**, **Stop**.
-
-##### Season Predictive Model (lower group)
-
-| Field | Description |
-|-------|-------------|
-| **Player / Team** | e.g. Lamar Jackson. |
-| **Stat Category** | 14 options — passing/rushing/receiving/defence + Points Scored + Custom. |
-| **Prop Line** | Optional — drives the over/under evaluation. |
-| **Game Log Data** | Multi-line paste — accepts `287, 312, 198, 341, 255` or `Week 1: 287 Week 2: 312` or `W1 287 vs BUF`. |
-| **Opponent / Context** | Upcoming matchup notes. |
-
-Buttons: **Build Projection**, **Stop**. A small **computed stats label** displays the parser output (mean, weighted projection, floor, ceiling) before the LLM is called.
-
-##### Results Tabs
-
-| Tab | Content |
-|-----|---------|
-| **Full Analysis** | The complete response (single-prop or season model, whichever was run last). |
-| **Over Case** | Section 2 of the single-prop response. |
-| **Under Case** | Section 3 of the single-prop response. |
-| **Edge Assessment** | Section 4 — lean, confidence, EV, units. |
-| **Projection** | Section 3 of the season model — next-game projection. |
-| **Season Trends** | Section 2 of the season model — trend / consistency. |
-
-##### Indicators Sidebar
-
-| Indicator | Description |
-|-----------|-------------|
-| **Lean** | OVER / UNDER / NO EDGE. |
-| **Confidence** | Low / Medium / High. |
-| **Expected Value** | EV computed when odds were provided. |
-| **Unit Size** | 0 / 0.5 / 1 / 2. |
-
-**Save Analysis** and **Clear** buttons at the bottom.
-
----
-
-#### How to Use — Step by Step
-
-**Single prop**
-
-1. Click **🏈 Playmaker** under **Finance & Business**.
-2. Fill in **Player**, **Prop Type**, **Line**, **Odds**, and **Game Context**.
-3. Paste relevant stats into **Stats / Data** — recent game logs, target share, defensive ranks.
-4. Pick **Provider** and **Model**.
-5. Click **Analyse Prop**.
-6. Read the **Edge Assessment** tab for lean, confidence, EV, and recommended unit size; **Over/Under** tabs for the cases.
-
-**Season model**
-
-1. In the **Season Predictive Model** group, fill in **Player**, **Stat Category**, and (optionally) **Prop Line**.
-2. Paste season-to-date numbers into **Game Log Data**. The parser accepts most reasonable formats.
-3. (Optional) Add **Opponent / Context**.
-4. Click **Build Projection**. The computed stats appear inline, then the LLM produces the projection in the **Projection** and **Season Trends** tabs.
-
----
-
-#### External Requirements
-
-- LLM provider API key.
-- Stats data — Pro-Football-Reference (https://pro-football-reference.com), Sports Reference, ESPN game logs. The agent will **not fabricate statistics**.
-- Sportsbook for odds (DraftKings, FanDuel, etc.) if you want EV computed.
-
----
-
-#### Tips & Limitations
-
-> The Season Predictive Model needs **at least 5 games** of data for reliable projections; it will explicitly flag small samples in section 5.
-
-> The parser is forgiving but not magical — when in doubt, supply comma-separated numbers in chronological order.
-
-> Monetisation (sweat-money, prop services, etc.) is covered in Chapter 18.
-
----
-
-#### Agent Class Reference
-
-| Property | Value |
-|----------|-------|
-| Agent class | `agents/nfl_bet_agent.py` — `NflBetAgent` |
-| Agent name (DB) | `nfl_bet` |
-| Label | Playmaker |
-| Default provider | Anthropic |
-| Helpers | `agents/nfl_stats_parser.py` (local descriptive-statistics computation) |
-| System prompts | Two — single-prop five-section analyst + season model five-section projector |
-
----
-
-### 5.7 Atelier Agent
-
-**Left-panel button:** 💼 Atelier  (category: **Finance & Business**)
+**Left-panel button:** 💼 Atelier  (category: **Gigs**)
 
 A logo-design freelancer assistant. The Fiverr agent generates **DALL-E 3 logo concepts**, a polished **delivery message** for the client, and a complete **Fiverr gig description** — all from a single client brief form. Image generation runs through OpenAI's DALL-E 3 API; the text deliverables can use any provider.
 
@@ -1021,110 +449,7 @@ A **Clear** button at the bottom resets the panel.
 
 ---
 
-### 5.8 Vitality Agent
-
-**Left-panel button:** 🏃 Vitality  (category: **Wellness**)
-
-A Health & Wellness Advisor for nutrition, fitness, mental wellness, and lifestyle design. The agent helps users define realistic goals and produces structured action plans, dietary recommendations, and habit-formation guidance. It does **not** diagnose, prescribe, or replace professional medical advice — every response ends with a mandatory disclaimer.
-
----
-
-#### What the Vitality Agent Does
-
-Four-section structured response:
-
-1. **SUMMARY** — restated goal, identified health domain, key context, realistic assessment.
-2. **ACTION PLAN** — 3–7 prioritised actionable steps with frequency/duration, quick wins vs longer-term, progress markers.
-3. **DIET & LIFESTYLE** — foods to prioritise/limit, hydration, sleep, recovery, evidence-based supplementation, habit stacking.
-4. **CAUTIONS** — safety considerations, red flags warranting professional evaluation, mandatory disclaimer.
-
----
-
-#### Health Panel Layout
-
-##### Quick Setup (form group)
-
-| Field | Description |
-|-------|-------------|
-| **Category** | General / Nutrition / Fitness / Mental Health / Wellness / Weight Management / Performance. |
-| **Goal** | General Advice / Weight Loss / Muscle Gain / Improve Energy / Reduce Stress / Better Sleep / Endurance / Mental Clarity / Custom. |
-| **Activity Level** | Sedentary / Lightly Active / Moderately Active / Very Active / Athlete (default: Moderately Active). |
-| **Age (optional)** | e.g. 32. |
-| **Question / Goal** | Multi-line free-text — the more context the better. |
-| **Provider / Model** | Default Anthropic. |
-
-(Some fields like Gender, Dietary Restrictions, and Medical Notes are read by the handler; the panel composes the full prompt from all available context.)
-
-##### Action Buttons
-
-| Button | Action |
-|--------|--------|
-| **Analyse** | Sends the composed prompt. |
-| **Stop** | Cancels the request. |
-| **Help** | Opens this documentation. |
-| **Save Response** | Saves the full response to `health_<category>_<timestamp>.txt`. |
-| **Clear** | Clears the inputs and tabs. |
-
-##### Results Tabs
-
-| Tab | Content |
-|-----|---------|
-| **Overview** | Section 1 + live stream. |
-| **Action Plan** | Section 2. |
-| **Nutrition & Lifestyle** | Section 3. |
-| **Important Notes** | Section 4 + disclaimer. |
-
-##### Sidebar Indicators
-
-| Indicator | Description |
-|-----------|-------------|
-| **Category** | Echoes the selected category. |
-| **Goal** | Echoes the selected goal. |
-| **Confidence** | Low / Medium / High parsed from the response (colour-coded). |
-
----
-
-#### How to Use — Step by Step
-
-1. Click **🏃 Vitality** under **Wellness**.
-2. Pick **Category** (Fitness, Nutrition, etc.) and **Goal** (Weight Loss, etc.).
-3. Set **Activity Level**; optionally enter **Age**.
-4. Write your question or goal in detail in the multi-line input.
-5. Pick **Provider** and **Model**.
-6. Click **Analyse**.
-7. Step through Overview → Action Plan → Nutrition & Lifestyle → Important Notes.
-8. Save the response if you want to track adherence over time.
-
----
-
-#### External Requirements
-
-- LLM provider API key.
-- No third-party services — but for evidence-based supplementation or training plans, cross-check the agent's output against **Examine.com** (supplement evidence) or **Stronger by Science** (training research).
-
----
-
-#### Tips & Limitations
-
-> The agent is explicit about being informational only. For anything medical (chest pain, sustained symptoms, mental-health crises) it directs you to a professional.
-
-> The more context you provide (current weight, diet, training history, blockers), the more specific the action plan.
-
----
-
-#### Agent Class Reference
-
-| Property | Value |
-|----------|-------|
-| Agent class | `agents/health_agent.py` — `HealthAgent` |
-| Agent name (DB) | `health` |
-| Label | Vitality |
-| Default provider | Anthropic |
-| System prompt | Four-section wellness advisor; no diagnosis; mandatory disclaimer at the end of every response |
-
----
-
-### 5.9 Manuscript Agent
+### 5.3 Manuscript Agent
 
 **Left-panel button:** ✍️ Manuscript  (category: **Creative**)
 
@@ -1389,7 +714,7 @@ Platform format rules enforced by the Market system prompt:
 
 ---
 
-### 5.10 Maestro Agent
+### 5.4 Maestro Agent
 
 **Left-panel button:** 🎵 Maestro  (category: **Creative**)
 
@@ -1497,7 +822,7 @@ One tab per section: **Artist Profile**, **Release Setup**, **Distribution**, **
 
 ---
 
-### 5.11 Site Builder Agent
+### 5.5 Site Builder Agent
 
 **Left-panel button:** 🎨 Site Builder  (category: **Creative**)
 
@@ -1604,7 +929,7 @@ The panel splits the output into HTML / CSS / JS tabs and computes line counts f
 
 ---
 
-### 5.12 Narrator Agent
+### 5.6 Narrator Agent
 
 **Left-panel button:** 🎧 Narrator  (category: **Creative**)
 
@@ -1714,114 +1039,7 @@ The conversion runs as a `QProcess` so the GUI stays responsive. Output is strea
 
 ---
 
-### 5.13 Forge Agent
-
-**Left-panel button:** 🏗 Forge  (category: **System**)
-
-An LLM-driven workflow for creating **new agents without writing code**. The user describes an agent idea in plain English; Manager instructs an LLM to produce a structured JSON specification; the user reviews and approves it; the Agent Factory then writes the agent's Python class, inserts the agent into the SQLite database, and registers a corresponding tool entry.
-
----
-
-#### What the Forge Agent Does
-
-A three-stage workflow:
-
-1. **Idea → Spec** — The user types a free-form description. The Manager system prompt forces the LLM to return a single valid JSON object matching a strict schema. The result is shown for review.
-2. **Spec → Approval** — The user reviews the rendered JSON. A confirmation dialog lists every file that will be written.
-3. **Approval → Files + DB rows** — The `AgentFactory` (`services/agent_factory.py`) writes `agents/<name>_agent.py`, inserts a row into the `agents` table, and inserts/updates a row in the `tools` table. The app must be restarted for the new agent to appear in the left-panel navigator.
-
----
-
-#### Manager Panel Layout
-
-##### Describe Your Agent Idea (group box)
-
-| Element | Purpose |
-|---------|---------|
-| **Idea input** | Free-text agent description. |
-| **Provider** | Defaults to `deepseek` (works well for structured JSON; Claude also strong). |
-| **Model** | Auto-populated. |
-| **Analyze Idea** | Sends the idea to the LLM; result populates the spec display. |
-| **Clear** | Clears idea input, spec display, and pending spec. |
-
-##### Generated Spec — review before approving (group box)
-
-| Element | Purpose |
-|---------|---------|
-| **Spec display** | Read-only monospace JSON viewer. On parse failure, shows the raw response with an error note. |
-| **Approve & Create Agent** | Confirmation dialog lists every file that will be written; on confirm, runs the Agent Factory. |
-| **Reject / Clear Spec** | Discards the pending spec. |
-
-##### Creation Log (group box)
-
-| Element | Purpose |
-|---------|---------|
-| **Log** | Append-only monospace log of all events: spec generated, approved, rejected, files created, errors. |
-
----
-
-#### Agent Spec Schema
-
-The LLM must return a single JSON object with these fields:
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `name` | string | Lowercase snake_case identifier (e.g. `cyber_agent`). |
-| `label` | string | Human-readable display name (e.g. `Cyber Agent`). |
-| `description` | string | One-sentence description. |
-| `allowed_providers` | array | Permitted providers, e.g. `["ollama", "openai"]`. |
-| `allowed_tools` | array or null | Permitted tool names, or `null` for unrestricted. |
-| `budget_limit_eur` | number or null | Per-day cost cap in EUR, or `null` for no cap. |
-| `requires_approval` | boolean | If true, the agent is created but blocked until manually enabled. |
-| `system_prompt` | string | The full system prompt the new agent will use. |
-| `reasoning` | string | Brief explanation of why those settings were chosen. |
-
----
-
-#### How to Use — Step by Step
-
-1. Click **🏗 Forge** under **System**.
-2. Describe the agent in plain English — purpose, behaviour, preferred providers, risk level.
-3. Pick a **Provider** and **Model** for the analysis (DeepSeek or Claude recommended).
-4. Click **Analyze Idea**. The spec appears in the spec display as formatted JSON.
-5. Review every field. If anything is wrong, click **Reject / Clear Spec** and refine the idea, then re-analyse.
-6. When satisfied, click **Approve & Create Agent**. The confirmation dialog lists the file(s) and DB rows that will be written.
-7. Confirm. The Agent Factory writes `agents/<name>_agent.py`, inserts into the `agents` and `tools` tables, and logs each step.
-8. **Restart the app** to load the new agent into the left-panel navigator.
-
----
-
-#### External Requirements
-
-- LLM provider API key (DeepSeek or Claude recommended for clean JSON output).
-- Write access to the project directory — the factory creates real files under `agents/`.
-
----
-
-#### Tips & Limitations
-
-> The new agent uses the **standard `normal_panel`** by default. To give it a custom GUI you must hand-write a `build_<name>_panel` method in `main.py` afterwards — Manager only generates the agent class, not the UI.
-
-> If `requires_approval` is set to `true`, the agent will appear in the DB but be locked from use until you explicitly enable it in Settings (Section 12.3).
-
-> Manager will refuse malformed responses — if the LLM returns prose instead of JSON, the parser logs a failure and the Approve button stays disabled. Use a more capable model and retry.
-
----
-
-#### Agent Class Reference
-
-| Property | Value |
-|----------|-------|
-| Agent class | `agents/manager_agent.py` — `ManagerAgent` (with `MANAGER_SYSTEM_PROMPT` and `parse_spec()`) |
-| Factory | `services/agent_factory.py` — writes files and DB rows |
-| Agent name (DB) | `manager` |
-| Label | Forge |
-| Default provider | DeepSeek (in panel) |
-| System prompt | Software-architect assistant; returns a single JSON object matching the agent schema; no markdown fences |
-
----
-
-### 5.14 Publisher Agent
+### 5.7 Publisher Agent
 
 **Left-panel button:** 📚 Publisher  (category: **Creative**)
 
@@ -1961,7 +1179,7 @@ Picks up where the Manuscript (writing studio) agent stops: real sales data, lau
 
 > Shorts generation blocks the Generate button and disables all Quote Finder row 🎬 buttons while one short is rendering — Calendar rows share the same lock, since both use the same background worker slot. Only one narration/encode runs at a time across the whole panel.
 
-> Nothing on this panel writes back into the manuscript — it only consumes a finished or in-progress draft. Drafting, editing, and EPUB/DOCX/PDF export live on the Manuscript writing-studio agent (§5.11), not here.
+> Nothing on this panel writes back into the manuscript — it only consumes a finished or in-progress draft. Drafting, editing, and EPUB/DOCX/PDF export live on the Manuscript writing-studio agent (§5.3), not here.
 
 > Calendar's captions are a single batched LLM call covering every scheduled post at once — if that call fails, the schedule still populates with blank captions rather than losing the whole batch; regenerate to retry.
 
@@ -1982,11 +1200,48 @@ Picks up where the Manuscript (writing studio) agent stops: real sales data, lau
 
 ---
 
+### 5.8 Course Generator (CLI)
+
+**No left-panel button — this one runs from the terminal, not the GUI.**
+
+`run_course.py` drives `agents/course_agent.py` to generate a full mini-course
+(modules → lessons → slides → narrated, avatar-presented video → a packaged
+`index.html`) from a single topic string. It has no left-panel entry, no
+`agent_box` row, and isn't wired into `main.py` at all — it is a standalone
+pipeline, invoked directly:
+
+```bash
+python run_course.py --topic "Python for Beginners" --modules 2 --lessons 2
+python run_course.py --topic "Data Science" --avatar heygen --voice elevenlabs
+```
+
+**Pipeline (`services/course/`):**
+
+| Stage | Module | What it does |
+|-------|--------|---------------|
+| Content | `content_generator.py` | Anthropic-generated module/lesson outline and script text |
+| Slides | `slide_generator.py` | Renders lesson slide images |
+| Voice | `providers/voice/` | `mock` (free, no key) or `elevenlabs` narration audio |
+| Avatar | `providers/avatar/` | `mock`, `heygen`, or `synthesia` presenter video |
+| Assembly | `video_assembler.py` | Combines slides + narration + avatar into the final video per lesson |
+| Packaging | `packager.py` | Writes `output/courses/<course>/index.html` plus assets |
+
+**Requirements:** `ANTHROPIC_API_KEY` in `.env` always; `ELEVENLABS_API_KEY` only
+if `--voice elevenlabs`; a HeyGen or Synthesia key only if `--avatar` selects
+that provider. `--avatar mock --voice mock` (the defaults) runs the whole
+pipeline free, useful for testing the flow before spending on real voice/avatar
+generation.
+
+**Output:** written to `--output` (default `output/courses/`), which is
+gitignored — open `index.html` in a browser to review the generated course.
+
+---
+
 ## 6. Tools
 
 Tools define the system prompt that frames the conversation. The active tool is selected from the Tool combo box in the centre panel. The system prompt is prepended to every message sent to the model.
 
-Tools are stored in the `tools` table in the database and can be enabled/disabled in the Settings panel (see Section 12.3). Custom tools can be added to the database directly or by using the Forge agent workflow.
+Tools are stored in the `tools` table in the database and can be enabled/disabled in the Settings panel (see Section 12.3). Custom tools can be added to the database directly — the agent-factory workflow that used to generate them (the Forge agent) was removed along with the security verticals; see [FORK_PLAN.md](FORK_PLAN.md).
 
 | Tool | Intended use |
 |------|-------------|
@@ -2059,7 +1314,7 @@ Requires an `OPENAI_API_KEY` environment variable. Get your key at **platform.op
 
 Requires a `DEEPSEEK_API_KEY` environment variable. Get your key at **platform.deepseek.com**.
 
-**Best for:** structured analysis, OSINT-style research, coding assistance, analytical long-form text. Often lower cost than OpenAI for comparable output quality.
+**Best for:** structured analysis, coding assistance, analytical long-form text. Often lower cost than OpenAI for comparable output quality.
 
 **Model discovery:** queries the DeepSeek API or falls back to a static list.
 
@@ -2117,7 +1372,6 @@ The **Auto Route** button calls `auto_route_agent()`, which resolves the current
 | Audiobook agent | OpenAI TTS (forced) |
 | Keywords: `debug`, `code`, `function`, `refactor`, `traceback` | DeepSeek → OpenAI → Ollama |
 | Keywords: `write`, `email`, `cv`, `professional`, `polish` | OpenAI → Gemini → Ollama |
-| Keywords: `osint`, `investigate`, `analysis`, `report` | DeepSeek → Gemini → Ollama |
 | Tool has a `recommended_provider` | That provider (if API is enabled), else Ollama |
 | Default / general task | Ollama |
 
@@ -2397,7 +1651,7 @@ Signals:
 
 ## 14. Database Schema
 
-The SQLite database is stored at `data/sentinel.db`. All tables use WAL journal mode and foreign key enforcement.
+The SQLite database is stored at `data/create_and_publish.db`. All tables use WAL journal mode and foreign key enforcement.
 
 ### `agents`
 
@@ -2413,7 +1667,7 @@ The SQLite database is stored at `data/sentinel.db`. All tables use WAL journal 
 | `requires_approval` | INTEGER | 1 = blocked until manually approved |
 | `description` | TEXT | Human-readable description |
 | `log_path` | TEXT | Log file path (legacy, now superseded by DB logging) |
-| `auto_generated` | INTEGER | 1 = created by Forge / Agent Factory |
+| `auto_generated` | INTEGER | 1 = created by the agent factory. Always 0 today — Forge and `services/agent_factory.py` were removed with the security verticals; the column is a schema vestige. |
 
 ### `tools`
 
@@ -2494,26 +1748,30 @@ Key-value store for application settings.
 ## 15. File & Directory Structure
 
 ```
-sentinel_ai/
-├── main.py                        # Entry point + GodAI window (~10,300 lines — see
+create_and_publish/
+├── main.py                        # Entry point + main window (~7,100 lines — see
 │                                  #   docs/refactor_plan.md, TODO.md #2)
 ├── run_course.py                  # CLI runner for the Course Agent (no GUI needed)
 ├── README.md                      # This documentation file
+├── FORK_PLAN.md                   # Split rationale, carved out of sentinel_ai
 ├── TODO.md                        # Prioritised engineering backlog
 ├── requirements.txt
 │
 ├── agents/                        # One module per agent: prompts + build_*_messages()
 │   ├── router_agent.py            # Keyword routing to an agent
-│   ├── chat_agent.py  writing_agent.py  coding_agent.py
-│   ├── osint_agent.py  osint_heavy_agent.py  wifi_agent.py  bug_bounty_agent.py
+│   ├── chat_agent.py              # Chat — plain message passthrough
 │   ├── author_agent.py            # Write (fiction + non-fiction) / Publish / Market
 │   ├── manuscript_agent.py        # Publisher: sales Q&A, quote extraction, captions
-│   ├── music_agent.py  webdesign_agent.py  fiverr_agent.py  course_agent.py
-│   ├── health_agent.py  nfl_bet_agent.py  nfl_stats_parser.py
-│   ├── manager_agent.py           # Forge — LLM spec generator for new agents
+│   ├── music_agent.py  webdesign_agent.py  fiverr_agent.py
+│   ├── course_agent.py            # Course Generator — CLI-only, see §5.8
 │   └── audiobook_connector.py
 │
-├── ui/                            # Extracted from main.py (refactor Phases 1–2)
+│   # osint_agent.py, osint_heavy_agent.py, wifi_agent.py, bug_bounty_agent.py,
+│   # nfl_bet_agent.py, nfl_stats_parser.py, manager_agent.py, coding_agent.py,
+│   # and writing_agent.py stayed with the security half of the split — see
+│   # FORK_PLAN.md and Chapter 16 (_purge_split_agents).
+│
+├── ui/                            # Extracted from main.py (refactor Phases 1-2)
 │   ├── workers.py                 # ChatWorker, SubprocessWorker, ModelPullWorker,
 │   │                              #   FiverrImageWorker, ShortsWorker
 │   ├── widgets.py                 # FlowLayout, CollapsibleSection
@@ -2524,7 +1782,8 @@ sentinel_ai/
 │   └── book_widgets.py            # Shared theme/size/voice controls + asset paths
 │
 ├── services/                      # Non-UI logic
-│   ├── database.py                # SQLite schema, connection, migration, seeding
+│   ├── database.py                # SQLite schema, connection, migration, seeding,
+│   │                              #   _purge_split_agents (Chapter 16)
 │   ├── registry.py                # Agent/tool registry queries (DB-backed)
 │   ├── validator.py               # 10-check permission and budget gate
 │   ├── usage_tracker.py           # Token/cost accounting and queries
@@ -2539,26 +1798,33 @@ sentinel_ai/
 │   ├── content_calendar.py        # Posting-schedule generation
 │   ├── publishdrive_client.py     # PublishDrive REST wrapper
 │   ├── kdp_csv_parser.py          # KDP sales CSV ingestion + todo seeding
-│   ├── narrator/converter.py      # Ebook → MP3 (Narrator agent)
+│   ├── narrator/converter.py      # Ebook -> MP3 (Narrator agent)
 │   ├── course/                    # Course generator (content, slides, video, packaging)
-│   ├── agent_factory.py  history_store.py  report_exporter.py
+│   ├── history_store.py  report_exporter.py
 │   ├── resource_monitor.py  tool_runner.py  model_router.py  runtime_paths.py
+│
+│   # agent_factory.py (Forge's LLM spec generator) was removed with the
+│   # security half — see FORK_PLAN.md.
 │
 ├── providers/                     # Pluggable external capabilities
 │   ├── voice/                     # base.py, mock.py (free system TTS),
 │   │                              #   elevenlabs.py, registry.py
 │   └── avatar/                    # base.py, mock.py, heygen.py, synthesia.py
 │
-├── tests/                         # 219 tests — see §15.1
-│   ├── test_agents_scenarios.py   # 98 — agent prompt construction
-│   ├── test_cost_and_limits.py    # 31 — Validator gates + token/cost maths
-│   ├── test_request_guard.py      # 30 — authorize/record/abandon_request
-│   ├── test_book_pipeline.py      # 60 — export, calendar, KDP CSV, parsing
+│   # domain_lookup.py, email_lookup.py, username_lookup.py, and
+│   # result_normalizer.py (the OSINT lookup layer) stayed with the security half.
+│
+├── tests/                         # ~160 tests — see §15.1
+│   ├── test_agents_scenarios.py   # agent prompt construction
+│   ├── test_cost_and_limits.py    # Validator gates + token/cost maths
+│   ├── test_request_guard.py      # authorize/record/abandon_request
+│   ├── test_book_pipeline.py      # export, calendar, KDP CSV, parsing
 │   └── manual_test_cases.md
 │
 ├── docs/
 │   ├── agents/*.md                # One reference page per agent (the 📖 Docs button)
 │   ├── refactor_plan.md           # main.py split — phases, measurements, decisions
+│   ├── app_split.md               # Why this fork is tabbed rather than sidebar-driven
 │   ├── projects_roadmap.md
 │   └── *_HANDOVER.md              # Historical build plans
 │
@@ -2570,7 +1836,7 @@ sentinel_ai/
 ├── assets/                        # Icons
 │
 └── data/
-    ├── sentinel.db                # Primary data store (SQLite)
+    ├── create_and_publish.db      # Primary data store (SQLite)
     ├── chats/                     # Saved conversation JSON files
     ├── logs/                      # Legacy run log (superseded by DB)
     ├── reports/                   # Exported report text files
@@ -2579,9 +1845,9 @@ sentinel_ai/
     └── shorts/                    # Generated vertical MP4s
 ```
 
-> `output/` is gitignored. Anything you want to keep — exported books, launch
-> copy — should be saved outside it. The `You Don't Chase` launch assets live
-> with the manuscript, not in the repo.
+> `output/` (including `output/courses/` from the Course Generator, §5.8) is
+> gitignored. Anything you want to keep — exported books, launch copy,
+> generated courses — should be saved outside it.
 
 ---
 
@@ -2591,8 +1857,9 @@ sentinel_ai/
 QT_QPA_PLATFORM=offscreen python3 -m pytest tests/ -q
 ```
 
-219 tests, ~11s. `QT_QPA_PLATFORM=offscreen` is required — some tests construct
-the real `GodAI` window.
+~160 tests. `QT_QPA_PLATFORM=offscreen` is required — some tests construct
+the real `GodAI` window. (Down from 219 before the fork's security-agent test
+coverage in `test_agents_scenarios.py` was stripped along with the agents themselves.)
 
 | File | Covers |
 |------|--------|
@@ -2617,7 +1884,7 @@ constructs is building the window offscreen:
 QT_QPA_PLATFORM=offscreen python3 -c "
 from PySide6.QtWidgets import QApplication; import main
 app = QApplication([]); w = main.GodAI()
-for a in ['author','manuscript','chat','osint']: w.update_agent_ui(a)
+for a in ['author','manuscript','chat','music','webdesign','fiverr','audiobook']: w.update_agent_ui(a)
 print('OK')"
 ```
 
@@ -2628,7 +1895,7 @@ Run it after any UI move — import success is not enough. Missing imports and
 
 ## 16. First-Run & Migration
 
-On the first launch, `init_db()` detects that `data/sentinel.db` does not exist and runs `_migrate_from_json()`, which reads any existing JSON config files and populates the database tables:
+On the first launch, `init_db()` detects that `data/create_and_publish.db` does not exist and runs `_migrate_from_json()`, which reads any existing JSON config files and populates the database tables:
 
 | Source file | Target tables |
 |-------------|--------------|
@@ -2642,6 +1909,13 @@ On the first launch, `init_db()` detects that `data/sentinel.db` does not exist 
 If a JSON file does not exist, that migration step is skipped silently. The JSON files are not deleted and serve as backups.
 
 On subsequent launches, the migration is skipped entirely — the database is the source of truth.
+
+**Every launch** also runs `_purge_split_agents()`, which deletes any `agents`
+row named `osint`, `osint_heavy`, `wifi`, `bug_bounty`, `nfl_bet`, or `manager`.
+A database created before this fork's security agents were stripped out would
+otherwise carry those rows forever — live in the registry and Settings with
+no panel or module behind them. Safe on every launch: it only names agents
+this app doesn't build, so it can't touch one a user has since added.
 
 ---
 
@@ -2702,11 +1976,11 @@ The Audiobook agent reads its paths and defaults from `services/tool_runner.py`,
 
 ---
 
-## 18. Earning Income with Sentinel AI
+## 18. Earning Income with Create & Publish
 
-Sentinel AI is not just a research and analysis tool — several of its agents are designed to produce **deliverables you can sell** or **decisions you can act on for financial return**. This chapter is the practical, no-nonsense guide to converting agent output into income, broken down by income type.
+Create & Publish's agents are designed to produce **deliverables you can sell** — logos, websites, books, music, audiobooks, courses. This chapter is the practical, no-nonsense guide to converting agent output into income, broken down by income type.
 
-> ⚠️ Nothing in this chapter is financial, legal, or tax advice. Income from freelancing, music streaming, betting, bug bounties, and investing is taxable in most jurisdictions. Always check local laws, register your activity if required, and consult a qualified professional for serious decisions.
+> ⚠️ Nothing in this chapter is financial, legal, or tax advice. Income from freelancing, music streaming, and self-publishing is taxable in most jurisdictions. Always check local laws, register your activity if required, and consult a qualified professional for serious decisions.
 
 ---
 
@@ -2718,7 +1992,7 @@ Service income is the **fastest path to revenue**: you sell a deliverable, you g
 
 #### Atelier (Fiverr Logo Gigs)
 
-**Agent:** 5.9 Atelier
+**Agent:** 5.2 Atelier
 
 **Setup:**
 
@@ -2751,7 +2025,7 @@ Service income is the **fastest path to revenue**: you sell a deliverable, you g
 
 #### Site Builder (Freelance Front-End)
 
-**Agent:** 5.13 Site Builder
+**Agent:** 5.5 Site Builder
 
 **What you sell:**
 
@@ -2786,7 +2060,7 @@ Service income is the **fastest path to revenue**: you sell a deliverable, you g
 
 #### Manuscript (Ghostwriting & Self-Publishing)
 
-**Agent:** 5.11 Manuscript
+**Agent:** 5.3 Manuscript
 
 **Income paths:**
 
@@ -2830,15 +2104,15 @@ Service income is the **fastest path to revenue**: you sell a deliverable, you g
 
 ---
 
-### 18.2 Recurring Revenue (Music, Audiobook)
+### 18.2 Recurring Revenue (Music, Audiobook, Courses)
 
-Recurring revenue compounds — once published, content keeps earning. These two agents produce **assets that generate passive income** over months and years.
+Recurring revenue compounds — once published, content keeps earning. These agents produce **assets that generate passive income** over months and years.
 
 ---
 
 #### Maestro (Spotify + Distribution)
 
-**Agent:** 5.12 Maestro
+**Agent:** 5.4 Maestro
 
 **Income breakdown:**
 
@@ -2856,7 +2130,7 @@ Recurring revenue compounds — once published, content keeps earning. These two
 
 **Setup workflow:**
 
-1. Click **🎵 Maestro** in Sentinel AI and fill in the artist brief.
+1. Click **🎵 Maestro** in Create & Publish and fill in the artist brief.
 2. Use the generated Artist Profile (short + long bio) to claim your Spotify for Artists account at https://artists.spotify.com.
 3. Sign up with a distributor (DistroKid $22.99/year recommended for most independent artists; CD Baby for one-off releases).
 4. Upload the release with the generated metadata, ISRC handled by distributor.
@@ -2878,11 +2152,11 @@ Recurring revenue compounds — once published, content keeps earning. These two
 
 #### Narrator (Bulk Conversion + ACX)
 
-**Agent:** 5.14 Narrator
+**Agent:** 5.6 Narrator
 
 **Income paths:**
 
-1. **Convert your own books** — if you self-published via 5.11 Author, run them through the Audiobook agent and publish to:
+1. **Convert your own books** — if you self-published via 5.3 Manuscript, run them through the Audiobook agent and publish to:
    - **Audible / ACX** (https://acx.com) — 25–40% royalty exclusive, 25% royalty non-exclusive.
    - **Findaway Voices** (https://findawayvoices.com) — 80% royalty, distributes to Apple Books, Google Play, Scribd, libraries.
    - **Google Play Books** — direct upload.
@@ -2907,121 +2181,41 @@ Recurring revenue compounds — once published, content keeps earning. These two
 
 ---
 
-### 18.3 Speculative Income (Playmaker)
+#### Course Generator (Teachable / Gumroad / Udemy)
 
-Speculative income depends on **risk-taking**: real money on the line, no guarantee of return. These agents are decision-support tools, not money printers. Treat outputs as **one input among many** in your own due diligence.
-
-> ⚠️ The Playmaker agent does **not** execute trades or place bets. They produce analysis. You must always make the final decision and execute manually.
-
----
-
-#### Playmaker (Sports Betting)
-
-**Agent:** 5.8 Playmaker
-
-**Income path:**
-
-1. Open a sportsbook account where legal in your jurisdiction:
-   - **US** — DraftKings, FanDuel, BetMGM, Caesars (state-by-state legality).
-   - **UK** — Bet365, William Hill, Paddy Power.
-   - **EU** — Unibet, Pinnacle, Betfair Exchange.
-2. Use the Playmaker agent's **Season Predictive Model** to derive a fair line from a player's game log.
-3. Compare the agent's projection vs the sportsbook line. Bet only when there's a clear edge (5%+ EV).
-4. Always size with **0.5–1% of bankroll** per bet maximum (Kelly criterion fraction).
-5. Track every bet — use a free tool like ActionNetwork or a Google Sheet.
-
-**Realistic earnings:**
-
-- Most prop bettors lose money. Sportsbooks have a built-in 5–10% house edge on prop lines.
-- A disciplined bettor with clean data and good model can target **2–5% ROI on volume** over a season — modest but compounding.
-- A 10k bankroll → 2k bets per season → ~$200–$1,000 expected return at 2–5% ROI.
-
-**External costs:** Sportsbook withdrawal fees ($0–$20). No subscription cost. Don't deposit more than you can afford to lose.
-
-> ⚠️ **Sports betting is regulated/illegal in many countries.** Always check local law. Problem gambling support: BeGambleAware (UK), Gamblers Anonymous (US/international).
-
----
-
-### 18.4 Bounty & Research Income (Bug Spray, Trace)
-
-These agents support **skill-based income** from security research, investigation, and intelligence work.
-
----
-
-#### Bug Spray
-
-**Agent:** 5.5 Bug Spray
-
-**Income path:**
-
-1. Sign up on bug bounty platforms:
-   - **HackerOne** (https://hackerone.com) — largest platform.
-   - **Bugcrowd** (https://bugcrowd.com) — major secondary platform.
-   - **Intigriti** (https://intigriti.com) — EU-focused.
-   - **YesWeHack** (https://yeswehack.com) — French + global.
-   - **Synack Red Team** (https://synack.com) — vetted/invite-only, higher payouts.
-2. Pick **public programs** to start. Read scope carefully — bounty is only paid for findings on listed assets, only via the listed vulnerability types.
-3. Use the agent's nmap runner to perform recon. Paste output into the panel.
-4. Add Burp Suite findings, recon notes, source code snippets.
-5. Click **Analyse** — the agent produces a CWE-classified vulnerability report and a clean **HackerOne-ready submission draft**.
-6. Submit via the platform. Wait for triage (1–14 days). If accepted, payout 7–60 days.
-
-**Realistic earnings:**
-
-| Severity | Typical bounty range |
-|----------|----------------------|
-| Low / Informational | $50–$250 |
-| Medium | $250–$1,000 |
-| High | $1,000–$10,000 |
-| Critical | $5,000–$100,000+ |
-
-- New hunters: $0–$500/month first 6 months (learning curve).
-- Experienced part-time: $1k–$10k/month.
-- Top full-time hunters: $200k–$500k/year.
-
-**External costs:** Burp Suite Pro ($475/year, optional but recommended). Nuclei, Subfinder, ffuf — free. VPS for scanning (Linode/Hetzner $5–$20/month optional).
-
-> ⚠️ **Only test in-scope assets.** Out-of-scope testing is unauthorised access in most jurisdictions and can lead to prosecution. Always confirm the program's authorisation language before scanning.
-
----
-
-#### Trace & Bloodhound (Investigation Services)
-
-**Agents:** 5.2 Trace, 5.3 Bloodhound
+**Agent:** 5.8 Course Generator (CLI, `run_course.py` — no left-panel button)
 
 **Income paths:**
 
-1. **Freelance investigation** — offer pre-employment due diligence, fraud verification, online persona verification, social media background checks.
-   - **Upwork** (https://upwork.com) — search "OSINT" or "due diligence". Typical rate $50–$200/hr.
-   - **Fiverr** — entry-level OSINT gigs $25–$150 per investigation.
-   - **PI directories** — partner with licensed private investigators (some jurisdictions require a PI licence).
-2. **Corporate intelligence consulting** — supply chain risk, third-party vendor checks, brand monitoring. $100–$500/hr at the higher end.
-3. **Journalism / fact-checking** — Bellingcat-style open-source investigation. Pay varies; some grants available.
-4. **Recovery services** — locate missing persons (lawful, with consent), recover stolen crypto traces, etc.
+1. **Sell the finished course** on Gumroad (0% listing fee, ~10% + payment
+   processing per sale) or Teachable (free tier caps transaction volume; paid
+   tiers from ~$39/month remove the per-sale fee).
+2. **Submit to Udemy** — free to list, but Udemy sets pricing/discounting and
+   takes a large revenue share (up to 63% on marketplace-driven sales; better
+   on instructor-referred sales).
+3. **Bundle with a book or Fiverr package** — e.g. a self-published manuscript
+   (§5.3) plus a companion course, sold together.
 
 **Workflow:**
 
-1. Use **Bloodhound** (5.3) for deep dossiers — image EXIF, domain pivots, person-of-interest mapping. Output is structured into 5 sections.
-2. Save the final report (built into the agent).
-3. Deliver to client with executive summary + appendix of sources.
+1. Run `python run_course.py --topic "..." --avatar heygen --voice elevenlabs`
+   for a real production run (mock avatar/voice for a free test pass first).
+2. Review the generated `output/courses/<course>/index.html` in a browser.
+3. Upload the video files to the chosen platform; use the generated lesson
+   scripts as the course description / curriculum copy.
 
-**Realistic earnings:**
+**Realistic earnings:** highly platform- and topic-dependent; a first course
+with no existing audience is typically **$0–$200 in month 1**. Course income
+is closer to service/self-publishing income (needs marketing/distribution)
+than to true passive royalties.
 
-- Hobbyist freelance: $200–$1,000/month.
-- Full-time corporate intelligence analyst: $60k–$150k/year.
-- Top PI / specialist: $200/hr+.
-
-**External costs:**
-
-- Most OSINT tools listed in the Bloodhound tool library are **free** (Sherlock, theHarvester, crt.sh, etc).
-- **Paid tier** services: Have I Been Pwned ($3.50/month for API), Hunter.io ($49/month), Spokeo ($24.95/month), Dehashed ($5/week), Pipl (enterprise pricing).
-- **Maltego** — free Community Edition, paid Pro tiers from $999/year.
-
-> ⚠️ **Privacy laws apply.** GDPR (EU), CCPA (California), and various stalking/harassment laws regulate what you can collect, store, and act on. Always operate within your jurisdiction and only investigate subjects where you have a lawful basis.
+**External costs:** ElevenLabs (paid tiers if used beyond the free quota),
+HeyGen/Synthesia per-minute avatar-video credits (skip both with
+`--avatar mock --voice mock` at zero cost, at the expense of quality).
 
 ---
 
-### 18.5 Required External Accounts & Tools
+### 18.3 Required External Accounts & Tools
 
 A compact reference of everything you need for each income path.
 
@@ -3040,18 +2234,11 @@ A compact reference of everything you need for each income path.
 | **Music (SoundExchange)** | Free | https://soundexchange.com |
 | **Music (ASCAP)** | $50 one-time | https://ascap.com |
 | **Music (BMI)** | Free | https://bmi.com |
-| **Trading (Interactive Brokers)** | Free, low spreads | https://interactivebrokers.com |
-| **Trading (Trading 212)** | Free | https://trading212.com |
-| **Crypto (Coinbase)** | Free | https://coinbase.com |
-| **Crypto (Kraken)** | Free | https://kraken.com |
-| **Sportsbook (DraftKings/FanDuel)** | Free | varies by US state |
-| **Bug Bounty (HackerOne)** | Free | https://hackerone.com |
-| **Bug Bounty (Bugcrowd)** | Free | https://bugcrowd.com |
-| **Bug Bounty (Intigriti)** | Free | https://intigriti.com |
-| **OSINT (Have I Been Pwned API)** | $3.50/mo | https://haveibeenpwned.com/API/Key |
-| **OSINT (Hunter.io)** | Free tier / $49 | https://hunter.io |
-| **OSINT (Dehashed)** | $5/week | https://dehashed.com |
-| **OSINT (Maltego Community)** | Free | https://maltego.com |
+| **Course (Gumroad)** | Free listing, ~10% + processing per sale | https://gumroad.com |
+| **Course (Teachable)** | Free tier, paid from ~$39/mo | https://teachable.com |
+| **Course (Udemy)** | Free to list, large revenue share | https://udemy.com |
+| **Course (ElevenLabs voice)** | Free tier, paid beyond quota | https://elevenlabs.io |
+| **Course (HeyGen avatar)** | Paid, per-minute credits | https://heygen.com |
 | **AI Provider (Anthropic)** | Pay-as-you-go | https://console.anthropic.com |
 | **AI Provider (OpenAI)** | Pay-as-you-go | https://platform.openai.com |
 | **AI Provider (DeepSeek)** | Pay-as-you-go (cheapest) | https://platform.deepseek.com |
@@ -3060,7 +2247,7 @@ A compact reference of everything you need for each income path.
 
 ---
 
-### 18.6 Realistic Earnings Expectations
+### 18.4 Realistic Earnings Expectations
 
 A summary of what you can realistically expect from each path, based on public data and platform averages.
 
@@ -3072,15 +2259,12 @@ A summary of what you can realistically expect from each path, based on public d
 | **Ghostwriting** | $0 (build samples) | $1k–$3k | $5k–$15k/mo |
 | **Music streaming (1 release)** | $5–$30 | $20–$100 | $200–$2k/mo (catalogue) |
 | **Audiobook royalties** | $20–$100 | $100–$500 | $500–$3k/mo (catalogue) |
-| **Trading (5–15% target)** | Variable | Variable | ~10%/year on bankroll |
-| **NFL props (disciplined)** | Variable | $50–$200 | $200–$1k/mo (small edge) |
-| **Bug bounty** | $0–$200 | $500–$2k | $5k–$30k/mo full-time |
-| **OSINT freelance** | $0–$200 | $500–$2k | $3k–$10k/mo specialist |
+| **Online course (Gumroad/Teachable/Udemy)** | $0–$200 | $100–$800 | $500–$5k/mo (established topic) |
 
-**Combined strategy** — most successful Sentinel AI users **stack 2–4 income paths**, e.g.:
+**Combined strategy** — most successful Create & Publish users **stack 2–4 income paths**, e.g.:
 
 - Fiverr logo gigs (immediate cash) + freelance web design (medium ticket) + self-published books (backlist/passive).
-- Bug bounty (skill-based) + OSINT freelance (similar skillset, different deliverable).
+- Self-published book (§18.1) + companion online course (§18.2) sold as a bundle.
 - Music releases (passive) + audiobook narration service (active).
 
 Diversification matters more than maximising a single channel. The agents are tools — your work, taste, and follow-through are what make money.

@@ -1,9 +1,21 @@
 # Atelier — what this fork is, and what still has to happen
 
-Forked from `sentinel_ai` on 2026-08-12, with its full history. Right now this
-is **a byte-for-byte copy of Sentinel** — nothing has been stripped yet. That is
-deliberate: the fork exists so the two can diverge in parallel without
-destabilising Sentinel while it is still being refactored.
+> **Status (as of the "Strip the security verticals" and "Rebrand the fork as
+> Create & Publish" commits):** steps 3, 5, and 6 below are done — the six
+> non-creative agents and `providers/` are deleted, the app is rebranded
+> (`APP_NAME`, `SINGLE_INSTANCE_KEY`, `DB_PATH` all say Create & Publish), it
+> has its own `scripts/install_app.sh` / `CreateAndPublish.spec`, and `lab_hub`
+> already has a `create_and_publish` launcher entry. `chat` was kept, not
+> dropped. Step 4 (tabbed UI reshape — Write / Audio / Web / Gigs) is **not**
+> done — the left panel is still the collapsible-category sidebar (General /
+> Creative / Gigs) inherited from Sentinel, not tabs; see README.md §3. The
+> rest of this file is the original plan, left as written for the record.
+
+Forked from `sentinel_ai` on 2026-08-12, with its full history. At the time
+this plan was written it was **a byte-for-byte copy of Sentinel** — nothing
+had been stripped yet. That was deliberate: the fork exists so the two can
+diverge in parallel without destabilising Sentinel while it is still being
+refactored.
 
 Rationale for the split, and why Atelier is tabbed rather than sidebar-driven,
 is in `docs/app_split.md` (carried over from Sentinel).
@@ -70,4 +82,5 @@ keeping the whole `normal_panel` machinery.
 
 ## Not yet done
 
-Everything above. This file is the checklist; nothing in it has been started.
+See the status note at the top of this file. Step 4 (the tabbed UI reshape)
+is the remaining open work in "Order of work".
