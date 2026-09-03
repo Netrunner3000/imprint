@@ -166,6 +166,7 @@ AGENT_PRETTY_NAMES = {
     "music": "Maestro", "webdesign": "Site Builder", "audiobook": "Narrator", }
 
 
+from ui.panels.base import AgentPanel
 from ui.workers import (
     ChatWorker, SubprocessWorker, ModelPullWorker, FiverrImageWorker, ShortsWorker,
 )
@@ -1980,13 +1981,14 @@ class GodAI(QWidget):
         sb.addWidget(self.author_task_box)
 
         sb.addWidget(QLabel("Provider:"))
-        self.author_provider_box = QComboBox()
-        self.author_provider_box.addItems(["ollama", "openai", "deepseek", "kimi", "gemini", "anthropic", "qwen"])
-        self.author_provider_box.setCurrentText("anthropic")
+        self.author_panel_base = AgentPanel(
+            self, "author", providers=tuple(["ollama", "openai", "deepseek", "kimi", "gemini", "anthropic", "qwen"]),
+            default_provider="anthropic")
+        self.author_provider_box = self.author_panel_base.provider_box
+        self.author_model_box = self.author_panel_base.model_box
         sb.addWidget(self.author_provider_box)
 
         sb.addWidget(QLabel("Model:"))
-        self.author_model_box = QComboBox()
         sb.addWidget(self.author_model_box)
 
         self.author_write_btn = QPushButton("✍️  Write")
@@ -2337,7 +2339,6 @@ class GodAI(QWidget):
 
         self.author_panel.hide()
 
-        self.author_provider_box.currentTextChanged.connect(self.author_load_models)
         self.author_load_models()
 
         self._author_on_content_type_changed(self.author_content_type_box.currentText())
@@ -2406,12 +2407,13 @@ class GodAI(QWidget):
         provider_row_container = QWidget()
         provider_row = FlowLayout(provider_row_container, spacing=6)
 
-        self.music_provider_box = QComboBox()
-        self.music_provider_box.addItems(["ollama", "openai", "deepseek", "kimi", "gemini", "anthropic", "qwen"])
-        self.music_provider_box.setCurrentText("anthropic")
+        self.music_panel_base = AgentPanel(
+            self, "music", providers=tuple(["ollama", "openai", "deepseek", "kimi", "gemini", "anthropic", "qwen"]),
+            default_provider="anthropic")
+        self.music_provider_box = self.music_panel_base.provider_box
+        self.music_model_box = self.music_panel_base.model_box
         provider_row.addWidget(self.music_provider_box)
 
-        self.music_model_box = QComboBox()
         self.music_model_box.setMinimumWidth(200)
         provider_row.addWidget(self.music_model_box)
 
@@ -2526,7 +2528,6 @@ class GodAI(QWidget):
 
         self.music_panel.hide()
 
-        self.music_provider_box.currentTextChanged.connect(self.music_load_models)
         self.music_load_models()
 
     # ── NFL Prop Bet Panel ───────────────────────────────────────────────────
@@ -2582,13 +2583,14 @@ class GodAI(QWidget):
         provider_row_container = QWidget()
         provider_row = FlowLayout(provider_row_container, spacing=6)
         provider_row.addWidget(QLabel("Provider:"))
-        self.webdesign_provider_box = QComboBox()
-        self.webdesign_provider_box.addItems(["ollama", "openai", "deepseek", "kimi", "gemini", "anthropic", "qwen"])
-        self.webdesign_provider_box.setCurrentText("anthropic")
+        self.webdesign_panel_base = AgentPanel(
+            self, "webdesign", providers=tuple(["ollama", "openai", "deepseek", "kimi", "gemini", "anthropic", "qwen"]),
+            default_provider="anthropic")
+        self.webdesign_provider_box = self.webdesign_panel_base.provider_box
+        self.webdesign_model_box = self.webdesign_panel_base.model_box
         provider_row.addWidget(self.webdesign_provider_box)
 
         provider_row.addWidget(QLabel("Model:"))
-        self.webdesign_model_box = QComboBox()
         self.webdesign_model_box.setMinimumWidth(200)
         provider_row.addWidget(self.webdesign_model_box)
 
@@ -2687,7 +2689,6 @@ class GodAI(QWidget):
 
         self.webdesign_panel.hide()
 
-        self.webdesign_provider_box.currentTextChanged.connect(self.webdesign_load_models)
         self.webdesign_load_models()
 
 
@@ -2695,29 +2696,8 @@ class GodAI(QWidget):
     # ── Wi-Fi handlers ───────────────────────────────────────────────────────
     # ── Web Design handlers ──────────────────────────────────────────────────
     def webdesign_load_models(self):
-        provider = self.webdesign_provider_box.currentText()
-        self.webdesign_model_box.clear()
-        try:
-            if provider == "ollama":
-                models = self.ollama.list_models()
-            elif provider == "openai":
-                models = self.openai.list_models()
-            elif provider == "deepseek":
-                models = self.deepseek.list_models()
-            elif provider == "kimi":
-                models = self.kimi.list_models()
-            elif provider == "gemini":
-                models = self.gemini.list_models()
-            elif provider == "anthropic":
-                models = self.anthropic.list_models()
-            elif provider == "qwen":
-                models = self.qwen.list_models()
-            else:
-                models = []
-            for m in models:
-                self.webdesign_model_box.addItem(m)
-        except Exception as exc:
-            self._note_failure("webdesign: load models", exc, self.webdesign_model_box)
+        """Kept as a method so existing call sites stay put."""
+        self.webdesign_panel_base.load_models()
 
     def webdesign_generate(self):
         page_type = self.webdesign_type_box.currentText()
@@ -2920,13 +2900,14 @@ class GodAI(QWidget):
         provider_row_container = QWidget()
         provider_row = FlowLayout(provider_row_container, spacing=6)
         provider_row.addWidget(QLabel("Text Provider:"))
-        self.fiverr_provider_box = QComboBox()
-        self.fiverr_provider_box.addItems(["anthropic", "openai", "deepseek", "kimi", "gemini", "qwen", "ollama"])
-        self.fiverr_provider_box.setCurrentText("anthropic")
+        self.fiverr_panel_base = AgentPanel(
+            self, "fiverr", providers=tuple(["anthropic", "openai", "deepseek", "kimi", "gemini", "qwen", "ollama"]),
+            default_provider="anthropic")
+        self.fiverr_provider_box = self.fiverr_panel_base.provider_box
+        self.fiverr_model_box = self.fiverr_panel_base.model_box
         provider_row.addWidget(self.fiverr_provider_box)
 
         provider_row.addWidget(QLabel("Model:"))
-        self.fiverr_model_box = QComboBox()
         self.fiverr_model_box.setMinimumWidth(180)
         provider_row.addWidget(self.fiverr_model_box, 1)
         brief_layout.addWidget(provider_row_container, 4, 0, 1, 4)
@@ -3052,34 +3033,12 @@ class GodAI(QWidget):
         layout.addWidget(results_splitter)
 
         self.fiverr_panel.hide()
-        self.fiverr_provider_box.currentTextChanged.connect(self.fiverr_load_models)
         self.fiverr_load_models()
 
     # ── Fiverr handlers ──────────────────────────────────────────────────────
     def fiverr_load_models(self):
-        provider = self.fiverr_provider_box.currentText()
-        self.fiverr_model_box.clear()
-        try:
-            if provider == "ollama":
-                models = self.ollama.list_models()
-            elif provider == "openai":
-                models = self.openai.list_models()
-            elif provider == "deepseek":
-                models = self.deepseek.list_models()
-            elif provider == "kimi":
-                models = self.kimi.list_models()
-            elif provider == "gemini":
-                models = self.gemini.list_models()
-            elif provider == "anthropic":
-                models = self.anthropic.list_models()
-            elif provider == "qwen":
-                models = self.qwen.list_models()
-            else:
-                models = []
-            for m in models:
-                self.fiverr_model_box.addItem(m)
-        except Exception as exc:
-            self._note_failure("fiverr: load models", exc, self.fiverr_model_box)
+        """Kept as a method so existing call sites stay put."""
+        self.fiverr_panel_base.load_models()
 
     def _fiverr_get_brief(self) -> dict:
         return {
@@ -3307,29 +3266,8 @@ class GodAI(QWidget):
                 item.widget().deleteLater()
 
     def author_load_models(self):
-        provider = self.author_provider_box.currentText()
-        self.author_model_box.clear()
-        try:
-            if provider == "ollama":
-                models = self.ollama.list_models()
-            elif provider == "openai":
-                models = self.openai.list_models()
-            elif provider == "deepseek":
-                models = self.deepseek.list_models()
-            elif provider == "kimi":
-                models = self.kimi.list_models()
-            elif provider == "gemini":
-                models = self.gemini.list_models()
-            elif provider == "anthropic":
-                models = self.anthropic.list_models()
-            elif provider == "qwen":
-                models = self.qwen.list_models()
-            else:
-                models = []
-            for m in models:
-                self.author_model_box.addItem(m)
-        except Exception as exc:
-            self._note_failure("author: load models", exc, self.author_model_box)
+        """Kept as a method so existing call sites stay put."""
+        self.author_panel_base.load_models()
 
     def _author_on_content_type_changed(self, content_type: str):
         fiction_tasks = [
@@ -4074,13 +4012,16 @@ class GodAI(QWidget):
         sb.addWidget(self.manuscript_query_input)
 
         sb.addWidget(QLabel("Provider:"))
-        self.manuscript_provider_box = QComboBox()
-        self.manuscript_provider_box.addItems(["anthropic", "openai", "deepseek", "kimi", "gemini", "qwen"])
-        self.manuscript_provider_box.currentTextChanged.connect(self.manuscript_load_models)
+        # No ollama: the manuscript registry row restricts providers, and a box
+        # offering one the validator refuses is a dead option.
+        self.manuscript_panel_base = AgentPanel(
+            self, "manuscript",
+            providers=("anthropic", "openai", "deepseek", "kimi", "gemini", "qwen"))
+        self.manuscript_provider_box = self.manuscript_panel_base.provider_box
+        self.manuscript_model_box = self.manuscript_panel_base.model_box
         sb.addWidget(self.manuscript_provider_box)
 
         sb.addWidget(QLabel("Model:"))
-        self.manuscript_model_box = QComboBox()
         sb.addWidget(self.manuscript_model_box)
 
         self.manuscript_ask_btn = QPushButton("💬  Ask")
@@ -4407,25 +4348,8 @@ class GodAI(QWidget):
 
     # ── Manuscript handlers ───────────────────────────────────────────────────
     def manuscript_load_models(self):
-        provider = self.manuscript_provider_box.currentText()
-        self.manuscript_model_box.clear()
-        try:
-            if provider == "anthropic":
-                models = self.anthropic.list_models()
-            elif provider == "openai":
-                models = self.openai.list_models()
-            elif provider == "deepseek":
-                models = self.deepseek.list_models()
-            elif provider == "kimi":
-                models = self.kimi.list_models()
-            elif provider == "gemini":
-                models = self.gemini.list_models()
-            else:
-                models = []
-            for m in models:
-                self.manuscript_model_box.addItem(m)
-        except Exception as exc:
-            self._note_failure("manuscript: load models", exc, self.manuscript_model_box)
+        """Kept as a method so existing call sites stay put."""
+        self.manuscript_panel_base.load_models()
 
     def _refresh_connections_status(self):
         """Shows which 3rd-party API keys are actually configured (checked from the running
@@ -4995,28 +4919,8 @@ class GodAI(QWidget):
 
     # ── Music handlers ────────────────────────────────────────────────────────
     def music_load_models(self):
-        provider = self.music_provider_box.currentText()
-        self.music_model_box.clear()
-        try:
-            if provider == "ollama":
-                models = self.ollama.list_models()
-            elif provider == "openai":
-                models = self.openai.list_models()
-            elif provider == "deepseek":
-                models = self.deepseek.list_models()
-            elif provider == "kimi":
-                models = self.kimi.list_models()
-            elif provider == "gemini":
-                models = self.gemini.list_models()
-            elif provider == "anthropic":
-                models = self.anthropic.list_models()
-            elif provider == "qwen":
-                models = self.qwen.list_models()
-            else:
-                models = []
-        except Exception:
-            models = []
-        self.music_model_box.addItems(models)
+        """Kept as a method so existing call sites stay put."""
+        self.music_panel_base.load_models()
 
     def music_analyse(self):
         description = self.music_query_input.toPlainText().strip()
