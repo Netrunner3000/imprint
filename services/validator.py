@@ -1,5 +1,18 @@
 from dataclasses import dataclass
+from decimal import Decimal
+
 from services.registry import Registry
+
+
+def _money(value: float | int | str) -> Decimal:
+    """Exact decimal for a euro amount.
+
+    Via `str` on purpose: `Decimal(0.1)` keeps the binary error the float
+    already carries, while `Decimal(str(0.1))` is exactly 0.1. Without this,
+    `1.00 - 0.90` is 0.09999999999999998 and a request estimated at exactly the
+    remaining budget is refused — safe, but wrong, and confusing to hit.
+    """
+    return Decimal(str(value))
 
 
 @dataclass
@@ -67,10 +80,13 @@ class Validator:
                     f"API access for '{provider}' is not enabled. Enable it in the API Permissions panel."
                 )
 
+        # 7-9 compare money, so they work in Decimal rather than float.
+        estimated = _money(estimated_cost)
+
         # 7. Per-agent budget (daily)
         agent_budget = self.registry.get_agent_budget(agent_name)
         if agent_budget is not None and provider != "ollama":
-            if estimated_cost > agent_budget:
+            if estimated > _money(agent_budget):
                 return ValidationResult(
                     False,
                     f"Agent '{agent_name}' has a budget cap of €{agent_budget:.2f}/day. "
@@ -79,8 +95,8 @@ class Validator:
 
         # 8. Session budget
         if provider != "ollama":
-            session_remaining = session_budget - session_cost
-            if estimated_cost > session_remaining:
+            session_remaining = _money(session_budget) - _money(session_cost)
+            if estimated > session_remaining:
                 return ValidationResult(
                     False,
                     f"Session budget exceeded. "
@@ -89,8 +105,8 @@ class Validator:
 
         # 9. Daily budget
         if provider != "ollama":
-            daily_remaining = daily_budget - daily_cost
-            if estimated_cost > daily_remaining:
+            daily_remaining = _money(daily_budget) - _money(daily_cost)
+            if estimated > daily_remaining:
                 return ValidationResult(
                     False,
                     f"Daily budget exceeded. "

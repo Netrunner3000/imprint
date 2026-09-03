@@ -94,12 +94,18 @@ class TestValidatorEdgeCases:
         result = validate(provider="somenewprovider", api_permissions={})
         assert result.allowed is False
 
-    def test_budget_boundary_fails_safe_under_float_error(self):
-        # 1.00 - 0.90 == 0.09999999999999998 in binary floating point, so a
-        # request estimated at exactly 0.10 is refused rather than allowed.
-        # Pinned deliberately: erring towards blocking never overspends. A
-        # future switch to Decimal should make this flip, and this test say so.
+    def test_budget_boundary_is_exact_under_decimal(self):
+        # This is the flip the old version of this test predicted. In float,
+        # 1.00 - 0.90 == 0.09999999999999998, so a request estimated at exactly
+        # the remaining 0.10 was refused. Validator now compares in Decimal, so
+        # spending exactly the remaining budget is allowed.
         result = validate(session_cost=0.90, session_budget=1.00, estimated_cost=0.10)
+        assert result.allowed is True
+
+    def test_budget_boundary_blocks_one_cent_over(self):
+        # The other side of the boundary must still block — Decimal made the
+        # comparison exact, not lenient.
+        result = validate(session_cost=0.90, session_budget=1.00, estimated_cost=0.11)
         assert result.allowed is False
 
     def test_already_over_session_budget_blocks_further_spend(self):
@@ -202,18 +208,55 @@ def win(_window):
     _window.session_cost_total = 0.0
     _window.session_request_count = 0
     _window._pending_requests = {}
+    _window._pending_by_agent = {}
     return _window
 
 
 class TestAuthorizeRequest:
 
-    def test_authorised_request_returns_true_and_opens_a_run(self, win):
-        assert win.authorize_request("author", "openai", "gpt-4o", "hello") is True
+    def test_authorised_request_returns_a_token_and_opens_a_run(self, win):
+        # Truthy so `if not authorize_request(...)` still guards, but a token
+        # rather than True so a caller can name the exact request later.
+        token = win.authorize_request("author", "openai", "gpt-4o", "hello")
+        assert token
+        assert token in win._pending_requests
         assert len(win.run_logger.started) == 1
 
     def test_authorised_request_stashes_context_for_recording(self, win):
-        win.authorize_request("author", "openai", "gpt-4o", "hello")
-        assert "author" in win._pending_requests
+        token = win.authorize_request("author", "openai", "gpt-4o", "hello")
+        assert win._pending_requests[token]["agent"] == "author"
+        assert win._pending_by_agent["author"] == [token]
+
+    def test_concurrent_runs_of_one_agent_keep_separate_contexts(self, win):
+        # The bug this keying fixes: both runs used to land on the same
+        # "author" key, so the second overwrote the first and the first run's
+        # run_id was lost — its run log entry could never be closed.
+        first = win.authorize_request("author", "openai", "gpt-4o", "one")
+        second = win.authorize_request("author", "openai", "gpt-4o", "two")
+        assert first != second
+        assert len(win._pending_requests) == 2
+        assert win._pending_requests[first]["prompt"] == "one"
+        assert win._pending_requests[second]["prompt"] == "two"
+
+    def test_both_concurrent_runs_close_their_own_run_log_entry(self, win):
+        first = win.authorize_request("author", "openai", "gpt-4o", "one")
+        second = win.authorize_request("author", "openai", "gpt-4o", "two")
+        win.abandon_request(second, reason="error")
+        win.abandon_request(first, reason="error")
+        finished = {f["run_id"] for f in win.run_logger.finished}
+        expected = {win.run_logger.started[0]["run_id"],
+                    win.run_logger.started[1]["run_id"]}
+        assert finished == expected
+        assert win._pending_requests == {}
+        assert win._pending_by_agent == {}
+
+    def test_agent_name_still_resolves_to_the_oldest_request(self, win):
+        # The 11 existing call sites pass an agent name, not a token.
+        first = win.authorize_request("author", "openai", "gpt-4o", "one")
+        win.authorize_request("author", "openai", "gpt-4o", "two")
+        win.abandon_request("author")
+        assert first not in win._pending_requests
+        assert len(win._pending_requests) == 1
 
     def test_blocked_request_returns_false(self, win):
         win.validator = Validator(FakeRegistry(agent_enabled=False))
@@ -248,7 +291,7 @@ class TestAuthorizeRequest:
             raise AssertionError("local model must not prompt for API confirmation")
 
         monkeypatch.setattr(QMessageBox, "question", explode)
-        assert win.authorize_request("author", "ollama", "llama3", "hi") is True
+        assert win.authorize_request("author", "ollama", "llama3", "hi")
 
 
 class TestRecordRequest:
@@ -354,24 +397,28 @@ class TestAbandonRequest:
 
 
 class TestConcurrentAgents:
-    """_pending_requests is keyed by agent name — TODO.md flags this as a known
-    limit. These pin the behaviour that is actually relied on today."""
+    """_pending_requests is keyed by request token, so concurrent runs — of one
+    agent or of several — each keep their own context."""
 
     def test_two_different_agents_do_not_interfere(self, win):
         win.authorize_request("author", "openai", "gpt-4o", "a-prompt")
         win.authorize_request("manuscript", "openai", "gpt-4o", "m-prompt")
         win.record_request("author", "a-response")
-        assert "manuscript" in win._pending_requests
+        assert "manuscript" in win._pending_by_agent
         assert win.history.saved[0]["agent"] == "author"
         win.record_request("manuscript", "m-response")
         assert {s["agent"] for s in win.history.saved} == {"author", "manuscript"}
 
-    def test_same_agent_twice_overwrites_the_first_context(self, win):
-        # Documented limitation: panels disable their run button so this is not
-        # reachable today. If that ever changes, this test should start failing.
+    def test_same_agent_twice_records_both_runs(self, win):
+        # This is the case the old agent-name keying lost: the second authorise
+        # overwrote the first, so only one run was ever billed and the other's
+        # run log entry stayed open. Both must now survive.
         win.authorize_request("author", "openai", "gpt-4o", "first")
         win.authorize_request("author", "openai", "gpt-4o", "second")
-        win.record_request("author", "response")
-        assert len(win.usage_tracker.logged) == 1
-        assert win.usage_tracker.logged[0]["agent"] == "author"
+        win.record_request("author", "first-response")
+        win.record_request("author", "second-response")
+        assert len(win.usage_tracker.logged) == 2
+        assert [s["response"] for s in win.history.saved] == [
+            "first-response", "second-response"]
         assert win._pending_requests == {}
+        assert win._pending_by_agent == {}

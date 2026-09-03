@@ -1,5 +1,6 @@
 import json
 import os
+import uuid
 import re
 import subprocess
 import sys
@@ -105,30 +106,6 @@ SUPPORTED_EBOOKS = {".pdf", ".epub", ".txt", ".mobi"}
 RECOMMENDED_COLOR = "#ff5555"
 
 AGENT_RECOMMENDATIONS = {
-    "osint": {
-        "provider": "deepseek", "model": "deepseek-v4-flash",
-        "reason": "Light, high-volume lookups and summaries — DeepSeek's flash tier "
-                  "gives solid structured output at the lowest cost per query.",
-    },
-    "osint_heavy": {
-        "provider": "anthropic", "model": "claude-opus-5",
-        "reason": "Deep multi-source dossiers need the strongest long-context "
-                  "synthesis. Low volume, so the higher token price is worth it.",
-    },
-    "wifi": {
-        "provider": "anthropic", "model": "claude-sonnet-5",
-        "reason": "Generating correct Kali/aircrack command lines rewards precision; "
-                  "Sonnet is accurate on tooling syntax without Opus pricing.",
-    },
-    "bug_bounty": {
-        "provider": "anthropic", "model": "claude-sonnet-5",
-        "reason": "Vulnerability triage plus a readable HackerOne write-up — Sonnet "
-                  "handles both the security reasoning and the report prose.",
-    },
-    "nfl_bet": {
-        "provider": "anthropic", "model": "claude-sonnet-5",
-        "reason": "Prop analysis needs reliable arithmetic for EV and projections.",
-    },
     "fiverr": {
         "provider": "openai", "model": "gpt-4o-mini",
         "reason": "Gig copy sits next to DALL·E logo generation — staying on OpenAI "
@@ -154,11 +131,6 @@ AGENT_RECOMMENDATIONS = {
         "reason": "Strongest HTML/CSS/JS generation; produces working responsive "
                   "markup in one pass more often than the cheaper models.",
     },
-    "manager": {
-        "provider": "anthropic", "model": "claude-sonnet-5",
-        "reason": "Forge writes real agent source files — code generation quality "
-                  "matters more here than cost.",
-    },
     "audiobook": {
         "provider": "openai", "model": "tts-1", "voice": "alloy",
         "reason": "Narrator is hard-wired to OpenAI TTS. Alloy is the most neutral, "
@@ -169,17 +141,11 @@ AGENT_RECOMMENDATIONS = {
 # agent key -> (provider box attribute, model box attribute)
 AGENT_SETUP_WIDGETS = {
     "chat":        ("provider_box",             "model_box"),
-    "osint":       ("osint_provider_box",       "osint_model_box"),
-    "osint_heavy": ("osint_heavy_provider_box", "osint_heavy_model_box"),
-    "wifi":        ("wifi_provider_box",        "wifi_model_box"),
-    "bug_bounty":  ("bb_provider_box",          "bb_model_box"),
-    "nfl_bet":     ("nfl_bet_provider_box",     "nfl_bet_model_box"),
     "fiverr":      ("fiverr_provider_box",      "fiverr_model_box"),
     "author":      ("author_provider_box",      "author_model_box"),
     "manuscript":  ("manuscript_provider_box",  "manuscript_model_box"),
     "music":       ("music_provider_box",       "music_model_box"),
     "webdesign":   ("webdesign_provider_box",   "webdesign_model_box"),
-    "manager":     ("manager_provider_box",     "manager_model_box"),
 }
 
 # agent key -> the panel's own "reload the model list" method, called after the
@@ -187,26 +153,17 @@ AGENT_SETUP_WIDGETS = {
 # try to select the recommended model in it.
 AGENT_MODEL_LOADERS = {
     "chat":        "load_provider_models",
-    "osint":       "osint_load_models",
-    "osint_heavy": "osint_heavy_load_models",
-    "wifi":        "wifi_load_models",
-    "bug_bounty":  "bb_load_models",
-    "nfl_bet":     "nfl_bet_load_models",
     "fiverr":      "fiverr_load_models",
     "author":      "author_load_models",
     "manuscript":  "manuscript_load_models",
     "music":       "music_load_models",
     "webdesign":   "webdesign_load_models",
-    "manager":     "manager_load_models",
 }
 
 AGENT_PRETTY_NAMES = {
-    "chat": "Chat", "osint": "Trace", "osint_heavy": "Bloodhound",
-    "wifi": "Beacon", "bug_bounty": "Bug Spray",
-    "nfl_bet": "Playmaker", "fiverr": "Atelier",
+    "chat": "Chat", "fiverr": "Atelier",
     "author": "Manuscript", "manuscript": "Publisher",
-    "music": "Maestro", "webdesign": "Site Builder", "audiobook": "Narrator",
-    "manager": "Forge", }
+    "music": "Maestro", "webdesign": "Site Builder", "audiobook": "Narrator", }
 
 
 from ui.workers import (
@@ -237,7 +194,7 @@ class GodAI(QWidget):
         })
         self.agents_config = self.load_json(
             AGENTS_FILE,
-            {"agents": ["chat", "writing", "coding", "osint", "audiobook"]},
+            {"agents": ["chat", "audiobook"]},
         )
         self.settings = self.load_json(SETTINGS_FILE, {})
 
@@ -258,8 +215,13 @@ class GodAI(QWidget):
         self.registry = Registry()
         self.validator = Validator(self.registry)
         self.run_logger = RunLogger()
-        # agent name -> context for an in-flight request (see authorize_request)
-        self._pending_requests = {}
+        # request token -> context for an in-flight request (see authorize_request).
+        # Keyed by token, not agent name: two concurrent runs of one agent used to
+        # overwrite each other here, losing the first run's run_id so its entry in
+        # the run log never closed. _pending_by_agent keeps the per-agent FIFO the
+        # agent-name API resolves through.
+        self._pending_requests: dict[str, dict] = {}
+        self._pending_by_agent: dict[str, list[str]] = {}
 
         self.author_worker: Optional[ChatWorker] = None
         self._last_author_response: str = ""
@@ -276,22 +238,8 @@ class GodAI(QWidget):
         self._calendar_slots: list = []
         self.music_worker: Optional[ChatWorker] = None
         self._last_music_response: str = ""
-        self.nfl_bet_worker: Optional[ChatWorker] = None
-        self._last_nfl_bet_response: str = ""
-        self.bug_bounty_worker: Optional[ChatWorker] = None
-        self._last_bb_response: str = ""
-        self.nfl_model_worker: Optional[ChatWorker] = None
-        self._last_nfl_model_response: str = ""
         self.webdesign_worker: Optional[ChatWorker] = None
         self._last_webdesign_response: str = ""
-        self.osint_worker: Optional[ChatWorker] = None
-        self.wifi_worker: Optional[ChatWorker] = None
-        self.wifi_scan_worker: Optional[SubprocessWorker] = None
-        self._last_wifi_response: str = ""
-        self._wifi_detected_adapter: dict = {}
-        self.osint_heavy_worker: Optional[ChatWorker] = None
-        self._last_osint_heavy_response: str = ""
-        self._osint_heavy_image_path: str = ""
         self.fiverr_image_worker: Optional[FiverrImageWorker] = None
         self.fiverr_text_worker: Optional[ChatWorker] = None
         self._fiverr_image_paths: list = []
@@ -307,7 +255,6 @@ class GodAI(QWidget):
         }
 
         self.current_messages = []
-        self.last_raw_osint = ""
 
         self.session_cost_total = 0.0
         self.session_request_count = 0
@@ -733,15 +680,6 @@ class GodAI(QWidget):
                 "reason": "Audiobook conversion uses OpenAI TTS only."
             }
 
-        if agent == "nfl_bet":
-            if self.allow_anthropic_checkbox.isChecked():
-                return {"mode": "Hybrid allowed", "provider": "anthropic", "model": "claude-sonnet-4-6", "reason": "NFL props; Claude Sonnet handles structured sports data analysis well."}
-            if self.allow_openai_checkbox.isChecked():
-                return {"mode": "Hybrid allowed", "provider": "openai", "model": "gpt-4o-mini", "reason": "NFL props; GPT-4o-mini is reliable for sports analytics reasoning."}
-            if self.allow_deepseek_checkbox.isChecked():
-                return {"mode": "Hybrid allowed", "provider": "deepseek", "model": "deepseek-chat", "reason": "NFL props; DeepSeek handles structured analytical output."}
-            return {"mode": "Local only", "provider": "ollama", "model": self.model_box.currentText(), "reason": "NFL props work best with a cloud model, but running locally."}
-
         if any(k in text for k in ["debug", "error", "traceback", "python", "code", "refactor", "function", "class"]):
             if self.allow_anthropic_checkbox.isChecked():
                 return {"mode": "Hybrid allowed", "provider": "anthropic", "model": "claude-sonnet-4-6", "reason": "Coding/debugging task; Claude Sonnet is excellent for code analysis and generation."}
@@ -762,11 +700,14 @@ class GodAI(QWidget):
                 return {"mode": "Hybrid allowed", "provider": "gemini", "model": "gemini-1.5-flash", "reason": "Writing task; Gemini is a good API fallback."}
             return {"mode": "Local only", "provider": "ollama", "model": self.model_box.currentText(), "reason": "Writing task detected, but APIs are not enabled. Using local model."}
 
-        if any(k in text for k in ["osint", "investigate", "research", "summarize sources", "analysis", "report"]):
+        # Keyword branch, not an agent branch: "research", "analysis" and "report"
+        # are ordinary asks in a publishing app (market research, sales analysis),
+        # so this still fires. Only the OSINT wording left with the security half.
+        if any(k in text for k in ["investigate", "research", "summarize sources", "analysis", "report"]):
             if self.allow_kimi_checkbox.isChecked():
-                return {"mode": "Hybrid allowed", "provider": "kimi", "model": "kimi-k2.7-code", "reason": "Analysis/OSINT-style task; Kimi's strong tool-use/agentic performance suits multi-step investigation."}
+                return {"mode": "Hybrid allowed", "provider": "kimi", "model": "kimi-k2.7-code", "reason": "Research/analysis task; Kimi's strong tool-use performance suits multi-step work."}
             if self.allow_deepseek_checkbox.isChecked():
-                return {"mode": "Hybrid allowed", "provider": "deepseek", "model": "deepseek-chat", "reason": "Analysis/OSINT-style task; DeepSeek is recommended."}
+                return {"mode": "Hybrid allowed", "provider": "deepseek", "model": "deepseek-chat", "reason": "Research/analysis task; DeepSeek is recommended."}
             if self.allow_gemini_checkbox.isChecked():
                 return {"mode": "Hybrid allowed", "provider": "gemini", "model": "gemini-1.5-flash", "reason": "Analysis task; Gemini is suitable for broad summarization."}
             return {"mode": "Local only", "provider": "ollama", "model": self.model_box.currentText(), "reason": "Analysis task detected, but APIs are not enabled. Using local model."}
@@ -1267,18 +1208,14 @@ class GodAI(QWidget):
         agents_layout.setSpacing(2)
 
         icons = {
-            "chat": "💬", "osint": "👹", "osint_heavy": "🔍",
-            "audiobook": "🎧", "manager": "🏗",
+            "chat": "💬", "audiobook": "🎧",
             "author": "✍️", "webdesign": "🎨",
-            "music": "🎵", "nfl_bet": "🏈", "wifi": "📡", "fiverr": "💼",
-            "bug_bounty": "🐛", "manuscript": "📚",
+            "music": "🎵", "fiverr": "💼", "manuscript": "📚",
         }
         labels = {
-            "chat": "Chat", "osint": "Trace", "osint_heavy": "Bloodhound",
-            "audiobook": "Narrator", "manager": "Forge",
+            "chat": "Chat", "audiobook": "Narrator",
             "author": "Manuscript", "webdesign": "Site Builder",
-            "music": "Maestro", "nfl_bet": "Playmaker", "wifi": "Beacon",
-            "fiverr": "Atelier", "bug_bounty": "Bug Spray",
+            "music": "Maestro", "fiverr": "Atelier",
             # Without this the sidebar fell back to name.capitalize() and showed a
             # second "Manuscript" entry, colliding with the author agent. Every
             # other surface (header title, registry) calls this one Publisher.
@@ -1491,7 +1428,7 @@ class GodAI(QWidget):
 
         self.agent_box = QComboBox()
         agent_items = self.agents_config.get("agents", [])
-        for extra in ("manager", "author"):
+        for extra in ("author",):
             if extra not in agent_items:
                 agent_items = list(agent_items) + [extra]
         self.agent_box.addItems(agent_items)
@@ -6288,8 +6225,10 @@ class GodAI(QWidget):
         is not a registry entry: pass that as `label` instead, so it still shows
         up in the run log and Saved Chats without failing the tool check.
 
-        On success the context record_request() needs is stashed per agent, so a
-        caller only has to pass the response back later.
+        On success the context record_request() needs is stashed under a fresh
+        request token, which is returned. A caller may hand that token back to
+        record_request()/abandon_request(); passing the agent name still works
+        and resolves to that agent's oldest outstanding request.
         """
         estimated_cost, approx_tokens = self.estimate_chat_cost(provider, model, prompt)
 
@@ -6312,7 +6251,10 @@ class GodAI(QWidget):
             return False
 
         descriptor = label or tool or "-"
-        self._pending_requests[agent] = {
+        # Own token rather than the run id: run_logger.start() may return an
+        # empty value, and the success signal must stay truthy.
+        token = uuid.uuid4().hex
+        self._pending_requests[token] = {
             "agent": agent,
             "tool": descriptor,
             "provider": provider,
@@ -6328,17 +6270,41 @@ class GodAI(QWidget):
                 prompt_summary=prompt,
             ),
         }
-        return True
+        self._pending_by_agent.setdefault(agent, []).append(token)
+        return token
+
+    def _resolve_request(self, handle, pop=False):
+        """Find one in-flight request from a token or an agent name.
+
+        An agent name resolves to that agent's oldest outstanding request, which
+        is the right one for the single-flight panels: they authorise, run, then
+        record before starting again.
+        """
+        token = handle if handle in self._pending_requests else None
+        if token is None:
+            queue = self._pending_by_agent.get(handle) or []
+            token = queue[0] if queue else None
+        if token is None:
+            return None
+        context = self._pending_requests[token]
+        if pop:
+            del self._pending_requests[token]
+            queue = self._pending_by_agent.get(context["agent"])
+            if queue and token in queue:
+                queue.remove(token)
+                if not queue:
+                    del self._pending_by_agent[context["agent"]]
+        return context
 
     def note_request_usage(self, agent, usage):
         """Real token counts from the worker, when it reports them."""
-        context = self._pending_requests.get(agent)
+        context = self._resolve_request(agent)
         if context is not None:
             context["usage"] = usage
 
     def record_request(self, agent, response, messages=None):
         """Bill, save and close out a request authorised by authorize_request()."""
-        context = self._pending_requests.pop(agent, None)
+        context = self._resolve_request(agent, pop=True)
         if context is None:          # never authorised (or already recorded)
             return
 
@@ -6381,7 +6347,7 @@ class GodAI(QWidget):
 
     def abandon_request(self, agent, reason="error"):
         """Drop a request that failed, so it is not billed and the log closes."""
-        context = self._pending_requests.pop(agent, None)
+        context = self._resolve_request(agent, pop=True)
         if context and context["run_id"]:
             self.run_logger.finish(run_id=context["run_id"], status=reason)
 
@@ -6822,7 +6788,6 @@ class GodAI(QWidget):
 
     def new_chat(self):
         self.current_messages = []
-        self.last_raw_osint = ""
         self.input_box.clear()
         self.output_box.clear()
         self.hide_output_area()
@@ -6843,12 +6808,10 @@ class GodAI(QWidget):
 
         # Map agent key → doc filename (same as the key for most)
         doc_file_map = {
-            "chat": "chat", "osint": "osint", "osint_heavy": "osint_heavy",
-            "wifi": "wifi", "bug_bounty": "bug_bounty",
-            "nfl_bet": "nfl_bet", "fiverr": "fiverr",
+            "chat": "chat", "fiverr": "fiverr",
             "author": "author", "music": "music",
             "webdesign": "webdesign", "audiobook": "audiobook",
-            "manager": "manager", "manuscript": "manuscript",
+            "manuscript": "manuscript",
         }
         doc_key = doc_file_map.get(agent_name, agent_name)
 
@@ -6955,12 +6918,9 @@ class GodAI(QWidget):
 
         # Build dialog
         agent_titles = {
-            "chat": "CHAT", "osint": "TRACE", "osint_heavy": "BLOODHOUND",
-            "wifi": "BEACON", "bug_bounty": "BUG SPRAY",
-            "nfl_bet": "PLAYMAKER", "fiverr": "ATELIER",
+            "chat": "CHAT", "fiverr": "ATELIER",
             "author": "MANUSCRIPT", "manuscript": "PUBLISHER",
-            "music": "MAESTRO", "webdesign": "SITE BUILDER", "audiobook": "NARRATOR",
-            "manager": "FORGE", }
+            "music": "MAESTRO", "webdesign": "SITE BUILDER", "audiobook": "NARRATOR", }
         title = agent_titles.get(agent_name, agent_name.upper())
 
         dialog = QDialog(self)

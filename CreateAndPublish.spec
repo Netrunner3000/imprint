@@ -12,8 +12,6 @@ hiddenimports = [
     "tiktoken_ext",
     "tiktoken_ext.openai_public",
     "services.narrator.converter",   # invoked via the --narrator-worker sentinel
-    "whois",                         # lazy import in providers/domain_lookup
-    "dns", "dns.resolver",           # lazy import in providers/domain_lookup
 ]
 
 # SDKs / libs with data files or plugin discovery that static analysis can miss.
