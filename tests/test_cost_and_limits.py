@@ -251,3 +251,59 @@ def test_cost_scales_with_token_count(tracker):
 
 def test_cost_is_never_negative(tracker):
     assert tracker.calculate_cost_eur("openai", "gpt-4o", 0, 0) >= 0.0
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Prompt caching — cached input tokens bill at a discounted rate
+# ─────────────────────────────────────────────────────────────────────────────
+def test_cached_input_is_cheaper_than_uncached(tracker):
+    """The whole point of the cached rate: repeated context costs less."""
+    full = tracker.calculate_cost_eur("kimi", "kimi-k2.7-code", 10**6, 0)
+    cached = tracker.calculate_cost_eur("kimi", "kimi-k2.7-code", 10**6, 0,
+                                        cached_input_tokens=10**6)
+    assert 0 < cached < full
+
+
+def test_cached_tokens_default_to_the_full_rate(tracker):
+    """Omitting the argument must not change what an existing caller is billed."""
+    a = tracker.calculate_cost_eur("kimi", "kimi-k2.7-code", 10**6, 10**6)
+    b = tracker.calculate_cost_eur("kimi", "kimi-k2.7-code", 10**6, 10**6,
+                                   cached_input_tokens=0)
+    assert a == b
+
+
+def test_partly_cached_input_lands_between_the_two_rates(tracker):
+    full = tracker.calculate_cost_eur("kimi", "kimi-k2.7-code", 10**6, 0)
+    all_cached = tracker.calculate_cost_eur("kimi", "kimi-k2.7-code", 10**6, 0,
+                                            cached_input_tokens=10**6)
+    half = tracker.calculate_cost_eur("kimi", "kimi-k2.7-code", 10**6, 0,
+                                      cached_input_tokens=5 * 10**5)
+    assert all_cached < half < full
+
+
+def test_more_cached_than_input_tokens_cannot_go_negative(tracker):
+    """A provider over-reporting cache hits must not produce a credit."""
+    cost = tracker.calculate_cost_eur("kimi", "kimi-k2.7-code", 1000, 0,
+                                      cached_input_tokens=99999)
+    assert cost >= 0
+
+
+def test_a_backend_without_a_cached_rate_bills_at_full_input(tracker):
+    """No cached rate known means no discount — never a free request."""
+    full = tracker.calculate_cost_eur("anthropic", "claude-sonnet-5", 10**6, 0)
+    claimed = tracker.calculate_cost_eur("anthropic", "claude-sonnet-5", 10**6, 0,
+                                         cached_input_tokens=10**6)
+    assert claimed == full
+
+
+@pytest.mark.parametrize("backend,model", [
+    ("kimi", "kimi-k2.7-code"),
+    ("openai", "gpt-4o-mini"),
+    ("deepseek", "deepseek-chat"),
+])
+def test_every_priced_provider_actually_bills(tracker, backend, model):
+    """Regression: these four had no pricing rows at all, so every request
+    through them cost EUR 0.00 — invisible to the budget caps and the spend
+    counters. Gemini is excluded: its rates are genuinely 0.0 in
+    config/pricing.json and still need filling in."""
+    assert tracker.calculate_cost_eur(backend, model, 10**6, 10**6) > 0

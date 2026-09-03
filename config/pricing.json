@@ -35,23 +35,28 @@
   "kimi": {
     "default": {
       "input_per_1m_usd": 0.95,
-      "output_per_1m_usd": 4.0
+      "output_per_1m_usd": 4.0,
+      "cached_input_per_1m_usd": 0.19
     },
     "kimi-k2.7-code": {
       "input_per_1m_usd": 0.95,
-      "output_per_1m_usd": 4.0
+      "output_per_1m_usd": 4.0,
+      "cached_input_per_1m_usd": 0.19
     },
     "kimi-k2.7-code-highspeed": {
       "input_per_1m_usd": 1.9,
-      "output_per_1m_usd": 8.0
+      "output_per_1m_usd": 8.0,
+      "cached_input_per_1m_usd": 0.38
     },
     "kimi-k2.6": {
       "input_per_1m_usd": 0.95,
-      "output_per_1m_usd": 4.0
+      "output_per_1m_usd": 4.0,
+      "cached_input_per_1m_usd": 0.19
     },
     "kimi-k3": {
       "input_per_1m_usd": 3.0,
-      "output_per_1m_usd": 15.0
+      "output_per_1m_usd": 15.0,
+      "cached_input_per_1m_usd": 0.6
     }
   },
   "gemini": {

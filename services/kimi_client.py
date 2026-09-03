@@ -59,6 +59,7 @@ class KimiClientWrapper:
             "input_tokens": response.usage.prompt_tokens if response.usage else 0,
             "output_tokens": response.usage.completion_tokens if response.usage else 0,
             "total_tokens": response.usage.total_tokens if response.usage else 0,
+            "cached_input_tokens": _cached_tokens(response.usage),
         }
 
         return text, usage
@@ -85,3 +86,28 @@ class KimiClientWrapper:
 
         except Exception as e:
             raise RuntimeError(f"Kimi streaming request failed: {e}")
+
+
+def _cached_tokens(usage) -> int:
+    """Input tokens the provider served from its prompt cache, or 0.
+
+    Two shapes are in the wild on OpenAI-compatible endpoints, so both are
+    read rather than assuming one: OpenAI nests it under
+    `prompt_tokens_details.cached_tokens`, while the DeepSeek-style APIs report
+    a flat `prompt_cache_hit_tokens`. Anything unrecognised counts as no cache
+    hit, which bills at the full input rate — the conservative direction.
+    """
+    if not usage:
+        return 0
+    details = getattr(usage, "prompt_tokens_details", None)
+    nested = getattr(details, "cached_tokens", None) if details else None
+    if nested is None and isinstance(details, dict):
+        nested = details.get("cached_tokens")
+    flat = getattr(usage, "prompt_cache_hit_tokens", None)
+    for value in (nested, flat):
+        try:
+            if value is not None:
+                return max(0, int(value))
+        except (TypeError, ValueError):
+            continue
+    return 0

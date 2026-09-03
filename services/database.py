@@ -74,6 +74,10 @@ CREATE TABLE IF NOT EXISTS pricing (
     model            TEXT NOT NULL,
     input_per_1m_usd REAL NOT NULL DEFAULT 0.0,
     output_per_1m_usd REAL NOT NULL DEFAULT 0.0,
+    -- Rate for input tokens served from the provider's prompt cache. 0.0 means
+    -- "no cache pricing known", and cached tokens then bill at the full input
+    -- rate — the conservative direction.
+    cached_input_per_1m_usd REAL NOT NULL DEFAULT 0.0,
     PRIMARY KEY (backend, model)
 );
 
@@ -153,12 +157,76 @@ def init_db() -> None:
     conn.commit()
     if is_new:
         _migrate_from_json(conn)
+    _add_missing_columns(conn)
     _seed_missing_pricing(conn)
+    _seed_pricing_from_json(conn)
     _correct_stale_pricing(conn)
     _seed_default_agents(conn)
     _purge_split_agents(conn)
     _sync_agent_labels(conn)
     conn.close()
+
+
+def _add_missing_columns(conn: sqlite3.Connection) -> None:
+    """Add columns introduced after a database was first created.
+
+    CREATE TABLE IF NOT EXISTS does nothing to an existing table, so a new
+    column in SCHEMA never reaches one. Each entry is applied only when absent.
+    """
+    wanted = {
+        "pricing": [("cached_input_per_1m_usd", "REAL NOT NULL DEFAULT 0.0")],
+    }
+    for table, columns in wanted.items():
+        have = {r["name"] for r in conn.execute(f"PRAGMA table_info({table})")}
+        for name, decl in columns:
+            if name not in have:
+                conn.execute(f"ALTER TABLE {table} ADD COLUMN {name} {decl}")
+    conn.commit()
+
+
+def _seed_pricing_from_json(conn: sqlite3.Connection) -> None:
+    """Reconcile the pricing table with config/pricing.json on every launch.
+
+    _migrate_pricing carries this file into the database, but only when the
+    database is first created (`if is_new`). A database that came into being any
+    other way — created empty by an import before init_db ran, restored, copied
+    between machines — therefore never receives it, and there is no repair path:
+    _seed_missing_pricing only holds hardcoded anthropic and qwen defaults.
+
+    That is not cosmetic. calculate_cost_eur returns 0.0 when a backend has no
+    row, so kimi, openai, deepseek and gemini requests silently cost nothing —
+    the budget caps, the spend counters and the confirmation prompt all see a
+    free request. This project's own database was in exactly that state.
+
+    Two idempotent passes, neither of which overwrites a rate edited in
+    Settings: insert rows that are missing, then fill cached rates still at 0.
+    """
+    data = _load_json(BASE_DIR / "config" / "pricing.json", {})
+    for backend, models in data.items():
+        if backend == "eur_per_usd" or not isinstance(models, dict):
+            continue
+        for model, prices in models.items():
+            if not isinstance(prices, dict):
+                continue
+            cached = float(prices.get("cached_input_per_1m_usd", 0.0))
+            conn.execute("""
+                INSERT OR IGNORE INTO pricing
+                  (backend, model, input_per_1m_usd, output_per_1m_usd,
+                   cached_input_per_1m_usd)
+                VALUES (?,?,?,?,?)
+            """, (
+                backend, model,
+                float(prices.get("input_per_1m_usd", 0.0)),
+                float(prices.get("output_per_1m_usd", 0.0)),
+                cached,
+            ))
+            if cached > 0:
+                conn.execute(
+                    "UPDATE pricing SET cached_input_per_1m_usd = ? "
+                    "WHERE backend = ? AND model = ? AND cached_input_per_1m_usd = 0",
+                    (cached, backend, model),
+                )
+    conn.commit()
 
 
 def _purge_split_agents(conn: sqlite3.Connection) -> None:
@@ -454,13 +522,16 @@ def _migrate_pricing(conn: sqlite3.Connection) -> None:
             if not isinstance(prices, dict):
                 continue
             conn.execute("""
-                INSERT OR REPLACE INTO pricing (backend, model, input_per_1m_usd, output_per_1m_usd)
-                VALUES (?,?,?,?)
+                INSERT OR REPLACE INTO pricing
+                  (backend, model, input_per_1m_usd, output_per_1m_usd,
+                   cached_input_per_1m_usd)
+                VALUES (?,?,?,?,?)
             """, (
                 backend,
                 model,
                 float(prices.get("input_per_1m_usd", 0.0)),
                 float(prices.get("output_per_1m_usd", 0.0)),
+                float(prices.get("cached_input_per_1m_usd", 0.0)),
             ))
 
 
