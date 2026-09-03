@@ -5144,7 +5144,7 @@ class GodAI(QWidget):
         cards_layout.addWidget(cost_card)
 
         # ── Card 4: Budget ──────────────────────────────────────────────
-        budget_card = QGroupBox("BUDGET")
+        budget_card = QGroupBox("BUDGET (€)")
         budget_card.setObjectName("RightCard")
         budget_layout = QVBoxLayout(budget_card)
         budget_layout.setContentsMargins(10, 6, 10, 10)
@@ -5154,31 +5154,35 @@ class GodAI(QWidget):
         self.budget_label.setWordWrap(True)
         budget_layout.addWidget(self.budget_label)
 
-        session_row = QHBoxLayout()
-        session_row.setSpacing(8)
-        session_lbl = QLabel("Session €")
-        session_lbl.setMinimumWidth(70)
-        session_row.addWidget(session_lbl)
+        # Both limits share one row, saving ~34px of a panel that is 260px wide
+        # at its narrowest. It only fits because the euro sign moved out of the
+        # two labels and into the card heading — "Session €" and "Daily €" at
+        # 70px each did not leave room for both fields.
+        limits_row = QHBoxLayout()
+        limits_row.setSpacing(6)
+
+        session_lbl = QLabel("Session")
+        limits_row.addWidget(session_lbl)
         self.session_budget_input = QLineEdit(str(int(self.session_budget_eur)))
         self.session_budget_input.setPlaceholderText("1")
         self.session_budget_input.setAlignment(Qt.AlignRight)
-        self.session_budget_input.setMaximumWidth(70)
-        session_row.addWidget(self.session_budget_input)
-        session_row.addStretch()
-        budget_layout.addLayout(session_row)
+        self.session_budget_input.setMaximumWidth(52)
+        self.session_budget_input.setToolTip("Maximum spend for this session, in euros.")
+        limits_row.addWidget(self.session_budget_input)
 
-        daily_row = QHBoxLayout()
-        daily_row.setSpacing(8)
-        daily_lbl = QLabel("Daily €")
-        daily_lbl.setMinimumWidth(70)
-        daily_row.addWidget(daily_lbl)
+        limits_row.addSpacing(6)
+
+        daily_lbl = QLabel("Daily")
+        limits_row.addWidget(daily_lbl)
         self.daily_budget_input = QLineEdit(str(int(self.daily_budget_eur)))
         self.daily_budget_input.setPlaceholderText("5")
         self.daily_budget_input.setAlignment(Qt.AlignRight)
-        self.daily_budget_input.setMaximumWidth(70)
-        daily_row.addWidget(self.daily_budget_input)
-        daily_row.addStretch()
-        budget_layout.addLayout(daily_row)
+        self.daily_budget_input.setMaximumWidth(52)
+        self.daily_budget_input.setToolTip("Maximum spend per day, in euros.")
+        limits_row.addWidget(self.daily_budget_input)
+
+        limits_row.addStretch()
+        budget_layout.addLayout(limits_row)
 
         self.save_budget_btn = QPushButton("Save Limits")
         self.save_budget_btn.clicked.connect(self.save_budget_limits)
