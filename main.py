@@ -39,7 +39,7 @@ from PySide6.QtWidgets import (
     QApplication, QSizePolicy, QWidget, QVBoxLayout, QHBoxLayout, QGridLayout, QGroupBox,
     QLabel, QTextEdit, QPushButton, QComboBox, QListWidget, QListWidgetItem,
     QMessageBox, QCheckBox, QTextBrowser, QSplitter, QLineEdit, QFileDialog,
-    QProgressBar, QDialog, QTabWidget, QFrame, QScrollArea, QStackedWidget, QLayout,
+    QProgressBar, QDialog, QTabWidget, QTabBar, QFrame, QScrollArea, QStackedWidget, QLayout,
     QInputDialog,
 )
 
@@ -84,6 +84,23 @@ CHATS_DIR = DATA_DIR / "chats"
 # Sentinel value for the Saved Chats agent filter — not a real agent name.
 ALL_AGENTS_FILTER = "All agents"
 
+# The app is organised around creative outcomes, not implementation-level agent
+# names. Each workspace remembers its last selected tool during the session.
+WORKSPACES = {
+    "Write": ("author", "manuscript"),
+    "Audio": ("audiobook", "music"),
+    "Web": ("webdesign",),
+    "Gigs": ("fiverr",),
+}
+WORKSPACE_LABELS = {
+    "author": "Draft",
+    "manuscript": "Publish",
+    "audiobook": "Audiobooks",
+    "music": "Music",
+    "webdesign": "Site Builder",
+    "fiverr": "Client Gigs",
+}
+
 SETTINGS_FILE = CONFIG_DIR / "settings.json"
 AGENTS_FILE = CONFIG_DIR / "agents.json"
 COMMANDS_FILE = CONFIG_DIR / "commands.json"
@@ -105,30 +122,6 @@ SUPPORTED_EBOOKS = {".pdf", ".epub", ".txt", ".mobi"}
 RECOMMENDED_COLOR = "#ff5555"
 
 AGENT_RECOMMENDATIONS = {
-    "osint": {
-        "provider": "deepseek", "model": "deepseek-v4-flash",
-        "reason": "Light, high-volume lookups and summaries — DeepSeek's flash tier "
-                  "gives solid structured output at the lowest cost per query.",
-    },
-    "osint_heavy": {
-        "provider": "anthropic", "model": "claude-opus-5",
-        "reason": "Deep multi-source dossiers need the strongest long-context "
-                  "synthesis. Low volume, so the higher token price is worth it.",
-    },
-    "wifi": {
-        "provider": "anthropic", "model": "claude-sonnet-5",
-        "reason": "Generating correct Kali/aircrack command lines rewards precision; "
-                  "Sonnet is accurate on tooling syntax without Opus pricing.",
-    },
-    "bug_bounty": {
-        "provider": "anthropic", "model": "claude-sonnet-5",
-        "reason": "Vulnerability triage plus a readable HackerOne write-up — Sonnet "
-                  "handles both the security reasoning and the report prose.",
-    },
-    "nfl_bet": {
-        "provider": "anthropic", "model": "claude-sonnet-5",
-        "reason": "Prop analysis needs reliable arithmetic for EV and projections.",
-    },
     "fiverr": {
         "provider": "openai", "model": "gpt-4o-mini",
         "reason": "Gig copy sits next to DALL·E logo generation — staying on OpenAI "
@@ -154,11 +147,6 @@ AGENT_RECOMMENDATIONS = {
         "reason": "Strongest HTML/CSS/JS generation; produces working responsive "
                   "markup in one pass more often than the cheaper models.",
     },
-    "manager": {
-        "provider": "anthropic", "model": "claude-sonnet-5",
-        "reason": "Forge writes real agent source files — code generation quality "
-                  "matters more here than cost.",
-    },
     "audiobook": {
         "provider": "openai", "model": "tts-1", "voice": "alloy",
         "reason": "Narrator is hard-wired to OpenAI TTS. Alloy is the most neutral, "
@@ -168,45 +156,33 @@ AGENT_RECOMMENDATIONS = {
 
 # agent key -> (provider box attribute, model box attribute)
 AGENT_SETUP_WIDGETS = {
-    "chat":        ("provider_box",             "model_box"),
-    "osint":       ("osint_provider_box",       "osint_model_box"),
-    "osint_heavy": ("osint_heavy_provider_box", "osint_heavy_model_box"),
-    "wifi":        ("wifi_provider_box",        "wifi_model_box"),
-    "bug_bounty":  ("bb_provider_box",          "bb_model_box"),
-    "nfl_bet":     ("nfl_bet_provider_box",     "nfl_bet_model_box"),
     "fiverr":      ("fiverr_provider_box",      "fiverr_model_box"),
     "author":      ("author_provider_box",      "author_model_box"),
     "manuscript":  ("manuscript_provider_box",  "manuscript_model_box"),
     "music":       ("music_provider_box",       "music_model_box"),
     "webdesign":   ("webdesign_provider_box",   "webdesign_model_box"),
-    "manager":     ("manager_provider_box",     "manager_model_box"),
 }
 
 # agent key -> the panel's own "reload the model list" method, called after the
 # provider is switched programmatically so the model box is populated before we
 # try to select the recommended model in it.
 AGENT_MODEL_LOADERS = {
-    "chat":        "load_provider_models",
-    "osint":       "osint_load_models",
-    "osint_heavy": "osint_heavy_load_models",
-    "wifi":        "wifi_load_models",
-    "bug_bounty":  "bb_load_models",
-    "nfl_bet":     "nfl_bet_load_models",
     "fiverr":      "fiverr_load_models",
     "author":      "author_load_models",
     "manuscript":  "manuscript_load_models",
     "music":       "music_load_models",
     "webdesign":   "webdesign_load_models",
-    "manager":     "manager_load_models",
 }
 
 AGENT_PRETTY_NAMES = {
-    "chat": "Chat", "osint": "Trace", "osint_heavy": "Bloodhound",
-    "wifi": "Beacon", "bug_bounty": "Bug Spray",
-    "nfl_bet": "Playmaker", "fiverr": "Atelier",
-    "author": "Manuscript", "manuscript": "Publisher",
-    "music": "Maestro", "webdesign": "Site Builder", "audiobook": "Narrator",
-    "manager": "Forge", }
+    "chat": "Studio Assistant",
+    "fiverr": "Client Gigs",
+    "author": "Draft",
+    "manuscript": "Publish",
+    "music": "Music",
+    "webdesign": "Site Builder",
+    "audiobook": "Audiobooks",
+}
 
 
 from ui.workers import (
@@ -219,6 +195,7 @@ from ui.tooltips import seed_tooltips
 class GodAI(QWidget):
     def __init__(self):
         super().__init__()
+        self._is_initializing = True
 
         self.setWindowTitle("Create & Publish")
         self.resize(1400, 900)
@@ -237,7 +214,7 @@ class GodAI(QWidget):
         })
         self.agents_config = self.load_json(
             AGENTS_FILE,
-            {"agents": ["chat", "writing", "coding", "osint", "audiobook"]},
+            {"agents": ["author", "manuscript", "audiobook", "music", "webdesign", "fiverr"]},
         )
         self.settings = self.load_json(SETTINGS_FILE, {})
 
@@ -350,7 +327,8 @@ class GodAI(QWidget):
         self.update_resource_label()
         self.update_usage_labels()
         self.start_resource_timer()
-        self.select_agent("chat")
+        self._is_initializing = False
+        self.select_agent("author")
 
     def _polish_tab_widgets(self):
         """Disable text elision and enable scroll buttons on every QTabWidget
@@ -1252,90 +1230,22 @@ class GodAI(QWidget):
         left_layout.setContentsMargins(6, 6, 6, 6)
         left_layout.setSpacing(4)
 
-        # Inner scrollable container holds all the agent categories so they never
-        # get clipped or vertically squashed when the window is short.
-        agents_scroll = QScrollArea()
-        agents_scroll.setWidgetResizable(True)
-        agents_scroll.setFrameShape(QFrame.NoFrame)
-        agents_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        agents_scroll.setStyleSheet("QScrollArea { background: transparent; border: none; }")
+        brand = QLabel("CREATE\n& PUBLISH")
+        brand.setObjectName("StudioBrand")
+        left_layout.addWidget(brand)
 
-        agents_container = QWidget()
-        agents_container.setStyleSheet("background: transparent;")
-        agents_layout = QVBoxLayout(agents_container)
-        agents_layout.setContentsMargins(0, 0, 0, 0)
-        agents_layout.setSpacing(2)
+        brand_note = QLabel(
+            "One studio for drafting, publishing, audio, websites, and client work."
+        )
+        brand_note.setObjectName("StudioBrandNote")
+        brand_note.setWordWrap(True)
+        left_layout.addWidget(brand_note)
 
-        icons = {
-            "chat": "💬", "osint": "👹", "osint_heavy": "🔍",
-            "audiobook": "🎧", "manager": "🏗",
-            "author": "✍️", "webdesign": "🎨",
-            "music": "🎵", "nfl_bet": "🏈", "wifi": "📡", "fiverr": "💼",
-            "bug_bounty": "🐛", "manuscript": "📚",
-        }
-        labels = {
-            "chat": "Chat", "osint": "Trace", "osint_heavy": "Bloodhound",
-            "audiobook": "Narrator", "manager": "Forge",
-            "author": "Manuscript", "webdesign": "Site Builder",
-            "music": "Maestro", "nfl_bet": "Playmaker", "wifi": "Beacon",
-            "fiverr": "Atelier", "bug_bounty": "Bug Spray",
-            # Without this the sidebar fell back to name.capitalize() and showed a
-            # second "Manuscript" entry, colliding with the author agent. Every
-            # other surface (header title, registry) calls this one Publisher.
-            "manuscript": "Publisher",
-        }
-
-        # Every section starts collapsed — launch shows just the category list,
-        # and you open the one you want.
-        categories = [
-            ("General",            ["chat"],                                                False),
-            ("Creative",           ["author", "manuscript", "music", "webdesign", "audiobook"],         False),
-            ("Gigs",               ["fiverr"],                                              False),
-        ]
-
-        # Minimal sidebar row — clear separation via padding + hover fill
-        agent_btn_style = """
-            QPushButton#AgentBtn {
-                text-align: left;
-                padding: 9px 8px 9px 12px;
-                background-color: transparent;
-                border: none;
-                border-left: 2px solid transparent;
-                border-radius: 0;
-                color: #a8a8a8;
-                font-size: 13px;
-                font-weight: normal;
-            }
-            QPushButton#AgentBtn:hover {
-                background-color: #161616;
-                color: #ffffff;
-            }
-            QPushButton#AgentBtn:checked {
-                background-color: rgba(60, 255, 136, 0.06);
-                border-left: 2px solid #3cff88;
-                color: #3cff88;
-                font-weight: 600;
-            }
-        """
-
+        # Agent navigation lives in the workspace tabs above the canvas. The
+        # slim rail is now reserved for projects, where persistent context is
+        # genuinely useful.
         self.agent_buttons = {}
-        for title, agent_names, expanded in categories:
-            section = CollapsibleSection(title, expanded=expanded)
-            for name in agent_names:
-                btn = QPushButton(f"{icons.get(name, '⚙️')}  {labels.get(name, name.capitalize())}")
-                btn.setObjectName("AgentBtn")
-                btn.setStyleSheet(agent_btn_style)
-                btn.setCheckable(True)
-                btn.setMinimumHeight(40)
-                btn.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-                btn.clicked.connect(lambda checked, n=name: self.select_agent(n))
-                section.addWidget(btn)
-                self.agent_buttons[name] = btn
-            agents_layout.addWidget(section)
-
-        agents_layout.addStretch()
-        agents_scroll.setWidget(agents_container)
-        left_layout.addWidget(agents_scroll, 1)
+        left_layout.addStretch(1)
 
         # ── Divider ──────────────────────────────────────────────
         divider = QFrame()
@@ -1343,7 +1253,7 @@ class GodAI(QWidget):
         divider.setStyleSheet("color: #242424; background-color: #242424; max-height: 1px;")
         left_layout.addWidget(divider)
 
-        saved_header = QLabel("  SAVED CHATS")
+        saved_header = QLabel("  RECENT PROJECTS")
         saved_header.setStyleSheet(
             "color: #707070; font-weight: bold; font-size: 10px; "
             "letter-spacing: 1.5px; padding: 8px 0 4px 8px; "
@@ -1359,7 +1269,7 @@ class GodAI(QWidget):
         left_layout.addWidget(self.history_agent_filter)
 
         self.history_search = QLineEdit()
-        self.history_search.setPlaceholderText("Search saved chats...")
+        self.history_search.setPlaceholderText("Search projects...")
         self.history_search.textChanged.connect(self.load_history_list)
         left_layout.addWidget(self.history_search)
 
@@ -1373,11 +1283,11 @@ class GodAI(QWidget):
         self.history_list.setMaximumHeight(200)
         left_layout.addWidget(self.history_list)
 
-        self.delete_chat_btn = QPushButton("🗑 Delete Selected")
+        self.delete_chat_btn = QPushButton("🗑 Remove Project")
         self.delete_chat_btn.clicked.connect(self.delete_selected_chat)
         left_layout.addWidget(self.delete_chat_btn)
 
-        self.new_chat_btn = QPushButton("✳️ New Chat")
+        self.new_chat_btn = QPushButton("✳️ New Project")
         self.new_chat_btn.clicked.connect(self.new_chat)
         left_layout.addWidget(self.new_chat_btn)
 
@@ -1443,6 +1353,35 @@ class GodAI(QWidget):
         center_layout.setContentsMargins(20, 16, 20, 16)
         center_layout.setSpacing(12)
 
+        # Four outcome-oriented workspaces replace Sentinel's long agent menu.
+        # A smaller stage switcher appears only when the workspace contains two
+        # related tools (Draft/Publish or Audiobooks/Music).
+        self.workspace_tabs = QTabBar()
+        self.workspace_tabs.setObjectName("WorkspaceTabs")
+        self.workspace_tabs.setExpanding(False)
+        self.workspace_tabs.setDrawBase(False)
+        for workspace_name in WORKSPACES:
+            self.workspace_tabs.addTab(workspace_name)
+        self.workspace_tabs.currentChanged.connect(self._workspace_changed)
+        center_layout.addWidget(self.workspace_tabs)
+
+        self.workspace_tool_row = QWidget()
+        tool_row = QHBoxLayout(self.workspace_tool_row)
+        tool_row.setContentsMargins(0, 0, 0, 0)
+        tool_row.setSpacing(6)
+        self.workspace_tool_buttons = {}
+        for agent_name, label in WORKSPACE_LABELS.items():
+            button = QPushButton(label)
+            button.setObjectName("WorkspaceTool")
+            button.setCheckable(True)
+            button.clicked.connect(
+                lambda _checked, name=agent_name: self.select_agent(name)
+            )
+            tool_row.addWidget(button)
+            self.workspace_tool_buttons[agent_name] = button
+        tool_row.addStretch()
+        center_layout.addWidget(self.workspace_tool_row)
+
         # ── Agent header bar: big accent title + status pill ─────────────
         header_row = QHBoxLayout()
         header_row.setSpacing(12)
@@ -1491,7 +1430,7 @@ class GodAI(QWidget):
 
         self.agent_box = QComboBox()
         agent_items = self.agents_config.get("agents", [])
-        for extra in ("manager", "author"):
+        for extra in ("author", "manuscript", "audiobook", "music", "webdesign", "fiverr"):
             if extra not in agent_items:
                 agent_items = list(agent_items) + [extra]
         self.agent_box.addItems(agent_items)
@@ -5622,6 +5561,8 @@ class GodAI(QWidget):
             self.output_box.append(f"[Model Load Error] {e}")
             
     def save_provider_model_preference(self):
+        if getattr(self, "_is_initializing", False):
+            return
         if not hasattr(self, "provider_box") or not hasattr(self, "model_box"):
             return
 
@@ -5679,23 +5620,61 @@ class GodAI(QWidget):
             btn.setChecked(False)
         if agent_name in self.agent_buttons:
             self.agent_buttons[agent_name].setChecked(True)
+        self._sync_workspace_navigation(agent_name)
         self.update_agent_ui(agent_name)
+
+    def _workspace_changed(self, index):
+        """Open the last-used tool in the selected workspace."""
+        if getattr(self, "_syncing_workspace_tabs", False):
+            return
+        workspace_name = self.workspace_tabs.tabText(index)
+        agents = WORKSPACES.get(workspace_name, ())
+        if not agents:
+            return
+        remembered = getattr(self, "_workspace_last_agent", {}).get(workspace_name)
+        self.select_agent(remembered if remembered in agents else agents[0])
+
+    def _sync_workspace_navigation(self, agent_name):
+        """Keep the workspace and stage controls aligned with the active tool."""
+        workspace_name = next(
+            (name for name, agents in WORKSPACES.items() if agent_name in agents),
+            None,
+        )
+        if workspace_name is None or not hasattr(self, "workspace_tabs"):
+            return
+
+        if not hasattr(self, "_workspace_last_agent"):
+            self._workspace_last_agent = {}
+        self._workspace_last_agent[workspace_name] = agent_name
+
+        target_index = list(WORKSPACES).index(workspace_name)
+        self._syncing_workspace_tabs = True
+        self.workspace_tabs.setCurrentIndex(target_index)
+        self._syncing_workspace_tabs = False
+
+        agents_in_workspace = WORKSPACES[workspace_name]
+        for name, button in self.workspace_tool_buttons.items():
+            button.setVisible(name in agents_in_workspace)
+            button.setChecked(name == agent_name)
+
+        # Single-tool workspaces do not need a redundant second navigation row.
+        self.workspace_tool_row.setVisible(len(agents_in_workspace) > 1)
 
     def update_agent_ui(self, agent_name):
         self._current_agent = agent_name  # track for show_agent_docs()
         # ── Update the agent header bar (title + subtitle + status pill) ─
         agent_titles = {
-            "chat": "CHAT", "fiverr": "ATELIER",
-            "author": "MANUSCRIPT", "manuscript": "PUBLISHER",
-            "music": "MAESTRO", "webdesign": "SITE BUILDER", "audiobook": "NARRATOR", }
+            "chat": "STUDIO ASSISTANT", "fiverr": "CLIENT GIGS",
+            "author": "DRAFT", "manuscript": "PUBLISH",
+            "music": "MUSIC", "webdesign": "SITE BUILDER", "audiobook": "AUDIOBOOKS", }
         agent_subtitles = {
             "chat":        "General-purpose conversation. Pick a tool, pick a model, talk.",
-            "fiverr":      "Logo gigs end-to-end — DALL·E logo prompts, gig descriptions, and client delivery messages.",
-            "author":      "Long-form fiction drafting — outlines, characters, scenes, dialogue, and world-building.",
-            "manuscript":  "Sales metrics, platform distribution status, and publishing todo tracker.",
-            "music":       "Spotify artist setup, release planning, distribution strategy, and income roadmap.",
+            "fiverr":      "Create client-ready logo concepts, gig listings, and polished delivery messages.",
+            "author":      "Plan, draft, revise, and export long-form fiction and non-fiction.",
+            "manuscript":  "Prepare a finished book for distribution, marketing, and ongoing sales tracking.",
+            "music":       "Plan releases, distribution, promotion, and sustainable artist income.",
             "webdesign":   "Modern HTML, CSS, and JavaScript generation with responsive layout and design advice.",
-            "audiobook":   "Convert ebooks (PDF / EPUB / TXT / MOBI) into MP3 audiobooks via OpenAI TTS.",
+            "audiobook":   "Turn PDF, EPUB, TXT, and MOBI books into production-ready MP3 audiobooks.",
             }
         if hasattr(self, "agent_title_label"):
             self.agent_title_label.setText(agent_titles.get(agent_name, agent_name.upper()))
@@ -5768,14 +5747,14 @@ class GodAI(QWidget):
 
         if not input_folder.exists():
             self.output_box.setPlainText(f"[Error] Input folder does not exist:\n{input_folder}")
-            self.show_empty_audiobook_folder_popup(input_folder)
+            self.audiobook_status_label.setText("Choose an input folder to add your first book.")
             return
 
         books = sorted(f for f in input_folder.iterdir() if f.is_file() and f.suffix.lower() in SUPPORTED_EBOOKS)
 
         if not books:
             self.output_box.setPlainText(f"[Info] No supported ebooks found in:\n{input_folder}")
-            self.show_empty_audiobook_folder_popup(input_folder)
+            self.audiobook_status_label.setText("No books yet — add a PDF, EPUB, TXT, or MOBI file.")
             return
 
         for book in books:
@@ -7086,4 +7065,3 @@ if __name__ == "__main__":
     instance_server.newConnection.connect(_raise_existing_window)
 
     app.exec()
-
