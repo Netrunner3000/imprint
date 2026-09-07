@@ -225,7 +225,7 @@ GLOBAL_STYLESHEET = """
         QLabel#AgentTitle {
             color: #3cff88;
             font-size: 22px;
-            font-weight: 800;
+            font-weight: 500;
             letter-spacing: 3px;
             background: transparent;
         }
@@ -233,10 +233,65 @@ GLOBAL_STYLESHEET = """
         /* ── Agent subtitle (one-line function description) ─────── */
         QLabel#AgentSubtitle {
             color: #888888;
-            font-size: 12px;
+            font-size: 13px;
             font-weight: 400;
             background: transparent;
             padding: 0 0 4px 1px;
+        }
+
+        /* ── Create & Publish workspace navigation ────────────────── */
+        QTabBar#WorkspaceTabs {
+            background: transparent;
+        }
+        QTabBar#WorkspaceTabs::tab {
+            min-width: 88px;
+            padding: 10px 18px;
+            margin-right: 6px;
+            color: #8c8c8c;
+            background-color: #161616;
+            border: 1px solid #242424;
+            border-radius: 9px;
+            font-size: 13px;
+            font-weight: 500;
+        }
+        QTabBar#WorkspaceTabs::tab:hover {
+            color: #ffffff;
+            border-color: #3a3a3a;
+        }
+        QTabBar#WorkspaceTabs::tab:selected {
+            color: #0f0f0f;
+            background-color: #3cff88;
+            border-color: #3cff88;
+        }
+        QPushButton#WorkspaceTool {
+            padding: 6px 14px;
+            color: #9b9b9b;
+            background: transparent;
+            border: 1px solid transparent;
+            border-radius: 7px;
+            font-size: 13px;
+            font-weight: 500;
+        }
+        QPushButton#WorkspaceTool:hover {
+            color: #ffffff;
+            background-color: #181818;
+        }
+        QPushButton#WorkspaceTool:checked {
+            color: #3cff88;
+            background-color: rgba(60, 255, 136, 0.08);
+            border-color: rgba(60, 255, 136, 0.3);
+        }
+        QLabel#StudioBrand {
+            color: #f3f3f3;
+            font-size: 18px;
+            font-weight: 500;
+            letter-spacing: 2px;
+            padding: 14px 10px 6px 10px;
+        }
+        QLabel#StudioBrandNote {
+            color: #777777;
+            font-size: 11px;
+            padding: 0 10px 16px 10px;
         }
 
         /* ── Status pill (top-right) ──────────────────────────────── */

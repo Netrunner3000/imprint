@@ -81,13 +81,13 @@ coll = COLLECT(
 app = BUNDLE(
     coll,
     name="Create & Publish.app",
-    icon="assets/icon.icns",
+    icon="assets/icon-v2.icns",
     bundle_identifier="com.netrunner3000.createandpublish",
     info_plist={
         "CFBundleName": "Create & Publish",
         "CFBundleDisplayName": "Create & Publish",
-        "CFBundleShortVersionString": "1.0.0",
-        "CFBundleVersion": "1.0.0",
+        "CFBundleShortVersionString": "1.0.1",
+        "CFBundleVersion": "1.0.1",
         "NSHighResolutionCapable": True,
         "NSRequiresAquaSystemAppearance": False,   # allow dark mode
         "LSMinimumSystemVersion": "12.0",
