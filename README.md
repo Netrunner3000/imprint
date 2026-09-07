@@ -1776,7 +1776,7 @@ create_and_publish/
 │   # and writing_agent.py stayed with the security half of the split — see
 │   # FORK_PLAN.md and Chapter 16 (_purge_split_agents).
 │
-├── ui/                            # Extracted from main.py (refactor Phases 1-2)
+├── ui/                            # Extracted from main.py (refactor Phases 1-3)
 │   ├── workers.py                 # ChatWorker, SubprocessWorker, ModelPullWorker,
 │   │                              #   FiverrImageWorker, ShortsWorker
 │   ├── widgets.py                 # FlowLayout, CollapsibleSection
@@ -1784,7 +1784,12 @@ create_and_publish/
 │   ├── tooltips.py                # seed_tooltips(app)
 │   ├── dialogs.py                 # show_settings / show_model_guide /
 │   │                              #   show_cost_history / show_run_log
-│   └── book_widgets.py            # Shared theme/size/voice controls + asset paths
+│   ├── book_widgets.py            # Shared theme/size/voice controls + asset paths
+│   ├── host.py                    # AgentHost protocol (Phase 3)
+│   └── panels/
+│       ├── __init__.py
+│       └── base.py                # AgentPanel — one instance per agent, owns that
+│                                  #   agent's provider/model boxes and *_load_models
 │
 ├── services/                      # Non-UI logic
 │   ├── database.py                # SQLite schema, connection, migration, seeding,
@@ -1823,6 +1828,8 @@ create_and_publish/
 │   ├── test_agents_scenarios.py   # agent prompt construction
 │   ├── test_cost_and_limits.py    # Validator gates + token/cost maths
 │   ├── test_request_guard.py      # authorize/record/abandon_request
+│   ├── test_agent_panel.py        # AgentPanel — provider switch, model reload,
+│   │                              #   the five *_load_models() call sites
 │   ├── test_book_pipeline.py      # export, calendar, KDP CSV, parsing
 │   └── manual_test_cases.md
 │
