@@ -172,7 +172,7 @@ def _purge_split_agents(conn: sqlite3.Connection) -> None:
     Safe to run on every launch: it names only agents this app does not build,
     so it cannot delete one a user has since added through the registry.
     """
-    gone = ("osint", "osint_heavy", "wifi", "bug_bounty", "nfl_bet", "manager")
+    gone = ("chat", "osint", "osint_heavy", "wifi", "bug_bounty", "nfl_bet", "manager")
     conn.executemany(
         "DELETE FROM agents WHERE name = ?", [(n,) for n in gone]
     )
@@ -182,13 +182,12 @@ def _purge_split_agents(conn: sqlite3.Connection) -> None:
 def _sync_agent_labels(conn: sqlite3.Connection) -> None:
     """Ensure built-in agents' DB labels match the current brand names shown in the GUI."""
     rename_map = {
-        "chat":        "Chat",
-        "fiverr":      "Atelier",
-        "author":      "Manuscript",
-        "manuscript":  "Publisher",
-        "music":       "Maestro",
+        "fiverr":      "Client Gigs",
+        "author":      "Draft",
+        "manuscript":  "Publish",
+        "music":       "Music",
         "webdesign":   "Site Builder",
-        "audiobook":   "Narrator",
+        "audiobook":   "Audiobooks",
     }
     for name, label in rename_map.items():
         conn.execute("UPDATE agents SET label = ? WHERE name = ?", (label, name))

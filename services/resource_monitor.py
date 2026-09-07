@@ -1,4 +1,5 @@
 import psutil  # lets Python read system resource information
+from types import SimpleNamespace
 
 
 class ResourceMonitor:
@@ -23,11 +24,27 @@ class ResourceMonitor:
         return "green"  # comfortable zone
 
     def snapshot(self):
-        vm = psutil.virtual_memory()  # reads RAM usage
-        sm = psutil.swap_memory()  # reads swap usage
-        cpu = psutil.cpu_percent(interval=0.2)  # short CPU usage sample
+        # Sandboxed macOS sessions and some virtual machines deny individual
+        # sysctl calls. Resource telemetry is informative, never essential, so
+        # each unavailable reading falls back independently instead of blocking
+        # the entire application at startup.
+        try:
+            vm = psutil.virtual_memory()
+        except (OSError, RuntimeError):
+            vm = SimpleNamespace(percent=0.0, used=0, total=0, available=0)
+        try:
+            sm = psutil.swap_memory()
+        except (OSError, RuntimeError):
+            sm = SimpleNamespace(percent=0.0, used=0, total=0)
+        try:
+            cpu = psutil.cpu_percent(interval=0.2)
+        except (OSError, RuntimeError):
+            cpu = 0.0
 
-        battery = psutil.sensors_battery()  # battery info if available on this machine
+        try:
+            battery = psutil.sensors_battery()
+        except (AttributeError, OSError, RuntimeError):
+            battery = None
         battery_percent = battery.percent if battery else None  # battery percentage or None
         battery_plugged = battery.power_plugged if battery else None  # charging state or None
 

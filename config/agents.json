@@ -1,3 +1,10 @@
 {
-  "agents": ["chat", "writing", "coding", "osint", "audiobook", "author", "manuscript"]
+  "agents": [
+    "author",
+    "manuscript",
+    "audiobook",
+    "music",
+    "webdesign",
+    "fiverr"
+  ]
 }
