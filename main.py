@@ -196,7 +196,9 @@ from ui.panels.base import AgentPanel
 from ui.workers import (
     ChatWorker, SubprocessWorker, ModelPullWorker, FiverrImageWorker, ShortsWorker,
 )
-from ui.widgets import FlowLayout, CollapsibleSection, scrollable
+from ui.widgets import (
+    FlowLayout, CollapsibleSection, scrollable, let_combos_shrink,
+)
 from ui.tooltips import seed_tooltips
 
 class GodAI(QWidget):
@@ -1212,6 +1214,12 @@ class GodAI(QWidget):
         splitter.setSizes([230, 870, 300])
 
         outer_layout.addWidget(splitter)
+
+        # After every panel exists: a combo sized to its longest item pins the
+        # control columns wider than the panes they live in, which is what cut
+        # the fields off down the right-hand edge.
+        let_combos_shrink(self)
+
         self.apply_global_style()
 
     def build_left_panel(self) -> QWidget:
@@ -2000,14 +2008,18 @@ class GodAI(QWidget):
         self.author_export_author_input.setPlaceholderText("e.g. Celeste Morgan")
         sb.addWidget(self.author_export_author_input)
 
-        export_row = QHBoxLayout()
+        # FlowLayout: a QHBoxLayout here reports combo + button as its minimum
+        # width (276px) and pinned the whole sidebar wider than its pane, which
+        # is what clipped the controls down the right-hand edge. These wrap.
+        export_row_container = QWidget()
+        export_row = FlowLayout(export_row_container, spacing=6)
         self.author_export_format_box = QComboBox()
         self.author_export_format_box.addItems(["EPUB", "DOCX", "PDF"])
         export_row.addWidget(self.author_export_format_box)
         self.author_export_btn = QPushButton("📤  Export Book")
         self.author_export_btn.clicked.connect(self.author_export_book)
         export_row.addWidget(self.author_export_btn)
-        sb.addLayout(export_row)
+        sb.addWidget(export_row_container)
 
         self.author_clear_btn = QPushButton("Clear All")
         self.author_clear_btn.clicked.connect(self.author_clear)
@@ -2145,7 +2157,7 @@ class GodAI(QWidget):
         self.author_pub_save_btn.clicked.connect(self.author_pub_save)
         pc.addWidget(self.author_pub_save_btn)
 
-        pub_outer.addWidget(pub_ctrl)
+        pub_outer.addWidget(scrollable(pub_ctrl))
         self.author_sub_stack.addWidget(publish_page)   # sub-page 0
 
         # ── Market page ───────────────────────────────────────────────────────
@@ -2222,7 +2234,7 @@ class GodAI(QWidget):
         self.author_mkt_save_btn.clicked.connect(self.author_mkt_save)
         mc.addWidget(self.author_mkt_save_btn)
 
-        mkt_outer.addWidget(mkt_ctrl)
+        mkt_outer.addWidget(scrollable(mkt_ctrl))
         self.author_sub_stack.addWidget(market_page)   # sub-page 1
 
         pm_layout.addWidget(self.author_sub_stack, 1)
@@ -2591,7 +2603,9 @@ class GodAI(QWidget):
         self.webdesign_clear_btn.clicked.connect(self.webdesign_clear)
         sidebar_layout.addWidget(self.webdesign_clear_btn)
 
-        results_splitter.addWidget(scrollable(sidebar))
+        # min_width: without a floor the splitter squeezes this pane below its
+        # own content on a small window and the indicators clip.
+        results_splitter.addWidget(scrollable(sidebar, min_width=170))
         results_splitter.setSizes([680, 200])
 
         layout.addWidget(results_splitter, 1)
@@ -2944,7 +2958,7 @@ class GodAI(QWidget):
         order_layout.addWidget(self.fiverr_clear_btn)
         sidebar_layout.addWidget(order_group)
 
-        results_splitter.addWidget(scrollable(sidebar))
+        results_splitter.addWidget(scrollable(sidebar, min_width=150))
         results_splitter.setSizes([700, 180])
         layout.addWidget(results_splitter)
 

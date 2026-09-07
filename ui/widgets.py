@@ -8,7 +8,7 @@ controls past their own minimums until the labels are chopped.
 """
 from PySide6.QtCore import Qt, QRect, QPoint, QSize
 from PySide6.QtWidgets import (
-    QLayout, QPushButton, QScrollArea, QVBoxLayout, QWidget,
+    QComboBox, QLayout, QPushButton, QScrollArea, QVBoxLayout, QWidget,
 )
 
 
@@ -206,3 +206,30 @@ def scrollable(widget: QWidget, *, min_width: int | None = None,
 
     area.setWidget(widget)
     return area
+
+
+def let_combos_shrink(root: QWidget, visible_chars: int = 8) -> int:
+    """Stop combo boxes from pinning a control column wider than its pane.
+
+    A QComboBox sizes itself to its longest *item*, so one entry like
+    "claude-opus-4-6" asks for 230px in a 200px column. The column cannot meet
+    that, so the content is clipped and a horizontal scrollbar appears — the
+    fields cut off down the right-hand edge.
+
+    Sizing to a fixed character count instead lets the box shrink with its
+    column. The popup keeps the full natural width, so the long names are still
+    readable when choosing; only the collapsed box gets shorter, and the
+    current value elides.
+
+    Returns how many boxes were adjusted, so a caller can assert it ran.
+    """
+    count = 0
+    for combo in root.findChildren(QComboBox):
+        natural = combo.sizeHint().width()
+        combo.setSizeAdjustPolicy(QComboBox.AdjustToMinimumContentsLengthWithIcon)
+        combo.setMinimumContentsLength(visible_chars)
+        view = combo.view()
+        if view is not None:
+            view.setMinimumWidth(max(natural, 180))
+        count += 1
+    return count
