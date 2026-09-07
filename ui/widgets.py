@@ -7,7 +7,9 @@ minimum width, which pins an impossible minimum on a pane and makes Qt compress
 controls past their own minimums until the labels are chopped.
 """
 from PySide6.QtCore import Qt, QRect, QPoint, QSize
-from PySide6.QtWidgets import QLayout, QPushButton, QVBoxLayout, QWidget
+from PySide6.QtWidgets import (
+    QLayout, QPushButton, QScrollArea, QVBoxLayout, QWidget,
+)
 
 
 class FlowLayout(QLayout):
@@ -159,3 +161,48 @@ class CollapsibleSection(QWidget):
         title = self._title.upper().replace("&", "&&")
         self.header_btn.setText(f"  {arrow}   {title}")
         self.header_btn.setChecked(self._expanded)
+
+
+def scrollable(widget: QWidget, *, min_width: int | None = None,
+               max_width: int | None = None) -> QScrollArea:
+    """Wrap a control column so it scrolls instead of overlapping itself.
+
+    The same failure FlowLayout fixes horizontally, on the vertical axis. A
+    QVBoxLayout reports the sum of its children as its minimum height; drop a
+    splitter pane below that and Qt compresses the children past their own
+    minimums, and they are drawn on top of each other — the direction box
+    landing over the Task and Provider rows beneath it.
+
+    A splitter will happily do that, because it honours the sizes the user drags
+    to over a child's minimumSizeHint. Wrapping the column in a scroll area
+    gives the content its full natural height and scrolls the overflow.
+
+    Width is carried across because the wrapper, not the inner widget, is what
+    the splitter now sizes.
+    """
+    area = QScrollArea()
+    area.setWidgetResizable(True)
+    area.setFrameShape(QScrollArea.NoFrame)
+    # AsNeeded, not AlwaysOff: widgetResizable shrinks the column to the
+    # viewport, but it can only shrink to the widest control's own minimum.
+    # Past that, AlwaysOff clips the control out of reach; a scrollbar is
+    # less pretty and still usable.
+    area.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+    area.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+    area.setStyleSheet("QScrollArea { background: transparent; border: none; }")
+
+    # Move the width constraints up to the wrapper, or the splitter sizes the
+    # scroll area freely and the inner column keeps its old limits.
+    if min_width is None and widget.minimumWidth():
+        min_width = widget.minimumWidth()
+    if max_width is None and widget.maximumWidth() < 16777215:
+        max_width = widget.maximumWidth()
+    widget.setMinimumWidth(0)
+    widget.setMaximumWidth(16777215)
+    if min_width:
+        area.setMinimumWidth(min_width)
+    if max_width:
+        area.setMaximumWidth(max_width)
+
+    area.setWidget(widget)
+    return area

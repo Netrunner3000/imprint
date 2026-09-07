@@ -44,6 +44,10 @@ from PySide6.QtWidgets import (
     QInputDialog,
 )
 
+from ui.style import (
+    GLOBAL_STYLESHEET, ACCENT, ACCENT_LINE, ACCENT_WASH, INFO, WARNING,
+    TEXT, TEXT_DIM, TEXT_MUTE,
+)
 from services.ollama_client import OllamaClient, MUSE_GLIMMER_VARIANTS, muse_glimmer_default
 from services.openai_client import OpenAIClientWrapper
 from services.deepseek_client import DeepSeekClientWrapper
@@ -120,7 +124,9 @@ SUPPORTED_EBOOKS = {".pdf", ".epub", ".txt", ".mobi"}
 # `provider` must match an item in that panel's provider box. `model` is matched
 # leniently (exact -> prefix -> substring) so a dated API id such as
 # "claude-sonnet-4-6-20260112" still resolves from "claude-sonnet-4-6".
-RECOMMENDED_COLOR = "#ff5555"
+# The accent, not a warning colour: this marks the *suggested* provider and
+# model, and red here read as "something is wrong with this choice".
+RECOMMENDED_COLOR = ACCENT
 
 AGENT_RECOMMENDATIONS = {
     "fiverr": {
@@ -190,8 +196,7 @@ from ui.panels.base import AgentPanel
 from ui.workers import (
     ChatWorker, SubprocessWorker, ModelPullWorker, FiverrImageWorker, ShortsWorker,
 )
-from ui.widgets import FlowLayout, CollapsibleSection
-from ui.style import GLOBAL_STYLESHEET
+from ui.widgets import FlowLayout, CollapsibleSection, scrollable
 from ui.tooltips import seed_tooltips
 
 class GodAI(QWidget):
@@ -1025,7 +1030,7 @@ class GodAI(QWidget):
         else:
             combo.setStyleSheet(
                 f"QComboBox {{ border: 1px solid {RECOMMENDED_COLOR}; }}"
-                "QComboBox:focus { border: 1px solid #3cff88; }"
+                f"QComboBox:focus {{ border: 1px solid {ACCENT}; }}"
             )
 
     def _recommendation_for(self, agent_key: str) -> dict | None:
@@ -1236,7 +1241,7 @@ class GodAI(QWidget):
         # ── Divider ──────────────────────────────────────────────
         divider = QFrame()
         divider.setFrameShape(QFrame.HLine)
-        divider.setStyleSheet("color: #242424; background-color: #242424; max-height: 1px;")
+        divider.setObjectName("CardDivider")
         left_layout.addWidget(divider)
 
         saved_header = QLabel("  RECENT PROJECTS")
@@ -1280,56 +1285,8 @@ class GodAI(QWidget):
         left_widget.setMinimumWidth(230)
         left_widget.setMaximumWidth(300)
 
-        left_widget.setStyleSheet("""
-        QWidget#LeftPanel {
-            background-color: #0f0f0f;
-        }
-        QWidget#LeftPanel QLineEdit {
-            font-size: 12px;
-            color: #ffffff;
-            background-color: #161616;
-            border: 1px solid #242424;
-            border-radius: 8px;
-            padding: 6px 10px;
-        }
-        QWidget#LeftPanel QLineEdit:focus {
-            border: 1px solid #3cff88;
-        }
-        QWidget#LeftPanel QListWidget {
-            background-color: #161616;
-            border: 1px solid #242424;
-            border-radius: 8px;
-            font-size: 12px;
-            color: #c8c8c8;
-            padding: 4px;
-        }
-        QWidget#LeftPanel QListWidget::item {
-            padding: 5px 8px;
-            border-radius: 4px;
-        }
-        QWidget#LeftPanel QListWidget::item:hover {
-            background-color: #1f1f1f;
-        }
-        QWidget#LeftPanel QListWidget::item:selected {
-            background-color: rgba(60, 255, 136, 0.10);
-            color: #3cff88;
-        }
-        QWidget#LeftPanel > QPushButton {
-            font-size: 12px;
-            font-weight: 600;
-            color: #d0d0d0;
-            background-color: #161616;
-            border: 1px solid #242424;
-            border-radius: 8px;
-            padding: 8px 12px;
-            margin-top: 6px;
-        }
-        QWidget#LeftPanel > QPushButton:hover {
-            background-color: #1f1f1f;
-            border: 1px solid #3cff88;
-            color: #ffffff;
-        }
-        """)
+        # Rail styling lives in ui/style.py (QWidget#LeftPanel rules) so the
+        # palette has one definition.
 
         return left_widget
 
@@ -1837,14 +1794,14 @@ class GodAI(QWidget):
         divider = QFrame()
         divider.setFrameShape(QFrame.HLine)
         divider.setFrameShadow(QFrame.Sunken)
-        divider.setStyleSheet("color: #444;")
+        divider.setObjectName("CardDivider")
         layout.addWidget(divider)
 
         self.author_next_step_label = QLabel("")
         self.author_next_step_label.setWordWrap(True)
         self.author_next_step_label.setStyleSheet(
-            "background: rgba(60,255,136,0.08); border: 1px solid rgba(60,255,136,0.25); "
-            "border-radius: 6px; padding: 8px 10px; color: #3cff88; font-size: 12px;"
+            f"background: {ACCENT_WASH}; border: 1px solid {ACCENT_LINE}; "
+            f"border-radius: 6px; padding: 8px 10px; color: {ACCENT}; font-size: 12px;"
         )
         layout.addWidget(self.author_next_step_label)
 
@@ -1927,7 +1884,7 @@ class GodAI(QWidget):
         ct_layout.setSpacing(6)
 
         self.author_chapters_stats_label = QLabel("No chapters detected yet.")
-        self.author_chapters_stats_label.setStyleSheet("font-size: 12px; color: #888;")
+        self.author_chapters_stats_label.setStyleSheet(f"font-size: 12px; color: {TEXT_MUTE};")
         ct_layout.addWidget(self.author_chapters_stats_label)
 
         self.author_chapters_list = QListWidget()
@@ -1980,38 +1937,26 @@ class GodAI(QWidget):
 
         self.author_write_btn = QPushButton("✍️  Write")
         self.author_write_btn.setMinimumHeight(34)
-        self.author_write_btn.setStyleSheet(
-            "QPushButton { background-color: #1a1a4d; border: 1px solid #7c7cff;"
-            " font-weight: bold; color: #c0c0ff; }"
-            "QPushButton:hover { background-color: #22227a; }"
-        )
+        self.author_write_btn.setObjectName("PrimaryAction")
         self.author_write_btn.clicked.connect(self.author_write)
         sb.addWidget(self.author_write_btn)
 
         self.author_continue_btn = QPushButton("▶  Continue")
         self.author_continue_btn.setMinimumHeight(34)
-        self.author_continue_btn.setStyleSheet(
-            "QPushButton { background-color: #1a2d1a; border: 1px solid #3cff88;"
-            " font-weight: bold; color: #3cff88; }"
-            "QPushButton:hover { background-color: #1e3d1e; }"
-        )
+        self.author_continue_btn.setObjectName("SecondaryAction")
         self.author_continue_btn.clicked.connect(self.author_continue)
         sb.addWidget(self.author_continue_btn)
 
         self.author_stop_btn = QPushButton("⬛  Stop")
         self.author_stop_btn.setEnabled(False)
         self.author_stop_btn.setMinimumHeight(34)
-        self.author_stop_btn.setStyleSheet(
-            "QPushButton { background-color: #2b1010; border: 1px solid #ff4444;"
-            " color: #ff5555; font-weight: bold; }"
-            "QPushButton:hover { background-color: #3d1515; }"
-        )
+        self.author_stop_btn.setObjectName("DangerAction")
         self.author_stop_btn.clicked.connect(self.author_stop)
         sb.addWidget(self.author_stop_btn)
 
         sep1 = QFrame()
         sep1.setFrameShape(QFrame.HLine)
-        sep1.setStyleSheet("color: #444;")
+        sep1.setObjectName("CardDivider")
         sb.addWidget(sep1)
 
         word_group = QGroupBox("Words")
@@ -2021,7 +1966,7 @@ class GodAI(QWidget):
         self.author_word_count_label = QLabel("0")
         self.author_word_count_label.setAlignment(Qt.AlignCenter)
         self.author_word_count_label.setStyleSheet(
-            "font-size: 26px; font-weight: bold; color: #f0c040;"
+            f"font-size: 26px; font-weight: 600; color: {TEXT};"
         )
         wg_layout.addWidget(self.author_word_count_label)
         sb.addWidget(word_group)
@@ -2033,7 +1978,7 @@ class GodAI(QWidget):
         self.author_scene_count_label = QLabel("0")
         self.author_scene_count_label.setAlignment(Qt.AlignCenter)
         self.author_scene_count_label.setStyleSheet(
-            "font-size: 20px; font-weight: bold; color: #a0a0ff;"
+            f"font-size: 20px; font-weight: 600; color: {TEXT};"
         )
         sg_layout.addWidget(self.author_scene_count_label)
         sb.addWidget(scene_group)
@@ -2042,7 +1987,7 @@ class GodAI(QWidget):
 
         sep2 = QFrame()
         sep2.setFrameShape(QFrame.HLine)
-        sep2.setStyleSheet("color: #444;")
+        sep2.setObjectName("CardDivider")
         sb.addWidget(sep2)
 
         self.author_save_btn = QPushButton("💾  Save Draft")
@@ -2068,7 +2013,7 @@ class GodAI(QWidget):
         self.author_clear_btn.clicked.connect(self.author_clear)
         sb.addWidget(self.author_clear_btn)
 
-        workspace_splitter.addWidget(sidebar)
+        workspace_splitter.addWidget(scrollable(sidebar))
         workspace_splitter.setSizes([760, 240])
 
         # ── Mode toggle row: Write | Publish & Market ────────────────────────
@@ -2079,24 +2024,17 @@ class GodAI(QWidget):
         self.author_mode_write_btn.setCheckable(True)
         self.author_mode_write_btn.setChecked(True)
         self.author_mode_write_btn.setMinimumHeight(32)
-        self.author_mode_write_btn.setStyleSheet(
-            "QPushButton { background-color: #1a1a4d; border: 1px solid #7c7cff;"
-            " font-weight: bold; color: #c0c0ff; border-radius: 0; }"
-            "QPushButton:checked { background-color: #22227a; border: 2px solid #a0a0ff; }"
-            "QPushButton:hover { background-color: #22227a; }"
-        )
+        self.author_mode_write_btn.setObjectName("WorkspaceTool")
         self.author_mode_write_btn.clicked.connect(lambda: self._author_set_mode("write"))
         mode_row.addWidget(self.author_mode_write_btn)
 
-        self.author_mode_pubmkt_btn = QPushButton("📣  Publish & Market")
+        # "&&", not "&": Qt reads a single ampersand in button text as a mnemonic
+        # marker and swallows it, so this rendered as "Publish_Market" with the
+        # M underlined. Same trap CollapsibleSection documents for its titles.
+        self.author_mode_pubmkt_btn = QPushButton("📣  Publish && Market")
         self.author_mode_pubmkt_btn.setCheckable(True)
         self.author_mode_pubmkt_btn.setMinimumHeight(32)
-        self.author_mode_pubmkt_btn.setStyleSheet(
-            "QPushButton { background-color: #2d1a0e; border: 1px solid #ff9944;"
-            " font-weight: bold; color: #ffb366; border-radius: 0; }"
-            "QPushButton:checked { background-color: #3d2210; border: 2px solid #ffa855; }"
-            "QPushButton:hover { background-color: #3d2210; }"
-        )
+        self.author_mode_pubmkt_btn.setObjectName("WorkspaceTool")
         self.author_mode_pubmkt_btn.clicked.connect(lambda: self._author_set_mode("pubmkt"))
         mode_row.addWidget(self.author_mode_pubmkt_btn)
 
@@ -2120,24 +2058,14 @@ class GodAI(QWidget):
         self.author_sub_publish_btn.setCheckable(True)
         self.author_sub_publish_btn.setChecked(True)
         self.author_sub_publish_btn.setMinimumHeight(28)
-        self.author_sub_publish_btn.setStyleSheet(
-            "QPushButton { background-color: #1a2d1a; border: 1px solid #3cff88;"
-            " font-weight: bold; color: #3cff88; border-radius: 0; }"
-            "QPushButton:checked { background-color: #1e3d1e; border: 2px solid #3cff88; }"
-            "QPushButton:hover { background-color: #1e3d1e; }"
-        )
+        self.author_sub_publish_btn.setObjectName("WorkspaceTool")
         self.author_sub_publish_btn.clicked.connect(lambda: self._author_set_sub_mode("publish"))
         sub_row.addWidget(self.author_sub_publish_btn)
 
         self.author_sub_market_btn = QPushButton("📢  Market")
         self.author_sub_market_btn.setCheckable(True)
         self.author_sub_market_btn.setMinimumHeight(28)
-        self.author_sub_market_btn.setStyleSheet(
-            "QPushButton { background-color: #2d1a0e; border: 1px solid #ff9944;"
-            " font-weight: bold; color: #ffb366; border-radius: 0; }"
-            "QPushButton:checked { background-color: #3d2210; border: 2px solid #ffa855; }"
-            "QPushButton:hover { background-color: #3d2210; }"
-        )
+        self.author_sub_market_btn.setObjectName("WorkspaceTool")
         self.author_sub_market_btn.clicked.connect(lambda: self._author_set_sub_mode("market"))
         sub_row.addWidget(self.author_sub_market_btn)
 
@@ -2198,21 +2126,13 @@ class GodAI(QWidget):
 
         self.author_pub_generate_btn = QPushButton("Generate")
         self.author_pub_generate_btn.setMinimumHeight(34)
-        self.author_pub_generate_btn.setStyleSheet(
-            "QPushButton { background-color: #1a2d1a; border: 1px solid #3cff88;"
-            " font-weight: bold; color: #3cff88; }"
-            "QPushButton:hover { background-color: #1e3d1e; }"
-        )
+        self.author_pub_generate_btn.setObjectName("PrimaryAction")
         self.author_pub_generate_btn.clicked.connect(self.author_pub_generate)
         pc.addWidget(self.author_pub_generate_btn)
 
         self.author_pub_stop_btn = QPushButton("Stop")
         self.author_pub_stop_btn.setEnabled(False)
-        self.author_pub_stop_btn.setStyleSheet(
-            "QPushButton { background-color: #2b1010; border: 1px solid #ff4444;"
-            " color: #ff5555; font-weight: bold; }"
-            "QPushButton:hover { background-color: #3d1515; }"
-        )
+        self.author_pub_stop_btn.setObjectName("DangerAction")
         self.author_pub_stop_btn.clicked.connect(self.author_pub_stop)
         pc.addWidget(self.author_pub_stop_btn)
 
@@ -2283,21 +2203,13 @@ class GodAI(QWidget):
 
         self.author_mkt_generate_btn = QPushButton("Generate")
         self.author_mkt_generate_btn.setMinimumHeight(34)
-        self.author_mkt_generate_btn.setStyleSheet(
-            "QPushButton { background-color: #2d1a0e; border: 1px solid #ff9944;"
-            " font-weight: bold; color: #ffb366; }"
-            "QPushButton:hover { background-color: #3d2210; }"
-        )
+        self.author_mkt_generate_btn.setObjectName("PrimaryAction")
         self.author_mkt_generate_btn.clicked.connect(self.author_mkt_generate)
         mc.addWidget(self.author_mkt_generate_btn)
 
         self.author_mkt_stop_btn = QPushButton("Stop")
         self.author_mkt_stop_btn.setEnabled(False)
-        self.author_mkt_stop_btn.setStyleSheet(
-            "QPushButton { background-color: #2b1010; border: 1px solid #ff4444;"
-            " color: #ff5555; font-weight: bold; }"
-            "QPushButton:hover { background-color: #3d1515; }"
-        )
+        self.author_mkt_stop_btn.setObjectName("DangerAction")
         self.author_mkt_stop_btn.clicked.connect(self.author_mkt_stop)
         mc.addWidget(self.author_mkt_stop_btn)
 
@@ -2319,7 +2231,7 @@ class GodAI(QWidget):
         layout.addWidget(self.author_content_stack, 1)
 
         self.author_status_label = QLabel("")
-        self.author_status_label.setStyleSheet("font-size: 12px; color: #888; padding: 2px 4px;")
+        self.author_status_label.setStyleSheet(f"font-size: 12px; color: {TEXT_MUTE}; padding: 2px 4px;")
         layout.addWidget(self.author_status_label)
 
         self.author_draft_box.textChanged.connect(self._author_update_counts)
@@ -2335,13 +2247,27 @@ class GodAI(QWidget):
     def build_music_panel(self):
         self.music_panel = QWidget()
         self.music_panel.setObjectName("MusicPanel")
-        layout = QVBoxLayout(self.music_panel)
+        # The whole panel scrolls: unlike the other agents its controls sit in
+        # the main column rather than a sidebar, so wrapping the sidebar alone
+        # left the setup grid free to compress past its minimum on a short
+        # window. self.music_panel stays the outer widget so the visibility
+        # switching in update_agent_ui is untouched.
+        _music_outer = QVBoxLayout(self.music_panel)
+        _music_outer.setContentsMargins(0, 0, 0, 0)
+        _music_content = QWidget()
+        _music_outer.addWidget(scrollable(_music_content))
+        layout = QVBoxLayout(_music_content)
         layout.setContentsMargins(8, 8, 8, 8)
         layout.setSpacing(8)
 
         # ── Setup form ──────────────────────────────────────────────────────
         setup_group = QGroupBox("Artist Setup")
         setup_group.setObjectName("MusicSetupGroup")
+        # Fixed vertically: this is a form of fixed-height rows, and leaving it
+        # shrinkable let a short window compress the grid past its minimum until
+        # the fields were drawn over each other. The results splitter below has
+        # somewhere to give; the form does not.
+        setup_group.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
         setup_layout = QGridLayout(setup_group)
         setup_layout.setSpacing(6)
 
@@ -2460,7 +2386,7 @@ class GodAI(QWidget):
         release_layout = QVBoxLayout(release_group)
         self.music_release_label = QLabel("—")
         self.music_release_label.setAlignment(Qt.AlignCenter)
-        self.music_release_label.setStyleSheet("font-size: 14px; font-weight: bold; color: #3cff88;")
+        self.music_release_label.setStyleSheet(f"font-size: 14px; font-weight: 600; color: {ACCENT};")
         release_layout.addWidget(self.music_release_label)
         indicators_layout.addWidget(release_group)
 
@@ -2469,7 +2395,7 @@ class GodAI(QWidget):
         genre_layout = QVBoxLayout(genre_group)
         self.music_genre_label = QLabel("—")
         self.music_genre_label.setAlignment(Qt.AlignCenter)
-        self.music_genre_label.setStyleSheet("font-size: 14px; font-weight: bold; color: #4db8ff;")
+        self.music_genre_label.setStyleSheet(f"font-size: 14px; font-weight: 600; color: {INFO};")
         genre_layout.addWidget(self.music_genre_label)
         indicators_layout.addWidget(genre_group)
 
@@ -2479,7 +2405,7 @@ class GodAI(QWidget):
         self.music_dist_label = QLabel("—")
         self.music_dist_label.setAlignment(Qt.AlignCenter)
         self.music_dist_label.setWordWrap(True)
-        self.music_dist_label.setStyleSheet("font-size: 13px; font-weight: bold; color: #f0c040;")
+        self.music_dist_label.setStyleSheet(f"font-size: 13px; font-weight: 600; color: {WARNING};")
         dist_layout.addWidget(self.music_dist_label)
         indicators_layout.addWidget(dist_group)
 
@@ -2489,7 +2415,7 @@ class GodAI(QWidget):
         self.music_steps_label = QLabel(
             "1. Artist Profile\n2. Release Setup\n3. Distribution\n4. Spotify Strategy\n5. Income Roadmap"
         )
-        self.music_steps_label.setStyleSheet("font-size: 11px; color: #aaa;")
+        self.music_steps_label.setStyleSheet(f"font-size: 11px; color: {TEXT_DIM};")
         steps_layout.addWidget(self.music_steps_label)
         indicators_layout.addWidget(steps_group)
 
@@ -2510,7 +2436,7 @@ class GodAI(QWidget):
         layout.addWidget(results_splitter, 1)
 
         self.music_status_label = QLabel("")
-        self.music_status_label.setStyleSheet("font-size: 12px; color: #888;")
+        self.music_status_label.setStyleSheet(f"font-size: 12px; color: {TEXT_MUTE};")
         layout.addWidget(self.music_status_label)
 
         self.music_panel.hide()
@@ -2627,7 +2553,7 @@ class GodAI(QWidget):
         responsive_layout = QVBoxLayout(responsive_group)
         self.webdesign_responsive_label = QLabel("—")
         self.webdesign_responsive_label.setAlignment(Qt.AlignCenter)
-        self.webdesign_responsive_label.setStyleSheet("font-size: 14px; font-weight: bold; color: #4db8ff;")
+        self.webdesign_responsive_label.setStyleSheet(f"font-size: 14px; font-weight: 600; color: {INFO};")
         responsive_layout.addWidget(self.webdesign_responsive_label)
         sidebar_layout.addWidget(responsive_group)
 
@@ -2636,7 +2562,7 @@ class GodAI(QWidget):
         framework_layout = QVBoxLayout(framework_group)
         self.webdesign_framework_label = QLabel("—")
         self.webdesign_framework_label.setAlignment(Qt.AlignCenter)
-        self.webdesign_framework_label.setStyleSheet("font-size: 14px; font-weight: bold;")
+        self.webdesign_framework_label.setStyleSheet(f"font-size: 14px; font-weight: 600; color: {TEXT};")
         framework_layout.addWidget(self.webdesign_framework_label)
         sidebar_layout.addWidget(framework_group)
 
@@ -2645,7 +2571,7 @@ class GodAI(QWidget):
         lines_layout = QVBoxLayout(lines_group)
         self.webdesign_lines_label = QLabel("—")
         self.webdesign_lines_label.setAlignment(Qt.AlignCenter)
-        self.webdesign_lines_label.setStyleSheet("font-size: 20px; font-weight: bold; color: #3cff88;")
+        self.webdesign_lines_label.setStyleSheet(f"font-size: 20px; font-weight: 600; color: {ACCENT};")
         lines_layout.addWidget(self.webdesign_lines_label)
         sidebar_layout.addWidget(lines_group)
 
@@ -2665,13 +2591,13 @@ class GodAI(QWidget):
         self.webdesign_clear_btn.clicked.connect(self.webdesign_clear)
         sidebar_layout.addWidget(self.webdesign_clear_btn)
 
-        results_splitter.addWidget(sidebar)
+        results_splitter.addWidget(scrollable(sidebar))
         results_splitter.setSizes([680, 200])
 
         layout.addWidget(results_splitter, 1)
 
         self.webdesign_status_label = QLabel("")
-        self.webdesign_status_label.setStyleSheet("font-size: 12px; color: #888;")
+        self.webdesign_status_label.setStyleSheet(f"font-size: 12px; color: {TEXT_MUTE};")
         layout.addWidget(self.webdesign_status_label)
 
         self.webdesign_panel.hide()
@@ -2900,8 +2826,11 @@ class GodAI(QWidget):
         brief_layout.addWidget(provider_row_container, 4, 0, 1, 4)
 
         # Row 2: All four action buttons get their own row with full width
-        action_row = QHBoxLayout()
-        action_row.addStretch()
+        # FlowLayout, not QHBoxLayout: four fixed-width buttons pin a minimum
+        # wider than this panel gets on a narrow window, and Qt then draws them
+        # over each other. These wrap onto a second line instead.
+        action_row_container = QWidget()
+        action_row = FlowLayout(action_row_container, spacing=6)
 
         self.fiverr_generate_btn = QPushButton("Generate Logos")
         self.fiverr_generate_btn.setMinimumWidth(140)
@@ -2911,13 +2840,13 @@ class GodAI(QWidget):
 
         self.fiverr_delivery_btn = QPushButton("Delivery Msg")
         self.fiverr_delivery_btn.setMinimumWidth(130)
-        self.fiverr_delivery_btn.setObjectName("PrimaryAction")
+        self.fiverr_delivery_btn.setObjectName("SecondaryAction")
         self.fiverr_delivery_btn.clicked.connect(self.fiverr_write_delivery)
         action_row.addWidget(self.fiverr_delivery_btn)
 
         self.fiverr_gig_btn = QPushButton("Gig Description")
         self.fiverr_gig_btn.setMinimumWidth(140)
-        self.fiverr_gig_btn.setObjectName("PrimaryAction")
+        self.fiverr_gig_btn.setObjectName("SecondaryAction")
         self.fiverr_gig_btn.clicked.connect(self.fiverr_write_gig)
         action_row.addWidget(self.fiverr_gig_btn)
 
@@ -2927,7 +2856,7 @@ class GodAI(QWidget):
         self.fiverr_stop_btn.clicked.connect(self.fiverr_stop)
         action_row.addWidget(self.fiverr_stop_btn)
 
-        brief_layout.addLayout(action_row, 5, 0, 1, 4)
+        brief_layout.addWidget(action_row_container, 5, 0, 1, 4)
         layout.addWidget(brief_group)
 
         results_splitter = QSplitter(Qt.Horizontal)
@@ -2940,7 +2869,7 @@ class GodAI(QWidget):
         preview_top_container = QWidget()
         preview_top = FlowLayout(preview_top_container, spacing=6)
         self.fiverr_preview_status = QLabel("No logos generated yet.")
-        self.fiverr_preview_status.setStyleSheet("color: #888; font-style: italic;")
+        self.fiverr_preview_status.setStyleSheet(f"color: {TEXT_MUTE}; font-style: italic;")
         preview_top.addWidget(self.fiverr_preview_status)
         self.fiverr_save_images_btn = QPushButton("Save All Images")
         self.fiverr_save_images_btn.setEnabled(False)
@@ -2981,7 +2910,7 @@ class GodAI(QWidget):
         status_layout = QVBoxLayout(status_group)
         self.fiverr_status_label = QLabel("Idle")
         self.fiverr_status_label.setWordWrap(True)
-        self.fiverr_status_label.setStyleSheet("font-size: 12px; color: #888;")
+        self.fiverr_status_label.setStyleSheet(f"font-size: 12px; color: {TEXT_MUTE};")
         status_layout.addWidget(self.fiverr_status_label)
         sidebar_layout.addWidget(status_group)
 
@@ -2989,9 +2918,9 @@ class GodAI(QWidget):
         cost_group.setObjectName("FiverrCostBox")
         cost_layout = QVBoxLayout(cost_group)
         self.fiverr_cost_label = QLabel("—")
-        self.fiverr_cost_label.setStyleSheet("font-size: 14px; font-weight: bold; color: #3cff88;")
+        self.fiverr_cost_label.setStyleSheet(f"font-size: 14px; font-weight: 600; color: {ACCENT};")
         cost_note = QLabel("DALL-E 3: ~$0.04/image\n(standard quality)")
-        cost_note.setStyleSheet("font-size: 10px; color: #666;")
+        cost_note.setStyleSheet(f"font-size: 10px; color: {TEXT_MUTE};")
         cost_note.setWordWrap(True)
         cost_layout.addWidget(self.fiverr_cost_label)
         cost_layout.addWidget(cost_note)
@@ -3015,7 +2944,7 @@ class GodAI(QWidget):
         order_layout.addWidget(self.fiverr_clear_btn)
         sidebar_layout.addWidget(order_group)
 
-        results_splitter.addWidget(sidebar)
+        results_splitter.addWidget(scrollable(sidebar))
         results_splitter.setSizes([700, 180])
         layout.addWidget(results_splitter)
 
@@ -3946,8 +3875,8 @@ class GodAI(QWidget):
         self.manuscript_next_step_label = QLabel("")
         self.manuscript_next_step_label.setWordWrap(True)
         self.manuscript_next_step_label.setStyleSheet(
-            "background: rgba(60,255,136,0.08); border: 1px solid rgba(60,255,136,0.25); "
-            "border-radius: 6px; padding: 8px 10px; color: #3cff88; font-size: 12px;"
+            f"background: {ACCENT_WASH}; border: 1px solid {ACCENT_LINE}; "
+            f"border-radius: 6px; padding: 8px 10px; color: {ACCENT}; font-size: 12px;"
         )
         layout.addWidget(self.manuscript_next_step_label)
 
@@ -4021,7 +3950,7 @@ class GodAI(QWidget):
         # Todos section
         sep = QFrame()
         sep.setFrameShape(QFrame.HLine)
-        sep.setStyleSheet("color: #444;")
+        sep.setObjectName("CardDivider")
         sb.addWidget(sep)
 
         sb.addWidget(QLabel("Publishing Todos:"))
@@ -4042,7 +3971,7 @@ class GodAI(QWidget):
         todo_btn_row.addWidget(self.manuscript_done_todo_btn)
         sb.addLayout(todo_btn_row)
 
-        splitter.addWidget(sidebar)
+        splitter.addWidget(scrollable(sidebar))
         overview_layout.addWidget(splitter)
         self.manuscript_tabs.addTab(overview_tab, "Overview")
 
@@ -4060,7 +3989,7 @@ class GodAI(QWidget):
 
         # Status bar
         self.manuscript_status_label = QLabel("")
-        self.manuscript_status_label.setStyleSheet("font-size: 12px; color: #888; padding: 2px 4px;")
+        self.manuscript_status_label.setStyleSheet(f"font-size: 12px; color: {TEXT_MUTE}; padding: 2px 4px;")
         layout.addWidget(self.manuscript_status_label)
 
         self.manuscript_panel.hide()
@@ -4374,7 +4303,7 @@ class GodAI(QWidget):
             opt_tag = " (optional)" if optional else ""
             if connected:
                 text = f"✅  {name}{opt_tag} — Connected"
-                color = "#3cff88"
+                color = ACCENT
             else:
                 text = f"⚪  {name}{opt_tag} — Not connected · get a key at {where}"
                 color = "#999999"
@@ -5257,96 +5186,7 @@ class GodAI(QWidget):
         self.daily_budget_input.setFixedHeight(28)
 
         # ── VPN-Agent-inspired card stylesheet ──────────────────────────
-        right_widget.setStyleSheet("""
-        QWidget#RightPanel {
-            background-color: #0f0f0f;
-        }
-        QWidget#RightCardsContainer {
-            background-color: transparent;
-        }
-
-        QGroupBox#RightCard {
-            background-color: #161616;
-            border: 1px solid #242424;
-            border-radius: 10px;
-            /* The title is drawn in this top margin. Card padding and each card
-               layout's own top margin both apply *inside*, so they stack: keep
-               their sum at a deliberate ~16px. It was ~30px (baggy) and briefly
-               ~6px (cramped, title crowding the border). */
-            margin-top: 16px;
-            padding: 10px 12px 10px 12px;
-        }
-        QGroupBox#RightCard::title {
-            subcontrol-origin: margin;
-            subcontrol-position: top left;
-            left: 4px;
-            top: 0px;
-            padding: 0 6px;
-            background-color: transparent;
-            color: #707070;
-            font-size: 10px;
-            font-weight: bold;
-            letter-spacing: 2px;
-        }
-
-        QGroupBox#RightCard QLabel {
-            font-size: 12px;
-            font-weight: normal;
-            color: #c8c8c8;
-            letter-spacing: 0;
-            border: none;
-            background: transparent;
-        }
-        QLabel#ResourceLabel {
-            background-color: transparent;
-            border: none;
-            padding: 0;
-            font-size: 11px;
-            color: #c8c8c8;
-        }
-        QFrame#CardDivider {
-            background-color: #242424;
-            color: #242424;
-            max-height: 1px;
-            border: none;
-        }
-
-        QGroupBox#RightCard QLineEdit {
-            font-size: 12px;
-            color: #ffffff;
-            background-color: #0f0f0f;
-            border: 1px solid #242424;
-            border-radius: 6px;
-            padding: 5px 10px;
-        }
-        QGroupBox#RightCard QLineEdit:focus {
-            border: 1px solid #3cff88;
-        }
-
-        QGroupBox#RightCard QPushButton {
-            font-size: 12px;
-            font-weight: 500;
-            color: #d0d0d0;
-            background-color: #1a1a1a;
-            border: 1px solid #262626;
-            border-radius: 8px;
-            padding: 8px 12px;
-            text-align: left;
-        }
-        QGroupBox#RightCard QPushButton:hover {
-            background-color: #232323;
-            border: 1px solid #3cff88;
-            color: #ffffff;
-        }
-        QGroupBox#RightCard QPushButton:pressed {
-            background-color: #0f0f0f;
-        }
-        QGroupBox#RightCard QPushButton:disabled {
-            color: #4a4a4a;
-            background-color: #161616;
-            border: 1px solid #1f1f1f;
-        }
-        """)
+        # Card styling lives in ui/style.py (QGroupBox#RightCard rules).
 
         return right_widget
 
@@ -6812,11 +6652,11 @@ class GodAI(QWidget):
                 if line.startswith("#### "):
                     html_lines.append(f'<h4 style="color:#e8e8e8;margin:10px 0 4px;">{line[5:]}</h4>')
                 elif line.startswith("### "):
-                    html_lines.append(f'<h3 style="color:#3cff88;margin:14px 0 6px;">{line[4:]}</h3>')
+                    html_lines.append(f'<h3 style="color:{ACCENT};margin:14px 0 6px;">{line[4:]}</h3>')
                 elif line.startswith("## "):
                     html_lines.append(f'<h2 style="color:#ffffff;border-bottom:1px solid #333;padding-bottom:4px;margin:18px 0 8px;">{line[3:]}</h2>')
                 elif line.startswith("# "):
-                    html_lines.append(f'<h1 style="color:#3cff88;font-size:20px;margin:0 0 4px;">{line[2:]}</h1>')
+                    html_lines.append(f'<h1 style="color:{ACCENT};font-size:20px;margin:0 0 4px;">{line[2:]}</h1>')
                 # Blockquote / warning
                 elif line.startswith("> "):
                     html_lines.append(f'<blockquote style="border-left:3px solid #f0a000;padding:6px 12px;margin:6px 0;background:#1e1a00;color:#f0c050;">{line[2:]}</blockquote>')
