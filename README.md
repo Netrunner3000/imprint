@@ -1482,9 +1482,11 @@ A visual divider separates the request-level labels above from the session/daily
 
 ### Budget Inputs & Controls
 
-**Session budget (€)** — Editable field for the session spend ceiling.
+The card heading reads **BUDGET (€)** — the euro sign lives there now, not on the two field labels, which is what let both limits share one row in a panel that's only 260px wide at its narrowest.
 
-**Daily budget (€)** — Editable field for the daily spend ceiling.
+**Session** — Editable field for the session spend ceiling, in euros.
+
+**Daily** — Editable field for the daily spend ceiling, in euros.
 
 **Save Budget Limits** — Persists the input values to the database and updates in-memory state immediately.
 
@@ -1729,8 +1731,11 @@ The SQLite database is stored at `data/create_and_publish.db`. All tables use WA
 | `model` | TEXT | Model name (or `default` for a fallback row) |
 | `input_per_1m_usd` | REAL | USD cost per million input tokens |
 | `output_per_1m_usd` | REAL | USD cost per million output tokens |
+| `cached_input_per_1m_usd` | REAL | USD cost per million input tokens served from the provider's prompt cache (currently populated for Kimi). `0.0` means no cache rate is known, and cached tokens then bill at the full input rate rather than for free. |
 
 Primary key: `(backend, model)`
+
+On every launch, `_seed_pricing_from_json()` reconciles this table against `config/pricing.json`: it inserts any backend/model row missing from the database and fills in a cached rate that is still `0.0`, without touching a rate someone has edited in Settings. This isn't just a convenience sync — `calculate_cost_eur()` silently returns €0.00 for a backend with no pricing row at all, so a database that was ever created without going through the normal first-run migration (imported, restored, copied between machines) would bill some providers nothing and never trip the budget caps. That was this project's own state for Kimi, OpenAI, DeepSeek and Gemini before the reconciliation pass was added; see the still-open "Gemini bills nothing" item in `TODO.md` for the one case (placeholder `0.0` rates in the JSON itself) reconciliation can't fix.
 
 ### `settings`
 
@@ -1946,9 +1951,9 @@ Maps command names to prompt prefixes. The default command is `"General Chat"` w
 }
 ```
 
-### config/pricing.json (legacy backup)
+### config/pricing.json
 
-Original pricing definitions in USD per million tokens. Superseded by the `pricing` table. Example structure:
+Pricing definitions in USD per million tokens. Not a "legacy backup" despite the name surviving from an earlier design — `_seed_pricing_from_json()` reconciles this file into the `pricing` table on every launch (see §14), so it is the source of truth for any rate the database doesn't already have, and the one thing standing between a mis-migrated database and providers that silently bill nothing. Example structure:
 
 ```json
 {
@@ -1956,11 +1961,14 @@ Original pricing definitions in USD per million tokens. Superseded by the `prici
   "openai": {
     "gpt-4o-mini": { "input_per_1m_usd": 0.15, "output_per_1m_usd": 0.60 },
     "default":     { "input_per_1m_usd": 2.50, "output_per_1m_usd": 10.00 }
+  },
+  "kimi": {
+    "kimi-k2.7-code": { "input_per_1m_usd": 0.95, "output_per_1m_usd": 4.0, "cached_input_per_1m_usd": 0.19 }
   }
 }
 ```
 
-A `default` model row acts as a fallback for any model not explicitly listed for that provider.
+A `default` model row acts as a fallback for any model not explicitly listed for that provider. `cached_input_per_1m_usd` is optional per model — omit it and cached tokens bill at the full input rate.
 
 ### Audiobook Tool Configuration
 
