@@ -78,7 +78,7 @@ from ui.book_widgets import (
 )
 
 
-# Writable base = project root in dev, ~/Library/Application Support/Create & Publish when frozen.
+# Writable base = project root in dev, ~/Library/Application Support/Imprint when frozen.
 BASE_DIR = user_data_base()
 # Read-only bundled resources (README, config defaults) = project root in dev, bundle when frozen.
 RESOURCE_DIR = resource_base()
@@ -206,7 +206,7 @@ class GodAI(QWidget):
         super().__init__()
         self._is_initializing = True
 
-        self.setWindowTitle("Create & Publish")
+        self.setWindowTitle("Imprint")
         self.resize(1400, 900)
         self.setMinimumSize(1000, 600)
         self.showMaximized()
@@ -1229,7 +1229,7 @@ class GodAI(QWidget):
         left_layout.setContentsMargins(6, 6, 6, 6)
         left_layout.setSpacing(4)
 
-        brand = QLabel("CREATE\n& PUBLISH")
+        brand = QLabel("IMPRINT")
         brand.setObjectName("StudioBrand")
         left_layout.addWidget(brand)
 
@@ -5582,7 +5582,7 @@ class GodAI(QWidget):
                 "OPENAI_API_KEY is not set.\n\n"
                 "Add your key to the .env file in the project root:\n"
                 "    OPENAI_API_KEY=sk-...\n\n"
-                "then restart Create & Publish and try again. "
+                "then restart Imprint and try again. "
                 "Get a key at platform.openai.com/api-keys.",
             )
             return
@@ -6794,7 +6794,7 @@ class GodAI(QWidget):
 
 # Must differ from Sentinel AI's key: a shared socket name would make launching
 # this app hand focus to Sentinel instead of opening a window.
-SINGLE_INSTANCE_KEY = "create-and-publish.single-instance"
+SINGLE_INSTANCE_KEY = "imprint.single-instance"
 
 
 def _hand_off_to_running_instance() -> bool:

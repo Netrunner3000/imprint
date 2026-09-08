@@ -1,5 +1,5 @@
 """
-Create & Publish — panel layout tests
+Imprint — panel layout tests
 =====================================
 Type: Layout regression tests, run headless.
 

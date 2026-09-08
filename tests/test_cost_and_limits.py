@@ -307,3 +307,81 @@ def test_every_priced_provider_actually_bills(tracker, backend, model):
     counters. Gemini is excluded: its rates are genuinely 0.0 in
     config/pricing.json and still need filling in."""
     assert tracker.calculate_cost_eur(backend, model, 10**6, 10**6) > 0
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Rename migration — the app was "Create & Publish" before it was Imprint
+# ─────────────────────────────────────────────────────────────────────────────
+def test_a_previous_database_is_adopted(tmp_path, monkeypatch):
+    """Renaming the app renamed its database file. Without adoption the app
+    starts empty: no usage history, no KDP ingests, no todos."""
+    import sqlite3
+    from services import database as db
+
+    data = tmp_path / "data"
+    data.mkdir()
+    old = data / "create_and_publish.db"
+    conn = sqlite3.connect(old)
+    conn.execute("CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
+    conn.execute("INSERT INTO settings VALUES ('marker', 'carried-over')")
+    conn.commit()
+    conn.close()
+
+    monkeypatch.setattr(db, "DB_PATH", data / "imprint.db")
+    db._adopt_previous_db()
+
+    assert not old.exists(), "old database left behind"
+    moved = sqlite3.connect(data / "imprint.db")
+    value = moved.execute("SELECT value FROM settings WHERE key='marker'").fetchone()[0]
+    moved.close()
+    assert value == "carried-over"
+
+
+def test_an_empty_placeholder_does_not_block_adoption(tmp_path, monkeypatch):
+    """Connecting to a sqlite path creates the file, so anything touching the
+    new path before init_db leaves a 0-table placeholder. Treating that as a
+    real database is what would silently strand the user's data."""
+    import sqlite3
+    from services import database as db
+
+    data = tmp_path / "data"
+    data.mkdir()
+    old = data / "create_and_publish.db"
+    conn = sqlite3.connect(old)
+    conn.execute("CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
+    conn.execute("INSERT INTO settings VALUES ('marker', 'real-data')")
+    conn.commit()
+    conn.close()
+    sqlite3.connect(data / "imprint.db").close()          # the placeholder
+
+    monkeypatch.setattr(db, "DB_PATH", data / "imprint.db")
+    db._adopt_previous_db()
+
+    moved = sqlite3.connect(data / "imprint.db")
+    value = moved.execute("SELECT value FROM settings WHERE key='marker'").fetchone()[0]
+    moved.close()
+    assert value == "real-data"
+
+
+def test_a_populated_database_is_never_clobbered(tmp_path, monkeypatch):
+    """Adoption must be one-way and safe: real current data wins."""
+    import sqlite3
+    from services import database as db
+
+    data = tmp_path / "data"
+    data.mkdir()
+    for name, marker in (("create_and_publish.db", "old"), ("imprint.db", "current")):
+        conn = sqlite3.connect(data / name)
+        conn.execute("CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
+        conn.execute("INSERT INTO settings VALUES ('marker', ?)", (marker,))
+        conn.commit()
+        conn.close()
+
+    monkeypatch.setattr(db, "DB_PATH", data / "imprint.db")
+    db._adopt_previous_db()
+
+    kept = sqlite3.connect(data / "imprint.db")
+    value = kept.execute("SELECT value FROM settings WHERE key='marker'").fetchone()[0]
+    kept.close()
+    assert value == "current"
+    assert (data / "create_and_publish.db").exists(), "old database should be left alone"

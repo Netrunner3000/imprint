@@ -12,7 +12,7 @@ Every other agent has a panel with a 📖 Docs button that opens its sheet from
 `docs/agents/`. The Course Generator has no panel, so it has no button — and
 until this page existed, `run_course.py --help` was its only documentation.
 
-It is also **excluded from the packaged app**: `CreateAndPublish.spec` lists
+It is also **excluded from the packaged app**: `Imprint.spec` lists
 `agents.course_agent` under `excludes`, because importing it pulls
 `providers.avatar` and `providers.voice`. Run it from a source checkout.
 

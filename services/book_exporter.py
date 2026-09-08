@@ -1,5 +1,5 @@
 """
-Manuscript export for Create & Publish's Manuscript (author) agent.
+Manuscript export for Imprint's Manuscript (author) agent.
 Splits a plain-text draft into chapters and renders it as EPUB, DOCX, or PDF.
 
 No external system dependencies (no LibreOffice/Calibre required):

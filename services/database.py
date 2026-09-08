@@ -4,9 +4,14 @@ from pathlib import Path
 
 from services.runtime_paths import user_data_base
 
-# Writable base: project root in dev, ~/Library/Application Support/Create & Publish when frozen.
+# Writable base: project root in dev, ~/Library/Application Support/Imprint when frozen.
 BASE_DIR = user_data_base()
-DB_PATH = BASE_DIR / "data" / "create_and_publish.db"
+DB_PATH = BASE_DIR / "data" / "imprint.db"
+
+# The database file was named for the app, so the rename to Imprint would have
+# left the existing one sitting there unread and the app would have started
+# empty — no usage history, no KDP ingests, no todos.
+PREVIOUS_DB_NAMES = ("create_and_publish.db",)
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS agents (
@@ -149,8 +154,56 @@ def save_setting(key: str, value: str) -> None:
         conn.commit()
 
 
+def _has_tables(path: Path) -> bool:
+    """True if this file is a database with something in it.
+
+    Not the same question as "does the file exist". Merely connecting to a
+    sqlite path creates an empty file, so anything that touches DB_PATH before
+    init_db runs — importing a module that opens a connection, say — leaves a
+    0-table placeholder behind. Treating that as a real database is what would
+    make the rename silently strand the user's history.
+    """
+    if not path.exists() or path.stat().st_size == 0:
+        return False
+    try:
+        conn = sqlite3.connect(str(path))
+        try:
+            count = conn.execute(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='table'"
+            ).fetchone()[0]
+        finally:
+            conn.close()
+        return count > 0
+    except sqlite3.Error:
+        return False
+
+
+def _adopt_previous_db() -> None:
+    """Rename a database left behind by an earlier app name.
+
+    Only when there is no populated current database, so it can never clobber
+    newer data. The -wal and -shm siblings move too; leaving them behind next to
+    a renamed database can strand the most recent committed transactions.
+    """
+    if _has_tables(DB_PATH):
+        return
+    for previous in PREVIOUS_DB_NAMES:
+        old = DB_PATH.parent / previous
+        if not _has_tables(old):
+            continue
+        if DB_PATH.exists():
+            DB_PATH.unlink()        # the empty placeholder checked for above
+        old.rename(DB_PATH)
+        for suffix in ("-wal", "-shm"):
+            sidecar = DB_PATH.parent / (previous + suffix)
+            if sidecar.exists():
+                sidecar.rename(DB_PATH.parent / (DB_PATH.name + suffix))
+        return
+
+
 def init_db() -> None:
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+    _adopt_previous_db()
     is_new = not DB_PATH.exists()
     conn = get_connection()
     conn.executescript(SCHEMA)

@@ -1,4 +1,4 @@
-"""Build the Create & Publish macOS icon from the approved source artwork."""
+"""Build the Imprint macOS icon from the approved source artwork."""
 
 from pathlib import Path
 

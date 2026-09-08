@@ -1,4 +1,4 @@
-"""Regression tests for the focused Create & Publish product shell."""
+"""Regression tests for the focused Imprint product shell."""
 
 import json
 from pathlib import Path

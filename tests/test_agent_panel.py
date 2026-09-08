@@ -1,5 +1,5 @@
 """
-Create & Publish — AgentPanel / AgentHost tests
+Imprint — AgentPanel / AgentHost tests
 ===============================================
 Type: Unit tests for the phase 3 refactor seam.
 
