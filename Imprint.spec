@@ -27,6 +27,7 @@ datas += [
     ("README.md", "."),
     (".env.example", "."),
     ("docs/agents", "docs/agents"),   # per-agent capability sheets (Docs button)
+    ("docs/learn", "docs/learn"),     # Learning Centre pages + their screenshots
 ]
 
 a = Analysis(
