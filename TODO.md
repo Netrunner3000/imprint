@@ -32,6 +32,8 @@ under **Detail** — this checklist is the summary view.
 
 - [ ] `P1` `bug` `@me` **Gemini bills nothing.** All three `gemini` rows in `config/pricing.json` are `0.0` input and `0.0` output, so `calculate_cost_eur` returns €0.00 for every Gemini request — it never counts against the session or daily cap, never appears in the spend counters, and never triggers the confirmation prompt. Needs real per-1M rates looked up and filled in; deliberately not guessed, since a wrong rate mis-bills silently in whichever direction it is wrong. `tests/test_cost_and_limits.py::test_every_priced_provider_actually_bills` excludes gemini for exactly this reason — add it there once the rates are in.
 
+- [x] `P2` `docs` `@ai` **Learning Centre** — a five-page in-app guide (`docs/learn/`) covering setup, each agent, the income paths, cross-agent workflows and best practices, with generated screenshots and a test suite that fails when a page, image or internal link goes missing. Built on the `feature/learning-center` branch.
+
 ## v3 — later
 
 - [ ] `P2` `feature` `@ai` Streaming responses in the chat panel, instead of wait-then-dump

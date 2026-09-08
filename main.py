@@ -5145,6 +5145,10 @@ class GodAI(QWidget):
         self.run_log_btn.clicked.connect(self.show_run_log)
         actions_layout.addWidget(self.run_log_btn)
 
+        self.learn_btn = QPushButton("🎓  Learning Centre")
+        self.learn_btn.clicked.connect(self.show_learning_center)
+        actions_layout.addWidget(self.learn_btn)
+
         self.settings_btn = QPushButton("⚙   Settings")
         self.settings_btn.clicked.connect(self.show_settings)
         actions_layout.addWidget(self.settings_btn)
@@ -6751,6 +6755,11 @@ class GodAI(QWidget):
     def show_model_guide(self):
         from ui.dialogs import show_model_guide as _show_model_guide
         return _show_model_guide(self)
+    def show_learning_center(self):
+        """Guides, workflows and the money chapter, rendered from docs/learn/."""
+        from ui.learning_center import show_learning_center as _show
+        return _show(self, RESOURCE_DIR)
+
     def show_docs(self, anchor: str = ""):
         dialog = QDialog(self)
         dialog.setWindowTitle("Documentation")
