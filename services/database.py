@@ -125,6 +125,58 @@ CREATE TABLE IF NOT EXISTS manuscript_todos (
     notes       TEXT NOT NULL DEFAULT ''
 );
 
+CREATE TABLE IF NOT EXISTS creator_accounts (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    handle        TEXT NOT NULL UNIQUE,
+    platform      TEXT NOT NULL DEFAULT 'onlyfans',
+    -- 'own'      — the user's own account
+    -- 'managed'  — someone else's, run with their permission
+    -- 'persona'  — a synthetic character the user operates
+    -- Recorded because the three carry different obligations, and a tool that
+    -- cannot tell them apart cannot enforce the difference.
+    account_type  TEXT NOT NULL DEFAULT 'own',
+    -- 'managed' only: who authorised it and when. The panel refuses to draft
+    -- for a managed account until this is filled in.
+    consent_holder TEXT NOT NULL DEFAULT '',
+    consent_date   TEXT NOT NULL DEFAULT '',
+    consent_note   TEXT NOT NULL DEFAULT '',
+    -- 'persona' only: how the account discloses that it is not a real person.
+    disclosure    TEXT NOT NULL DEFAULT '',
+    notes         TEXT NOT NULL DEFAULT '',
+    created_at    TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS creator_content (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    account_id   INTEGER NOT NULL,
+    created_at   TEXT NOT NULL,
+    scheduled_for TEXT NOT NULL DEFAULT '',
+    kind         TEXT NOT NULL DEFAULT 'post',
+    title        TEXT NOT NULL DEFAULT '',
+    body         TEXT NOT NULL DEFAULT '',
+    price_usd    REAL NOT NULL DEFAULT 0.0,
+    -- draft -> approved -> posted. Nothing here posts itself; "posted" is the
+    -- user marking that they sent it by hand.
+    status       TEXT NOT NULL DEFAULT 'draft',
+    media_path   TEXT NOT NULL DEFAULT '',
+    FOREIGN KEY (account_id) REFERENCES creator_accounts(id)
+);
+
+CREATE TABLE IF NOT EXISTS creator_earnings (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    account_id     INTEGER NOT NULL,
+    ingested_at    TEXT NOT NULL,
+    source_file    TEXT NOT NULL DEFAULT '',
+    period_from    TEXT NOT NULL DEFAULT '',
+    period_to      TEXT NOT NULL DEFAULT '',
+    gross_usd      REAL NOT NULL DEFAULT 0.0,
+    net_usd        REAL NOT NULL DEFAULT 0.0,
+    subscribers    INTEGER NOT NULL DEFAULT 0,
+    raw_json       TEXT NOT NULL DEFAULT '{}',
+    UNIQUE (account_id, source_file),
+    FOREIGN KEY (account_id) REFERENCES creator_accounts(id)
+);
+
 CREATE INDEX IF NOT EXISTS idx_usage_timestamp ON usage(timestamp);
 CREATE INDEX IF NOT EXISTS idx_runs_timestamp  ON runs(timestamp);
 CREATE INDEX IF NOT EXISTS idx_runs_run_id     ON runs(run_id);
@@ -436,6 +488,17 @@ def _seed_default_agents(conn: sqlite3.Connection) -> None:
             "label": "Fiverr",
             "description": "Fiverr freelancer agent — generates logo concepts via DALL-E 3, writes professional delivery messages, and creates Fiverr gig descriptions.",
             "allowed_providers": json.dumps([]),
+            "allowed_tools": None,
+            "budget_limit_eur": None,
+            "requires_approval": 0,
+            "log_path": "data/logs/runs.jsonl",
+            "auto_generated": 0,
+        },
+        {
+            "name": "creator",
+            "label": "Creator",
+            "description": "Subscription-platform account management — content calendar, captions, PPV and promo drafting, and earnings import. Drafts only; it has no posting path.",
+            "allowed_providers": json.dumps(["anthropic", "openai", "deepseek", "gemini", "kimi", "qwen"]),
             "allowed_tools": None,
             "budget_limit_eur": None,
             "requires_approval": 0,
