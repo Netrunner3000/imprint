@@ -42,3 +42,50 @@ The converter runs as a separate process via `QProcess`:
 
 ## Requirements
 **OpenAI API key** (TTS billed per character; ~$7–10 for a novel). Input folder configured in `config/tools.json`.
+
+---
+
+## Listening (the Listen tab)
+
+Converting a book used to be the end of it: the MP3 existed and nothing in the
+app could find or play it. The **Listen** tab is the other half.
+
+- **Library** — a recursive scan of the configured output folder for audio
+  files (`.mp3 .m4a .m4b .wav .aac .flac .ogg`), showing progress, position and
+  when each was last played.
+- **Player** — play/pause, 30-second skips, a scrubber and playback speed from
+  0.75× to 2×, built on `QMediaPlayer`.
+- **Resume** — the button reads *Resume at 1:24:03* and picks up exactly there.
+
+### How resume works, and the two traps
+
+Position is keyed by **file path**, not by a library index: the library is a
+directory scan, and files get renamed, moved and re-converted, so an index would
+quietly point at the wrong book.
+
+It is saved **on a five-second timer as well as on stop**, because people close
+laptops and quit apps — a resume that only survives a clean exit is not a
+resume.
+
+Two bugs found by actually playing a file, each of which silently defeated the
+whole feature:
+
+1. **`stop()` overwrote the position it had just saved.** `QMediaPlayer` resets
+   position to 0 on stop, and the resulting state change called the save path
+   again. Every listen recorded 0 and nothing ever resumed. The player now
+   never persists a zero; starting over is an explicit action instead.
+2. **The resume seek was applied too early.** `durationChanged` arrives before
+   the media is seekable, so the seek was accepted and then discarded, and
+   playback began from the beginning while appearing to work. It now waits for
+   `LoadedMedia`.
+
+A book played to ~99% is marked **finished** rather than parked at the last
+second, so the next play starts from the beginning rather than resuming and
+immediately stopping. **Start Over** clears that flag.
+
+| Location | Role |
+|---|---|
+| `services/audiobook_library.py` | Scan, resume bookkeeping, time formatting. |
+| `ui/audio_player.py` | `AudiobookPlayer` widget. |
+| `main.py: _build_audiobook_library_tab()` | The Listen tab. |
+| `audiobook_progress` table | Path, position, duration, finished, last played. |

@@ -218,6 +218,13 @@ AGENT_PRETTY_NAMES = {
 
 
 from ui.panels.base import AgentPanel
+from services.audiobook_library import (
+    format_time as format_audiobook_time,
+    load_position as load_audiobook_position,
+    mark_unfinished as mark_audiobook_unfinished,
+    scan as scan_audiobooks,
+)
+from ui.audio_player import AudiobookPlayer
 from ui.workers import (
     ChatWorker, SubprocessWorker, ModelPullWorker, FiverrImageWorker, ShortsWorker,
     HiggsfieldWorker,
@@ -1673,7 +1680,17 @@ class GodAI(QWidget):
     
     def build_audiobook_panel(self):
         self.audiobook_panel = QWidget()
-        panel_layout = QVBoxLayout(self.audiobook_panel)
+        _ab_outer = QVBoxLayout(self.audiobook_panel)
+        _ab_outer.setContentsMargins(0, 4, 0, 0)
+        _ab_outer.setSpacing(6)
+
+        # Convert and Listen are two different jobs. The app could produce an
+        # audiobook and then had no way to play it; the Library tab is that.
+        self.audiobook_tabs = QTabWidget()
+        _ab_outer.addWidget(self.audiobook_tabs, 1)
+
+        _convert_page = QWidget()
+        panel_layout = QVBoxLayout(_convert_page)
         panel_layout.setContentsMargins(0, 4, 0, 0)
         panel_layout.setSpacing(6)
 
@@ -1769,7 +1786,165 @@ class GodAI(QWidget):
         progress_layout.addWidget(self.audiobook_status_label)
 
         panel_layout.addWidget(progress_group)
+        self.audiobook_tabs.addTab(_convert_page, "🎙  Convert")
+        self.audiobook_tabs.addTab(self._build_audiobook_library_tab(), "🎧  Listen")
         self.audiobook_panel.hide()
+
+    def _build_audiobook_library_tab(self) -> QWidget:
+        """The finished audiobooks, and a player that resumes where you left off."""
+        page = QWidget()
+        layout = QVBoxLayout(page)
+        layout.setContentsMargins(8, 8, 8, 8)
+        layout.setSpacing(8)
+
+        header = QHBoxLayout()
+        header.addWidget(QLabel("Audiobooks in your output folder:"))
+        header.addStretch()
+        self.audiobook_refresh_btn = QPushButton("↻  Rescan")
+        self.audiobook_refresh_btn.setObjectName("ChipBtn")
+        self.audiobook_refresh_btn.clicked.connect(self.refresh_audiobook_library)
+        header.addWidget(self.audiobook_refresh_btn)
+        layout.addLayout(header)
+
+        self.audiobook_library_table = QTableWidget(0, 4)
+        self.audiobook_library_table.setHorizontalHeaderLabels(
+            ["Title", "Progress", "Position", "Last played"])
+        self.audiobook_library_table.horizontalHeader().setSectionResizeMode(
+            0, QHeaderView.Stretch)
+        self.audiobook_library_table.setSelectionBehavior(QTableWidget.SelectRows)
+        self.audiobook_library_table.setEditTriggers(QTableWidget.NoEditTriggers)
+        self.audiobook_library_table.itemSelectionChanged.connect(
+            self._audiobook_selection_changed)
+        self.audiobook_library_table.doubleClicked.connect(
+            lambda *_: self.play_selected_audiobook())
+        layout.addWidget(self.audiobook_library_table, 1)
+
+        row = QHBoxLayout()
+        self.audiobook_play_btn = QPushButton("▶  Listen")
+        self.audiobook_play_btn.setObjectName("PrimaryAction")
+        self.audiobook_play_btn.setEnabled(False)
+        self.audiobook_play_btn.clicked.connect(self.play_selected_audiobook)
+        row.addWidget(self.audiobook_play_btn)
+
+        self.audiobook_restart_btn = QPushButton("↺  Start Over")
+        self.audiobook_restart_btn.setEnabled(False)
+        self.audiobook_restart_btn.clicked.connect(self.restart_selected_audiobook)
+        row.addWidget(self.audiobook_restart_btn)
+
+        self.audiobook_reveal_btn = QPushButton("📂  Show in Finder")
+        self.audiobook_reveal_btn.setEnabled(False)
+        self.audiobook_reveal_btn.clicked.connect(self.reveal_selected_audiobook)
+        row.addWidget(self.audiobook_reveal_btn)
+        row.addStretch()
+        layout.addLayout(row)
+
+        divider = QFrame()
+        divider.setFrameShape(QFrame.HLine)
+        divider.setObjectName("CardDivider")
+        layout.addWidget(divider)
+
+        self.audiobook_player = AudiobookPlayer()
+        self.audiobook_player.position_saved.connect(
+            lambda *_: self._audiobook_refresh_row())
+        layout.addWidget(self.audiobook_player)
+
+        self._audiobook_library: list = []
+        return page
+
+    def refresh_audiobook_library(self):
+        """Rescan the output folder. Cheap, so it runs on every panel entry."""
+        defaults = self.get_audiobook_defaults()
+        folder = Path(defaults["output"]).expanduser()
+        try:
+            self._audiobook_library = scan_audiobooks(folder)
+        except Exception as exc:
+            self._note_failure("audiobook: scan library", exc)
+            self._audiobook_library = []
+
+        table = self.audiobook_library_table
+        table.setRowCount(0)
+        for book in self._audiobook_library:
+            r = table.rowCount()
+            table.insertRow(r)
+            if book.finished:
+                progress = "finished"
+            elif book.duration_ms:
+                progress = f"{book.progress * 100:.0f}%"
+            elif book.position_ms:
+                progress = "started"
+            else:
+                progress = "—"
+            position = (format_audiobook_time(book.position_ms)
+                        if book.position_ms else "—")
+            table.setItem(r, 0, QTableWidgetItem(book.title))
+            table.setItem(r, 1, QTableWidgetItem(progress))
+            table.setItem(r, 2, QTableWidgetItem(position))
+            table.setItem(r, 3, QTableWidgetItem(book.last_played or "—"))
+
+        if not self._audiobook_library:
+            self.audiobook_status_label.setText(
+                f"[Library] No audio files in {folder}. Convert a book first.")
+
+    def _selected_audiobook(self):
+        row = self.audiobook_library_table.currentRow()
+        if row < 0 or row >= len(self._audiobook_library):
+            return None
+        return self._audiobook_library[row]
+
+    def _audiobook_selection_changed(self):
+        book = self._selected_audiobook()
+        for button in (self.audiobook_play_btn, self.audiobook_restart_btn,
+                       self.audiobook_reveal_btn):
+            button.setEnabled(book is not None)
+        if book and book.started:
+            self.audiobook_play_btn.setText(
+                f"▶  Resume at {format_audiobook_time(book.position_ms)}")
+        else:
+            self.audiobook_play_btn.setText("▶  Listen")
+
+    def _audiobook_refresh_row(self):
+        """Update the selected row in place while playing.
+
+        A full rescan here would reset the selection under the user mid-listen.
+        """
+        book = self._selected_audiobook()
+        if not book:
+            return
+        row = self.audiobook_library_table.currentRow()
+        position = load_audiobook_position(book.path)
+        book.position_ms = position
+        self.audiobook_library_table.setItem(
+            row, 2, QTableWidgetItem(format_audiobook_time(position)))
+
+    def play_selected_audiobook(self):
+        book = self._selected_audiobook()
+        if not book:
+            return
+        if not book.path.exists():
+            QMessageBox.warning(
+                self, "File Missing",
+                f"{book.path.name} is no longer in the output folder.")
+            self.refresh_audiobook_library()
+            return
+        self.audiobook_player.load(
+            book.path, title=book.title,
+            resume_ms=load_audiobook_position(book.path))
+        self.audiobook_player.play()
+        self.audiobook_status_label.setText(f"[Playing] {book.title}")
+
+    def restart_selected_audiobook(self):
+        book = self._selected_audiobook()
+        if not book:
+            return
+        mark_audiobook_unfinished(book.path)
+        self.audiobook_player.load(book.path, title=book.title, resume_ms=0)
+        self.audiobook_player.play()
+        self.refresh_audiobook_library()
+
+    def reveal_selected_audiobook(self):
+        book = self._selected_audiobook()
+        if book:
+            QDesktopServices.openUrl(QUrl.fromLocalFile(str(book.path.parent)))
 
     def build_author_panel(self):
         self.author_panel = QWidget()
@@ -6431,6 +6606,7 @@ class GodAI(QWidget):
             self.output_label.setText("Output Log")
             self.output_box.setPlainText("[Ready] Click Start to begin.")
             self.refresh_audiobook_books()
+            self.refresh_audiobook_library()
         elif is_manuscript:
             from services.kdp_csv_parser import manuscript_seed_todos
             manuscript_seed_todos()
