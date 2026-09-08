@@ -33,6 +33,24 @@ than ideas: unused schema, an unfinished API loop, and untested handlers.
 | 29 | DONE — **Panel handler tests.** `test_creator_agent.py` covers the agent, the content guard and the CSV parser. The panel handlers — save/delete account, schedule, import, the worker lifecycle — have no coverage, which is where the consent rule is actually enforced for a real user. | testing | S | IDEA |
 | 30 | DONE — **Agency view across managed accounts.** Consent is recorded per account, but there is no cross-account reporting, no per-account voice, and no commission calculation — the things that make managing several accounts different from managing one. | feature | L | IDEA |
 
+## After the Imprint merge
+
+Written with all five modes shipped and the app rebuilt. The first two are
+consequences of what just landed rather than new ideas.
+
+| # | Suggestion | Category | Effort | Status |
+|---|---|---|---|---|
+| 40 | **Price the second provider.** The budget guard is denominated in tokens, so it cannot express "one video render". Higgsfield bills per render, Fiverr's logo path bills per image, and TTS bills per character — three paid paths the cost model cannot see. A per-unit cost type alongside the token one would let all three count against the same caps instead of each needing its own exemption. | security | M | IDEA |
+| 41 | **A doc test that fails when an agent has no guide.** The Learning Centre silently fell a full agent behind twice. `WORKSPACES` is the list of what exists; a test asserting every agent in it appears in `docs/learn/02-agents.md` and has a `docs/agents/*.md` sheet would make that impossible rather than merely noticed. | testing | S | IDEA |
+| 42 | **Project as the object everything hangs off.** A book, a release and a product are each worked on across Write, Audio, Video and Creator, but each mode keeps its own state and the projects rail is decorative. Making Project real — one record the modes read from — is what would turn five tools that share a window into a studio. | design | L | IDEA |
+| 43 | **Video mode.** Still the largest gap against the original plan: `vidforge` has a clean `pipeline.produce()` and a working YouTube upload, and Imprint has no video tab. The Higgsfield client already proves the async-render shape the panel would use. | feature | L | IDEA |
+| 44 | **Social mode.** Scheduling and drafting for the public funnels — X, Reddit, TikTok, Instagram — which every other mode already depends on for traffic and none of them owns. Some of those have real APIs, unlike the subscription platforms. | feature | L | IDEA |
+| 45 | **Charts, not monospace.** Three panels now compute genuinely interesting numbers (KDP royalties, creator price points, cost history) and all three render them as aligned text. One small charting layer would serve all of them. | design | M | IDEA |
+| 46 | **A "what should I do today" view.** The app knows the publishing todos, the content calendar, which drafts are unposted and which books are part-listened. Nothing assembles that into the one screen a person actually opens in the morning. | feature | M | IDEA |
+| 47 | **Retire or rehome the chat agent.** It is still constructed and still owns `normal_panel`, but the tabbed shell reaches no part of it. Either it becomes a real mode or it goes, and with it a meaningful amount of machinery. | infra | M | IDEA |
+| 48 | **Back up the writable directory.** Everything that matters — database, keys, chats, logs — lives in one Application Support folder that nothing in this workspace backs up, while `_Admin/backup/` exists and is good at exactly this. One line in `backup_folders.txt`. | infra | XS | IDEA |
+| 49 | **Sleep timer and keyboard control for the player.** Resume was the ask and it works; space-to-pause and a sleep timer are what make it something you would actually listen to a novel on. | feature | S | IDEA |
+
 ## v3 — bigger swings
 
 | # | Suggestion | Category | Effort | Status |

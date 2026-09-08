@@ -21,7 +21,7 @@ under **Detail** — this checklist is the summary view.
 - [ ] `P2` `research` `@me` Decide whether `RunLogger` should grow a general `note` method — it is the tidier home for the `_note_failure` warnings if they ever need to be queryable
 - [x] `P2` `bug` `@ai` Dead code from the "Strip the security verticals" commit is gone. One correction to the original note: the `osint` branch in `get_recommended_setup()` is a *prompt-keyword* branch, not an agent branch — "research"/"analysis"/"report" still match, so it was kept with the OSINT wording removed rather than deleted. Original note follows: the `icons`/`labels` dicts, `PROVIDER_MODEL_BOXES`-style mappings, and worker attributes (`osint_worker`, `osint_heavy_worker`, …) for the six deleted agents are still defined but unreachable, and `get_recommended_setup()` still has an `osint` keyword branch that can never fire since no `osint` agent exists. Also: the hidden `agent_box` combo still injects `"manager"` into its item list (`for extra in ("manager", "author"): ...`) even though `ManagerAgent` no longer exists. None of this is user-visible today, but it will confuse the next person who greps for those agents assuming they're live.
 - [x] `P3` `infra` `@ai` `Imprint.spec` no longer lists `whois` and `dns`/`dns.resolver` as hidden imports "for `providers/domain_lookup`" — that module was deleted in the same strip commit. Harmless (just bundles two unused packages) but worth pruning next time the spec is touched.
-- [ ] `P2` `design` `@me` FORK_PLAN.md step 4 — reshape the left-nav sidebar into tabs (Write / Audio / Web / Gigs) — is the one step of the fork plan not yet done; everything else in "Order of work" shipped. Needs a UX call on whether tabs are actually better than the current collapsible-category sidebar now that it's live and working.
+- [x] `P2` `design` `@ai` FORK_PLAN.md step 4 — the left-nav sidebar is now mode tabs (Write / Audio / Web / Gigs / Creator) — is the one step of the fork plan not yet done; everything else in "Order of work" shipped. Needs a UX call on whether tabs are actually better than the current collapsible-category sidebar now that it's live and working.
 - [x] `P3` `docs` `@ai` Added `docs/agents/course.md` — every other agent has a reference page under `docs/agents/` opened by its panel's 📖 Docs button; the Course Generator has no panel (it's CLI-only, §5.8) so it has no Docs button either, but a reference page would still help since `run_course.py --help` is the only current documentation of its flags.
 - [x] `P0` `security` `@ai` Paid API calls bypassed every guardrail outside the chat panel — 22 sites constructed a `ChatWorker` directly. `authorize_request` / `record_request` / `abandon_request` / `note_request_usage` now wrap all 19 previously unguarded sites.
 - [x] `P1` `bug` `@ai` Agent panels crushed when the window was narrow — 13 control rows converted to `FlowLayout`; splitter minimum 1460px → 985px
@@ -34,12 +34,31 @@ under **Detail** — this checklist is the summary view.
 
 - [x] `P2` `docs` `@ai` **Learning Centre** — a five-page in-app guide (`docs/learn/`) covering setup, each agent, the income paths, cross-agent workflows and best practices, with generated screenshots and a test suite that fails when a page, image or internal link goes missing. Built on the `feature/learning-center` branch.
 
+- [ ] `P1` `security` `@ai` **Higgsfield renders bypass the request guard.** `creator_generate_video()` submits straight to the API: no `authorize_request`, no `record_request`, so a video render is invisible to the session and daily caps, to the spend counters and to the confirmation prompt. This is the same class of bug as the P0 above — paid calls made outside the one guarded path — reintroduced by the agent that added a second paid provider. Higgsfield bills per render, so this is real money, not a rounding error. Needs its own cost model too: the guard is priced in tokens and a render is not.
+- [ ] `P1` `docs` `@ai` The Learning Centre describes an app that no longer exists — it predates both the Creator agent and the audiobook Listen tab, so two of the seven agents and the player are entirely absent from the guide. `scripts/make_learning_shots.py` also has no shot of either.
+- [ ] `P2` `design` `@ai` **Refactor Phase 4** — one module per agent panel. `main.py` is back to ~8,000 lines: the Creator panel alone added roughly 700, and the phase 3 seam (`AgentHost` + `AgentPanel`) exists precisely so panels can move out. This is the point at which not doing it starts costing.
+- [ ] `P2` `feature` `@ai` The Creator earnings tab is a text dump. It has real numbers behind it now — price points, top content, hook results — and they want a chart, not a monospace table.
+- [ ] `P2` `research` `@me` **Read the actual 2257 requirements** before trusting the performer records table. It records that documents exist and where they are held, which is the right shape, but the field list was designed from a general understanding rather than the regulation. This is a legal obligation, not a feature.
+- [ ] `P3` `feature` `@ai` Audiobook player: no sleep timer, no chapter marks, no keyboard shortcuts (space to pause is the obvious one). The resume works, which was the ask; these are what make it pleasant.
+- [ ] `P3` `bug` `@ai` The `chat` agent is still built and instantiated but reachable from no mode tab — the shell moved to tabs and left it behind. Either give it a home or remove it and its `normal_panel` machinery.
+
 ## v3 — later
 
 - [ ] `P2` `feature` `@ai` Streaming responses in the chat panel, instead of wait-then-dump
 - [ ] `P2` `feature` `@ai` Local model provider (Ollama) as a zero-cost fallback when the budget cap is hit
 - [ ] `P3` `infra` `@ai` One shared retry-with-backoff wrapper across providers, replacing per-client handling
 - [ ] `P3` `feature` `@ai` Export a run — prompt, response, usage, cost — as a single markdown file
+
+---
+
+## Shipped since the last review
+
+- **Renamed to Imprint**, with migrations that carry the Application Support directory and the database file across the rename — the `.env` holding the API keys lives in that directory, so a rename without them looks exactly like the app losing everything.
+- **Creator agent** — subscription account planning and drafting, voice profiles, persona bibles, media library, Higgsfield promo video, revenue attribution, agency view, performer records. No posting path: OnlyFans has no usable API and the automation their terms allow is the kind that assists rather than replaces.
+- **Audiobook library and player** with resume, closing the gap where the app could produce an audiobook and then not play it.
+- **Learning Centre** — five guide pages with generated screenshots.
+- **Right rail** cut from six always-open cards to two plus three collapsibles; `COST` and `BUDGET` were showing the same two numbers twice.
+- **Layout collapse fixed** — controls no longer draw on top of each other or clip off the right edge at any window size, pinned by `tests/test_panel_layout.py`.
 
 ---
 
