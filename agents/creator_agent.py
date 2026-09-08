@@ -36,6 +36,10 @@ starting points for the creator's own voice, not a stand-in for them.
 
 from __future__ import annotations
 
+from services.creator_profile import (
+    SEGMENTS, persona_block, voice_block,
+)
+
 ACCOUNT_TYPES = ("own", "managed", "persona")
 
 KINDS = {
@@ -45,6 +49,9 @@ KINDS = {
     "promo": "an off-platform promo post that drives traffic to the account",
     "bio": "a profile bio",
     "campaign": "a week of scheduled content, as a plan",
+    "hooks": "three alternative opening hooks for the same piece, numbered, "
+             "each taking a different angle — so they can be tested against "
+             "each other rather than guessed between",
 }
 
 # Where subscription traffic actually comes from. Promo drafts are written for
@@ -142,18 +149,47 @@ class CreatorAgent:
 
     def build_draft_prompt(self, account: dict, kind: str, brief: str,
                            *, price_usd: float = 0.0,
-                           channel: str = "") -> list[dict]:
-        """Messages for one drafting run. Consent-checked first."""
+                           channel: str = "", segment: str = "",
+                           price_history: str = "") -> list[dict]:
+        """Messages for one drafting run. Consent-checked first.
+
+        Order matters: who the account is, then how it writes, then the task.
+        The voice block carries the creator's own samples and is what stops the
+        output reading like generic AI copy — it goes in for every kind of
+        draft, not just the long ones.
+        """
         require_ready(account)
 
+        account_id = account.get("id")
         what = KINDS.get(kind, KINDS["post"])
-        parts = [_account_context(account), "", f"Write {what}."]
+        parts = [_account_context(account)]
+
+        if account_id:
+            if (account.get("account_type") or "").lower() == "persona":
+                block = persona_block(account_id)
+                if block:
+                    parts += ["", block]
+            voice = voice_block(account_id)
+            if voice:
+                parts += ["", voice]
+
+        parts += ["", f"Write {what}."]
+
+        segment_note = SEGMENTS.get(segment or "", "")
+        if segment_note:
+            parts.append(f"Audience: {segment_note}")
 
         if kind == "ppv" and price_usd:
             parts.append(
                 f"Price point: ${price_usd:.2f}. The copy should make the "
                 "value legible at that price without overpromising."
             )
+            if price_history:
+                parts.append(
+                    "For reference, what this account has actually earned at "
+                    f"different price points: {price_history}. Pitch the value "
+                    "at a level consistent with what has worked."
+                )
         if kind == "promo" and channel:
             parts.append(
                 f"Target channel: {channel}. Match its norms and length, and "
@@ -173,9 +209,20 @@ class CreatorAgent:
         """
         require_ready(account)
         descriptor = (brief or "").strip() or "a mood teaser for the account"
+
+        # For a persona, the appearance line goes in so successive renders are
+        # the same character rather than a new one each time. The seed does the
+        # rest, and lives on the persona record.
+        appearance = ""
+        account_id = account.get("id")
+        if account_id and (account.get("account_type") or "").lower() == "persona":
+            from services.creator_profile import load_persona
+            appearance = (load_persona(account_id) or {}).get("appearance", "")
+
+        subject = f"{appearance.strip()}. {descriptor}" if appearance else descriptor
         return (
-            f"Cinematic promotional teaser: {descriptor}. "
+            f"Cinematic promotional teaser: {subject}. "
             "Stylised, atmospheric, safe-for-work advertising footage. "
             "Shallow depth of field, considered colour grade, confident "
-            "framing. No text overlays, no explicit content."
+            "framing. No text overlays, nothing explicit."
         )

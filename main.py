@@ -79,6 +79,14 @@ from services.higgsfield_client import (
     HiggsfieldClient, ContentPolicyError, check_prompt,
 )
 from services.creator_csv import ingest_creator_csv
+from services.creator_profile import (
+    SEGMENTS, load_persona, load_voice, persona_seed, reference_images,
+    save_persona, save_voice,
+)
+from services.creator_insights import (
+    account_summary, agency_overview, commission, hook_results, price_history,
+    price_points, record_revenue, top_content,
+)
 from ui.book_widgets import (
     make_theme_box, make_size_box, make_voice_source_box,
     theme_key, size_key, unique_output_path,
@@ -212,6 +220,7 @@ AGENT_PRETTY_NAMES = {
 from ui.panels.base import AgentPanel
 from ui.workers import (
     ChatWorker, SubprocessWorker, ModelPullWorker, FiverrImageWorker, ShortsWorker,
+    HiggsfieldWorker,
 )
 from ui.widgets import (
     FlowLayout, CollapsibleSection, scrollable, let_combos_shrink,
@@ -3074,6 +3083,27 @@ class GodAI(QWidget):
             "statement from the site and import the CSV here.")
         self.creator_tabs.addTab(self.creator_earnings_output, "📈  Earnings")
 
+        self.creator_voice_tab = self._build_creator_voice_tab()
+        self.creator_tabs.addTab(self.creator_voice_tab, "🗣  Voice")
+
+        self.creator_media_table = QTableWidget(0, 4)
+        self.creator_media_table.setHorizontalHeaderLabels(
+            ["File", "Kind", "Source", "Caption"])
+        self.creator_media_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
+        self.creator_tabs.addTab(self.creator_media_table, "🖼  Media")
+
+        self.creator_agency_table = QTableWidget(0, 6)
+        self.creator_agency_table.setHorizontalHeaderLabels(
+            ["Account", "Type", "Authorised by", "Net $", "Subs", "Drafts"])
+        self.creator_agency_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
+        self.creator_tabs.addTab(self.creator_agency_table, "🏢  Agency")
+
+        self.creator_records_table = QTableWidget(0, 5)
+        self.creator_records_table.setHorizontalHeaderLabels(
+            ["Performer", "Verified", "ID on file", "Release", "Records held at"])
+        self.creator_records_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
+        self.creator_tabs.addTab(self.creator_records_table, "📋  Records")
+
         body.addWidget(self.creator_tabs)
 
         sidebar = QWidget()
@@ -3087,7 +3117,7 @@ class GodAI(QWidget):
         sb.addWidget(QLabel("Draft:"))
         self.creator_kind_box = QComboBox()
         self.creator_kind_box.addItems(
-            ["post", "ppv", "welcome", "promo", "bio", "campaign"])
+            ["post", "ppv", "welcome", "promo", "bio", "campaign", "hooks"])
         self.creator_kind_box.currentTextChanged.connect(self._creator_kind_changed)
         sb.addWidget(self.creator_kind_box)
 
@@ -3096,6 +3126,13 @@ class GodAI(QWidget):
         self.creator_price_input = QLineEdit()
         self.creator_price_input.setPlaceholderText("12.00")
         sb.addWidget(self.creator_price_input)
+
+        self.creator_segment_label = QLabel("Audience:")
+        sb.addWidget(self.creator_segment_label)
+        self.creator_segment_box = QComboBox()
+        self.creator_segment_box.addItems(
+            ["(any)", "new", "loyal", "lapsed", "big_spender"])
+        sb.addWidget(self.creator_segment_box)
 
         self.creator_channel_label = QLabel("Promo channel:")
         sb.addWidget(self.creator_channel_label)
@@ -3157,6 +3194,18 @@ class GodAI(QWidget):
         divider2.setObjectName("CardDivider")
         sb.addWidget(divider2)
 
+        self.creator_add_media_btn = QPushButton("🖼  Add Media")
+        self.creator_add_media_btn.clicked.connect(self.creator_add_media)
+        sb.addWidget(self.creator_add_media_btn)
+
+        self.creator_add_performer_btn = QPushButton("📋  Add Performer Record")
+        self.creator_add_performer_btn.clicked.connect(self.creator_add_performer)
+        sb.addWidget(self.creator_add_performer_btn)
+
+        self.creator_revenue_btn = QPushButton("💰  Record Revenue")
+        self.creator_revenue_btn.clicked.connect(self.creator_record_revenue)
+        sb.addWidget(self.creator_revenue_btn)
+
         self.creator_import_btn = QPushButton("📥  Import Earnings CSV")
         self.creator_import_btn.clicked.connect(self.creator_import_earnings)
         sb.addWidget(self.creator_import_btn)
@@ -3193,6 +3242,10 @@ class GodAI(QWidget):
         self.creator_price_input.setVisible(kind == "ppv")
         self.creator_channel_label.setVisible(kind == "promo")
         self.creator_channel_box.setVisible(kind == "promo")
+        # Audience only shapes a message aimed at someone.
+        wants_segment = kind in ("welcome", "ppv", "post")
+        self.creator_segment_label.setVisible(wants_segment)
+        self.creator_segment_box.setVisible(wants_segment)
 
     def creator_refresh_accounts(self):
         self.creator_account_box.blockSignals(True)
@@ -3221,6 +3274,10 @@ class GodAI(QWidget):
         self.creator_disclosure_input.setText(account.get("disclosure", ""))
         self.creator_refresh_calendar()
         self.creator_refresh_earnings()
+        self.creator_load_voice_tab()
+        self.creator_refresh_media()
+        self.creator_refresh_records()
+        self.creator_refresh_agency()
 
     def creator_current_account(self) -> dict | None:
         account_id = self.creator_account_box.currentData()
@@ -3313,9 +3370,12 @@ class GodAI(QWidget):
             price = 0.0
 
         try:
+            segment = self.creator_segment_box.currentText()
             messages = agent.build_draft_prompt(
                 account, kind, brief, price_usd=price,
-                channel=self.creator_channel_box.currentText())
+                channel=self.creator_channel_box.currentText(),
+                segment="" if segment == "(any)" else segment,
+                price_history=price_history(account["id"]))
         except ConsentError as exc:
             QMessageBox.warning(self, "Authorisation Required", str(exc))
             return
@@ -3409,19 +3469,22 @@ class GodAI(QWidget):
         try:
             with get_connection() as conn:
                 rows = conn.execute(
-                    "SELECT scheduled_for, kind, title, price_usd, status "
-                    "FROM creator_content WHERE account_id = ? "
+                    "SELECT id, scheduled_for, kind, title, price_usd, status, "
+                    "revenue_usd FROM creator_content WHERE account_id = ? "
                     "ORDER BY id DESC", (account["id"],)).fetchall()
         except Exception as exc:
             self._note_failure("creator: load calendar", exc)
             return
+        # Row order maps to content ids so revenue can attach to a selection.
+        self._creator_calendar_ids = [row["id"] for row in rows]
         for row in rows:
             r = self.creator_calendar_table.rowCount()
             self.creator_calendar_table.insertRow(r)
             for col, value in enumerate([
                     row["scheduled_for"], row["kind"], row["title"],
                     f"{row['price_usd']:.2f}" if row["price_usd"] else "",
-                    row["status"]]):
+                    f"{row['status']}"
+                    + (f"  (${row['revenue_usd']:,.2f})" if row["revenue_usd"] else "")]):
                 self.creator_calendar_table.setItem(r, col, QTableWidgetItem(str(value)))
 
     # ── Promo video ──────────────────────────────────────────────────────────
@@ -3451,19 +3514,40 @@ class GodAI(QWidget):
             QMessageBox.warning(self, "Higgsfield Content Policy", str(exc))
             return
 
+        # Personas reuse their locked seed and reference image so successive
+        # renders are the same character rather than a new one each time.
+        seed = persona_seed(account["id"])
+        references = reference_images(account["id"])
+
+        output_dir = Path(BASE_DIR) / "output" / "creator" / str(account["id"])
+        stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+        output_path = output_dir / f"teaser-{stamp}.mp4"
+
+        self.creator_video_btn.setEnabled(False)
         self.creator_video_status.setText("Submitting to Higgsfield…")
-        try:
-            job = client.generate_video(prompt)
-        except ContentPolicyError as exc:
-            self.creator_video_status.setText(str(exc))
-            return
-        except Exception as exc:
-            self._note_failure("creator: higgsfield submit", exc,
-                               self.creator_video_status)
-            return
-        self.creator_video_status.setText(
-            f"Job {job.job_id or '?'} queued. Renders take a few minutes; "
-            "check Higgsfield for the result.")
+
+        self.creator_video_worker = HiggsfieldWorker(
+            client, prompt, output_path, seed=seed,
+            reference_image=references[0] if references else None)
+        self.creator_video_worker.status_signal.connect(
+            self.creator_video_status.setText)
+        self.creator_video_worker.done_signal.connect(
+            lambda path, aid=account["id"]: self._creator_video_done(aid, path))
+        self.creator_video_worker.error_signal.connect(
+            self._creator_video_error)
+        self.creator_video_worker.start()
+
+    def _creator_video_done(self, account_id: int, path: str):
+        """Store the render in the media library rather than leaving it on disk."""
+        self._creator_store_media(account_id, path, source="higgsfield",
+                                  caption="Higgsfield teaser")
+        self.creator_video_btn.setEnabled(True)
+        self.creator_video_status.setText(f"Saved: {Path(path).name}")
+        self.creator_refresh_media()
+
+    def _creator_video_error(self, error: str):
+        self.creator_video_btn.setEnabled(True)
+        self.creator_video_status.setText(f"[Error] {error}")
 
     # ── Earnings ─────────────────────────────────────────────────────────────
     def creator_import_earnings(self):
@@ -3510,10 +3594,42 @@ class GodAI(QWidget):
                 "No earnings imported yet.\n\nThere is no OnlyFans API, so "
                 "export the statement from the site and import the CSV.")
             return
-        gross = sum(r["gross_usd"] for r in rows)
-        net = sum(r["net_usd"] for r in rows)
-        lines = [f"Imported statements: {len(rows)}",
-                 f"Gross: ${gross:,.2f}    Net: ${net:,.2f}", ""]
+
+        summary = account_summary(account["id"])
+        lines = [
+            "OVERVIEW",
+            f"  Statements imported : {summary['statements']}",
+            f"  Gross / Net         : ${summary['gross']:,.2f} / ${summary['net']:,.2f}",
+            f"  Subscribers (peak)  : {summary['subscribers']}",
+            f"  Net per subscriber  : ${summary['per_subscriber']:,.2f}",
+            f"  Posted items        : {summary['posted']}"
+            f"  (attributed ${summary['attributed']:,.2f})",
+        ]
+
+        points = price_points(account["id"])
+        if points:
+            lines += ["", "PRICE POINTS  (what each PPV price actually returned)"]
+            for point in points:
+                thin = "" if point["sends"] >= 5 else "   ← few sends, treat as anecdote"
+                lines.append(
+                    f"  ${point['price_usd']:>7.2f}  ×{point['sends']:<3}  "
+                    f"avg ${point['average']:>8.2f}  total ${point['total']:>9.2f}{thin}")
+
+        best = top_content(account["id"])
+        if best:
+            lines += ["", "TOP CONTENT"]
+            for item in best:
+                lines.append(
+                    f"  ${item['revenue_usd']:>9.2f}  {item['kind']:<9} "
+                    f"{(item['title'] or '')[:52]}")
+
+        hooks = hook_results(account["id"])
+        if hooks:
+            lines += ["", "HOOKS THAT SHIPPED"]
+            for hook in hooks[:8]:
+                lines.append(f"  ${hook['revenue_usd']:>9.2f}  {hook['body'][:60]}")
+
+        lines += ["", "STATEMENTS"]
         for r in rows:
             lines.append(
                 f"  {r['source_file']}  {r['period_from']}–{r['period_to']}  "
@@ -3524,6 +3640,287 @@ class GodAI(QWidget):
     def creator_load_models(self):
         """Kept as a method so existing call sites stay put."""
         self.creator_panel_base.load_models()
+
+    def _build_creator_voice_tab(self) -> QWidget:
+        """Voice profile, and the persona bible for persona accounts.
+
+        Voice is the single biggest lever on how the drafts read: samples of
+        the creator's own writing are what the model imitates, and without them
+        every draft starts from nothing.
+        """
+        page = QWidget()
+        layout = QVBoxLayout(page)
+        layout.setContentsMargins(8, 8, 8, 8)
+        layout.setSpacing(6)
+
+        layout.addWidget(QLabel(
+            "Paste a few of this account's own posts. The model imitates these "
+            "— it is what stops drafts reading like generic AI copy."))
+        self.creator_voice_samples = QTextEdit()
+        self.creator_voice_samples.setPlaceholderText(
+            "One post per line — five or six is plenty.")
+        layout.addWidget(self.creator_voice_samples, 1)
+
+        grid = QGridLayout()
+        grid.setSpacing(6)
+        grid.addWidget(QLabel("Tone:"), 0, 0)
+        self.creator_voice_tone = QLineEdit()
+        self.creator_voice_tone.setPlaceholderText("dry, warm, a bit deadpan")
+        grid.addWidget(self.creator_voice_tone, 0, 1)
+        grid.addWidget(QLabel("Emoji:"), 0, 2)
+        self.creator_voice_emoji = QLineEdit()
+        self.creator_voice_emoji.setPlaceholderText("sparse — one at most")
+        grid.addWidget(self.creator_voice_emoji, 0, 3)
+        grid.addWidget(QLabel("Length:"), 1, 0)
+        self.creator_voice_length = QLineEdit()
+        self.creator_voice_length.setPlaceholderText("1–2 short sentences")
+        grid.addWidget(self.creator_voice_length, 1, 1)
+        grid.addWidget(QLabel("Never say:"), 1, 2)
+        self.creator_voice_banned = QLineEdit()
+        self.creator_voice_banned.setPlaceholderText("babe, hun, 🔥")
+        grid.addWidget(self.creator_voice_banned, 1, 3)
+        layout.addLayout(grid)
+
+        # Persona bible — shown only for persona accounts.
+        self.creator_persona_group = QGroupBox("Character bible (persona accounts)")
+        pg = QGridLayout(self.creator_persona_group)
+        pg.setSpacing(6)
+        pg.addWidget(QLabel("Appearance:"), 0, 0)
+        self.creator_persona_appearance = QLineEdit()
+        self.creator_persona_appearance.setPlaceholderText(
+            "Locked description — reused in every render so it stays the same character")
+        pg.addWidget(self.creator_persona_appearance, 0, 1, 1, 3)
+        pg.addWidget(QLabel("Backstory:"), 1, 0)
+        self.creator_persona_backstory = QLineEdit()
+        pg.addWidget(self.creator_persona_backstory, 1, 1, 1, 3)
+        pg.addWidget(QLabel("Personality:"), 2, 0)
+        self.creator_persona_personality = QLineEdit()
+        pg.addWidget(self.creator_persona_personality, 2, 1, 1, 3)
+        pg.addWidget(QLabel("Never does:"), 3, 0)
+        self.creator_persona_boundaries = QLineEdit()
+        pg.addWidget(self.creator_persona_boundaries, 3, 1, 1, 3)
+        pg.addWidget(QLabel("Seed:"), 4, 0)
+        self.creator_persona_seed = QLineEdit()
+        self.creator_persona_seed.setPlaceholderText("e.g. 4821 — keeps renders on-model")
+        self.creator_persona_seed.setMaximumWidth(120)
+        pg.addWidget(self.creator_persona_seed, 4, 1)
+        layout.addWidget(self.creator_persona_group)
+
+        save_btn = QPushButton("Save Voice && Character")
+        save_btn.setObjectName("PrimaryAction")
+        save_btn.clicked.connect(self.creator_save_voice)
+        layout.addWidget(save_btn)
+        return page
+
+    def creator_save_voice(self):
+        account = self.creator_current_account()
+        if not account:
+            QMessageBox.warning(self, "No Account", "Select an account first.")
+            return
+        save_voice(
+            account["id"],
+            samples=self.creator_voice_samples.toPlainText(),
+            tone=self.creator_voice_tone.text(),
+            emoji_style=self.creator_voice_emoji.text(),
+            banned_words=self.creator_voice_banned.text(),
+            typical_length=self.creator_voice_length.text(),
+        )
+        if account.get("account_type") == "persona":
+            try:
+                seed = int(self.creator_persona_seed.text().strip() or 0) or None
+            except ValueError:
+                seed = None
+            save_persona(
+                account["id"],
+                appearance=self.creator_persona_appearance.text(),
+                backstory=self.creator_persona_backstory.text(),
+                personality=self.creator_persona_personality.text(),
+                boundaries=self.creator_persona_boundaries.text(),
+                seed=seed,
+            )
+        self.creator_status_label.setText("Voice saved — drafts will use it.")
+
+    def creator_load_voice_tab(self):
+        account = self.creator_current_account()
+        if not account:
+            return
+        voice = load_voice(account["id"])
+        self.creator_voice_samples.setPlainText(voice.get("samples", ""))
+        self.creator_voice_tone.setText(voice.get("tone", ""))
+        self.creator_voice_emoji.setText(voice.get("emoji_style", ""))
+        self.creator_voice_banned.setText(voice.get("banned_words", ""))
+        self.creator_voice_length.setText(voice.get("typical_length", ""))
+
+        is_persona = account.get("account_type") == "persona"
+        self.creator_persona_group.setVisible(is_persona)
+        if is_persona:
+            persona = load_persona(account["id"])
+            self.creator_persona_appearance.setText(persona.get("appearance", ""))
+            self.creator_persona_backstory.setText(persona.get("backstory", ""))
+            self.creator_persona_personality.setText(persona.get("personality", ""))
+            self.creator_persona_boundaries.setText(persona.get("boundaries", ""))
+            seed = persona.get("seed")
+            self.creator_persona_seed.setText(str(seed) if seed else "")
+
+    # ── Media library ────────────────────────────────────────────────────────
+    def creator_add_media(self):
+        account = self.creator_current_account()
+        if not account:
+            QMessageBox.warning(self, "No Account", "Select an account first.")
+            return
+        paths, _ = QFileDialog.getOpenFileNames(
+            self, "Add Media", "",
+            "Media (*.png *.jpg *.jpeg *.webp *.mp4 *.mov *.m4a *.mp3)")
+        if not paths:
+            return
+        for path in paths:
+            self._creator_store_media(account["id"], path, source="upload")
+        self.creator_refresh_media()
+        self.creator_tabs.setCurrentWidget(self.creator_media_table)
+
+    def _creator_store_media(self, account_id: int, path: str,
+                             *, source: str = "upload", job_id: str = "",
+                             caption: str = ""):
+        suffix = Path(path).suffix.lower()
+        kind = ("video" if suffix in (".mp4", ".mov")
+                else "audio" if suffix in (".mp3", ".m4a") else "image")
+        try:
+            with get_connection() as conn:
+                conn.execute("""
+                    INSERT INTO creator_media
+                      (account_id, path, kind, caption, source, job_id, added_at)
+                    VALUES (?,?,?,?,?,?,?)
+                    ON CONFLICT(account_id, path) DO UPDATE SET
+                      caption=excluded.caption, source=excluded.source
+                """, (account_id, path, kind, caption, source, job_id,
+                      datetime.now().isoformat(timespec="seconds")))
+                conn.commit()
+        except Exception as exc:
+            self._note_failure("creator: store media", exc)
+
+    def creator_refresh_media(self):
+        account = self.creator_current_account()
+        self.creator_media_table.setRowCount(0)
+        if not account:
+            return
+        try:
+            with get_connection() as conn:
+                rows = conn.execute(
+                    "SELECT path, kind, source, caption FROM creator_media "
+                    "WHERE account_id = ? ORDER BY id DESC",
+                    (account["id"],)).fetchall()
+        except Exception as exc:
+            self._note_failure("creator: load media", exc)
+            return
+        for row in rows:
+            r = self.creator_media_table.rowCount()
+            self.creator_media_table.insertRow(r)
+            for col, value in enumerate([Path(row["path"]).name, row["kind"],
+                                         row["source"], row["caption"]]):
+                self.creator_media_table.setItem(r, col, QTableWidgetItem(str(value)))
+
+    # ── Performer records ────────────────────────────────────────────────────
+    def creator_add_performer(self):
+        """Record that age/identity records exist for someone depicted.
+
+        Deliberately records *that* documents are held and where — not the
+        documents. In the US, 18 U.S.C. 2257 puts this obligation on the
+        producer; storing scans of passports in an app database would create a
+        second problem rather than solve the first.
+        """
+        account = self.creator_current_account()
+        if not account:
+            QMessageBox.warning(self, "No Account", "Select an account first.")
+            return
+        name, ok = QInputDialog.getText(
+            self, "Add Performer Record",
+            "Performer's legal name (as it appears on their ID):")
+        if not ok or not name.strip():
+            return
+        location, ok = QInputDialog.getText(
+            self, "Records Location",
+            "Where are the ID and release documents actually held?\n"
+            "(This app stores the reference, never the documents.)")
+        if not ok:
+            return
+        try:
+            with get_connection() as conn:
+                conn.execute("""
+                    INSERT INTO creator_performers
+                      (account_id, legal_name, date_verified, id_on_file,
+                       release_signed, records_location, created_at)
+                    VALUES (?,?,?,1,1,?,?)
+                """, (account["id"], name.strip(),
+                      datetime.now().strftime("%Y-%m-%d"),
+                      location.strip(),
+                      datetime.now().isoformat(timespec="seconds")))
+                conn.commit()
+        except Exception as exc:
+            self._note_failure("creator: add performer", exc)
+            return
+        self.creator_refresh_records()
+        self.creator_tabs.setCurrentWidget(self.creator_records_table)
+
+    def creator_refresh_records(self):
+        account = self.creator_current_account()
+        self.creator_records_table.setRowCount(0)
+        if not account:
+            return
+        try:
+            with get_connection() as conn:
+                rows = conn.execute(
+                    "SELECT legal_name, date_verified, id_on_file, "
+                    "release_signed, records_location FROM creator_performers "
+                    "WHERE account_id = ? ORDER BY legal_name",
+                    (account["id"],)).fetchall()
+        except Exception as exc:
+            self._note_failure("creator: load records", exc)
+            return
+        for row in rows:
+            r = self.creator_records_table.rowCount()
+            self.creator_records_table.insertRow(r)
+            for col, value in enumerate([
+                    row["legal_name"], row["date_verified"],
+                    "yes" if row["id_on_file"] else "no",
+                    "yes" if row["release_signed"] else "no",
+                    row["records_location"]]):
+                self.creator_records_table.setItem(r, col, QTableWidgetItem(str(value)))
+
+    # ── Revenue attribution ──────────────────────────────────────────────────
+    def creator_record_revenue(self):
+        """Attach what a calendar item earned, closing the loop to the drafter."""
+        row = self.creator_calendar_table.currentRow()
+        ids = getattr(self, "_creator_calendar_ids", [])
+        if row < 0 or row >= len(ids):
+            QMessageBox.information(
+                self, "Select an Item",
+                "Pick a row on the Calendar tab first — revenue attaches to "
+                "one piece of content.")
+            return
+        amount, ok = QInputDialog.getDouble(
+            self, "Record Revenue", "What did it earn (USD)?", 0, 0, 1e6, 2)
+        if not ok:
+            return
+        record_revenue(ids[row], amount)
+        self.creator_refresh_calendar()
+        self.creator_refresh_earnings()
+
+    # ── Agency ───────────────────────────────────────────────────────────────
+    def creator_refresh_agency(self):
+        self.creator_agency_table.setRowCount(0)
+        try:
+            rows = agency_overview()
+        except Exception as exc:
+            self._note_failure("creator: agency overview", exc)
+            return
+        for row in rows:
+            r = self.creator_agency_table.rowCount()
+            self.creator_agency_table.insertRow(r)
+            for col, value in enumerate([
+                    row["handle"], row["account_type"],
+                    row["consent_holder"] or "—",
+                    f"{row['net']:,.2f}", row["subscribers"], row["drafts"]]):
+                self.creator_agency_table.setItem(r, col, QTableWidgetItem(str(value)))
 
     # ── Fiverr handlers ──────────────────────────────────────────────────────
     def fiverr_load_models(self):

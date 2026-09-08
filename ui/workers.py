@@ -210,3 +210,59 @@ class ShortsWorker(QThread):
             self.done_signal.emit(str(self.output_path))
         except Exception as e:
             self.error_signal.emit(str(e))
+
+
+class HiggsfieldWorker(QThread):
+    """Submits a Higgsfield render, waits for it, and downloads the result.
+
+    On a thread because a render takes minutes. The panel used to submit and
+    then tell the user to go and look on Higgsfield's site, which is not a
+    feature so much as a note apologising for the absence of one.
+
+    Emits `status_signal` on every poll so the wait is legible rather than a
+    frozen button.
+    """
+    status_signal = Signal(str)
+    done_signal = Signal(str)     # local path of the downloaded video
+    error_signal = Signal(str)
+
+    def __init__(self, client, prompt: str, output_path,
+                 *, duration: int = 5, reference_image: str | None = None,
+                 seed: int | None = None, timeout: int = 900):
+        super().__init__()
+        self.client = client
+        self.prompt = prompt
+        self.output_path = Path(output_path)
+        self.duration = duration
+        self.reference_image = reference_image
+        self.seed = seed
+        self.timeout = timeout
+
+    def run(self):
+        try:
+            self.status_signal.emit("Submitting to Higgsfield…")
+            job = self.client.generate_video(
+                self.prompt, duration=self.duration,
+                reference_image=self.reference_image, seed=self.seed)
+
+            def progress(current):
+                self.status_signal.emit(f"Rendering… ({current.status})")
+
+            job = self.client.wait(job, timeout=self.timeout,
+                                   on_progress=progress)
+            if job.status != "completed" or not job.video_url:
+                self.error_signal.emit(job.error or f"Render {job.status}")
+                return
+
+            self.status_signal.emit("Downloading…")
+            self.output_path.parent.mkdir(parents=True, exist_ok=True)
+            import requests
+            with requests.get(job.video_url, stream=True, timeout=120) as response:
+                response.raise_for_status()
+                with open(self.output_path, "wb") as handle:
+                    for chunk in response.iter_content(chunk_size=1 << 16):
+                        if chunk:
+                            handle.write(chunk)
+            self.done_signal.emit(str(self.output_path))
+        except Exception as exc:
+            self.error_signal.emit(str(exc))
