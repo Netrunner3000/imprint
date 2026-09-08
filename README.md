@@ -1786,6 +1786,7 @@ imprint/
 │   │                              #   show_cost_history / show_run_log
 │   ├── book_widgets.py            # Shared theme/size/voice controls + asset paths
 │   ├── host.py                    # AgentHost protocol (Phase 3)
+│   ├── learning_center.py         # Learning Centre dialog (docs/learn renderer)
 │   └── panels/
 │       ├── __init__.py
 │       └── base.py                # AgentPanel — one instance per agent, owns that
@@ -1988,6 +1989,40 @@ The Audiobook agent reads its paths and defaults from `services/tool_runner.py`,
 - `default_output` — Default MP3 output folder.
 - `default_voice` — Default TTS voice.
 - `default_chunk_tokens` — Default chunk size.
+
+---
+
+## 17b. Learning Centre
+
+`ACTIONS → 🎓 Learning Centre` in the right rail opens a five-page guide
+rendered from `docs/learn/`:
+
+| Page | Covers |
+|---|---|
+| Getting started | The four regions, first-run setup, a first end-to-end run |
+| The agents | Each agent's controls and the working method that suits it |
+| Making money | Which income path to start with, and realistic expectations |
+| Workflows | Cross-agent recipes — novel → audiobook → landing page |
+| Best practices | Money, prompting, publishing, and the traps specific to this app |
+
+The pages are plain markdown, so they can be read on disk or in the app.
+
+**Screenshots are generated, not pasted.** `scripts/make_learning_shots.py`
+drives the real window offscreen and writes `docs/learn/img/`:
+
+```bash
+.venv/bin/python scripts/make_learning_shots.py
+```
+
+Re-run it after any UI change and commit what moves — otherwise the guide
+slowly starts describing an app that no longer exists.
+
+`tests/test_learning_center.py` guards the parts that rot silently: every page
+listed exists, every page on disk is reachable, every image reference and
+internal link resolves, every referenced screenshot is one the generator
+actually produces, and `docs/learn` is in the PyInstaller `datas` list — without
+that last one the Learning Centre is empty in the installed `.app` while working
+perfectly from a source checkout.
 
 ---
 
