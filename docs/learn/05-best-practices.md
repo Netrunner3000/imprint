@@ -85,7 +85,7 @@ leaves a partial output. The run log records where it stopped.
 
 ## Keeping the app healthy
 
-**Back up `~/Library/Application Support/Create & Publish/`.** Your database,
+**Back up `~/Library/Application Support/Imprint/`.** Your database,
 saved chats, logs and `.env` live there — not in the app bundle. Reinstalling
 does not touch it; deleting it loses everything.
 

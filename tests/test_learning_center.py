@@ -1,5 +1,5 @@
 """
-Create & Publish — Learning Centre tests
+Imprint — Learning Centre tests
 ========================================
 Type: Content + wiring tests, run headless.
 
@@ -9,7 +9,7 @@ box. These assert the things that would otherwise only be caught by a human
 opening the dialog and looking.
 
 The packaging case is the one most likely to bite. The pages live under
-`docs/learn/`, which reaches a frozen .app only because CreateAndPublish.spec
+`docs/learn/`, which reaches a frozen .app only because Imprint.spec
 lists it in `datas`; without that the Learning Centre is empty in the installed
 app while working perfectly from source.
 
@@ -85,7 +85,7 @@ def test_learn_dir_is_bundled_by_the_spec():
     """Without this line the Learning Centre is empty in the installed .app
     while working perfectly from a source checkout — the kind of break that
     only shows up after shipping."""
-    spec = (PROJECT_ROOT / "CreateAndPublish.spec").read_text(encoding="utf-8")
+    spec = (PROJECT_ROOT / "Imprint.spec").read_text(encoding="utf-8")
     assert '("docs/learn", "docs/learn")' in spec, \
         "docs/learn is not in the PyInstaller datas list"
 
