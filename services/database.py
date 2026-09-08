@@ -125,6 +125,137 @@ CREATE TABLE IF NOT EXISTS manuscript_todos (
     notes       TEXT NOT NULL DEFAULT ''
 );
 
+CREATE TABLE IF NOT EXISTS creator_accounts (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    handle        TEXT NOT NULL UNIQUE,
+    platform      TEXT NOT NULL DEFAULT 'onlyfans',
+    -- 'own'      — the user's own account
+    -- 'managed'  — someone else's, run with their permission
+    -- 'persona'  — a synthetic character the user operates
+    -- Recorded because the three carry different obligations, and a tool that
+    -- cannot tell them apart cannot enforce the difference.
+    account_type  TEXT NOT NULL DEFAULT 'own',
+    -- 'managed' only: who authorised it and when. The panel refuses to draft
+    -- for a managed account until this is filled in.
+    consent_holder TEXT NOT NULL DEFAULT '',
+    consent_date   TEXT NOT NULL DEFAULT '',
+    consent_note   TEXT NOT NULL DEFAULT '',
+    -- 'persona' only: how the account discloses that it is not a real person.
+    disclosure    TEXT NOT NULL DEFAULT '',
+    notes         TEXT NOT NULL DEFAULT '',
+    created_at    TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS creator_content (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    account_id   INTEGER NOT NULL,
+    created_at   TEXT NOT NULL,
+    scheduled_for TEXT NOT NULL DEFAULT '',
+    kind         TEXT NOT NULL DEFAULT 'post',
+    title        TEXT NOT NULL DEFAULT '',
+    body         TEXT NOT NULL DEFAULT '',
+    price_usd    REAL NOT NULL DEFAULT 0.0,
+    -- draft -> approved -> posted. Nothing here posts itself; "posted" is the
+    -- user marking that they sent it by hand.
+    status       TEXT NOT NULL DEFAULT 'draft',
+    media_path   TEXT NOT NULL DEFAULT '',
+    FOREIGN KEY (account_id) REFERENCES creator_accounts(id)
+);
+
+CREATE TABLE IF NOT EXISTS creator_earnings (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    account_id     INTEGER NOT NULL,
+    ingested_at    TEXT NOT NULL,
+    source_file    TEXT NOT NULL DEFAULT '',
+    period_from    TEXT NOT NULL DEFAULT '',
+    period_to      TEXT NOT NULL DEFAULT '',
+    gross_usd      REAL NOT NULL DEFAULT 0.0,
+    net_usd        REAL NOT NULL DEFAULT 0.0,
+    subscribers    INTEGER NOT NULL DEFAULT 0,
+    raw_json       TEXT NOT NULL DEFAULT '{}',
+    UNIQUE (account_id, source_file),
+    FOREIGN KEY (account_id) REFERENCES creator_accounts(id)
+);
+
+-- One voice per account. The single biggest lever on draft quality: without
+-- samples of how this creator actually writes, every draft starts from nothing
+-- and reads like it.
+CREATE TABLE IF NOT EXISTS creator_voice (
+    account_id     INTEGER PRIMARY KEY,
+    samples        TEXT NOT NULL DEFAULT '',   -- the creator's own posts, newline-separated
+    tone           TEXT NOT NULL DEFAULT '',
+    emoji_style    TEXT NOT NULL DEFAULT '',
+    banned_words   TEXT NOT NULL DEFAULT '',
+    typical_length TEXT NOT NULL DEFAULT '',
+    notes          TEXT NOT NULL DEFAULT '',
+    updated_at     TEXT NOT NULL DEFAULT '',
+    FOREIGN KEY (account_id) REFERENCES creator_accounts(id)
+);
+
+-- Persona accounts only. A disclosure line alone keeps nothing consistent
+-- between sessions; this is what makes a character rather than a series of
+-- unrelated posts.
+CREATE TABLE IF NOT EXISTS creator_persona (
+    account_id     INTEGER PRIMARY KEY,
+    appearance     TEXT NOT NULL DEFAULT '',
+    backstory      TEXT NOT NULL DEFAULT '',
+    personality    TEXT NOT NULL DEFAULT '',
+    boundaries     TEXT NOT NULL DEFAULT '',   -- what this character never does or says
+    reference_images TEXT NOT NULL DEFAULT '', -- newline-separated paths, locked for consistency
+    seed           INTEGER,                    -- reused so generations stay on-model
+    updated_at     TEXT NOT NULL DEFAULT '',
+    FOREIGN KEY (account_id) REFERENCES creator_accounts(id)
+);
+
+-- The asset library. creator_content.media_path points at one of these.
+CREATE TABLE IF NOT EXISTS creator_media (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    account_id   INTEGER NOT NULL,
+    path         TEXT NOT NULL,
+    kind         TEXT NOT NULL DEFAULT 'image',  -- image | video | audio
+    caption      TEXT NOT NULL DEFAULT '',
+    source       TEXT NOT NULL DEFAULT 'upload', -- upload | higgsfield
+    job_id       TEXT NOT NULL DEFAULT '',
+    added_at     TEXT NOT NULL,
+    UNIQUE (account_id, path),
+    FOREIGN KEY (account_id) REFERENCES creator_accounts(id)
+);
+
+-- Hook variants. Creators test openers; recording which one shipped is what
+-- turns the earnings table into a feedback loop instead of a report.
+CREATE TABLE IF NOT EXISTS creator_variants (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    content_id   INTEGER NOT NULL,
+    body         TEXT NOT NULL DEFAULT '',
+    chosen       INTEGER NOT NULL DEFAULT 0,
+    revenue_usd  REAL NOT NULL DEFAULT 0.0,
+    notes        TEXT NOT NULL DEFAULT '',
+    created_at   TEXT NOT NULL,
+    FOREIGN KEY (content_id) REFERENCES creator_content(id)
+);
+
+-- Records for anyone depicted in produced content. In the US, 18 U.S.C. 2257
+-- puts this obligation on the producer regardless of whether their tooling
+-- knows about it. Storing identity documents inside an app database would be
+-- the wrong call, so this records *that* records exist and where they are
+-- held, not the documents themselves.
+CREATE TABLE IF NOT EXISTS creator_performers (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    account_id     INTEGER NOT NULL,
+    legal_name     TEXT NOT NULL DEFAULT '',
+    stage_name     TEXT NOT NULL DEFAULT '',
+    date_verified  TEXT NOT NULL DEFAULT '',
+    id_on_file     INTEGER NOT NULL DEFAULT 0,
+    release_signed INTEGER NOT NULL DEFAULT 0,
+    records_location TEXT NOT NULL DEFAULT '',  -- where the actual documents live
+    notes          TEXT NOT NULL DEFAULT '',
+    created_at     TEXT NOT NULL,
+    FOREIGN KEY (account_id) REFERENCES creator_accounts(id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_creator_content_account ON creator_content(account_id);
+CREATE INDEX IF NOT EXISTS idx_creator_media_account   ON creator_media(account_id);
+
 CREATE INDEX IF NOT EXISTS idx_usage_timestamp ON usage(timestamp);
 CREATE INDEX IF NOT EXISTS idx_runs_timestamp  ON runs(timestamp);
 CREATE INDEX IF NOT EXISTS idx_runs_run_id     ON runs(run_id);
@@ -228,6 +359,11 @@ def _add_missing_columns(conn: sqlite3.Connection) -> None:
     """
     wanted = {
         "pricing": [("cached_input_per_1m_usd", "REAL NOT NULL DEFAULT 0.0")],
+        "creator_content": [
+            ("segment", "TEXT NOT NULL DEFAULT ''"),
+            ("posted_at", "TEXT NOT NULL DEFAULT ''"),
+            ("revenue_usd", "REAL NOT NULL DEFAULT 0.0"),
+        ],
     }
     for table, columns in wanted.items():
         have = {r["name"] for r in conn.execute(f"PRAGMA table_info({table})")}
@@ -436,6 +572,17 @@ def _seed_default_agents(conn: sqlite3.Connection) -> None:
             "label": "Fiverr",
             "description": "Fiverr freelancer agent — generates logo concepts via DALL-E 3, writes professional delivery messages, and creates Fiverr gig descriptions.",
             "allowed_providers": json.dumps([]),
+            "allowed_tools": None,
+            "budget_limit_eur": None,
+            "requires_approval": 0,
+            "log_path": "data/logs/runs.jsonl",
+            "auto_generated": 0,
+        },
+        {
+            "name": "creator",
+            "label": "Creator",
+            "description": "Subscription-platform account management — content calendar, captions, PPV and promo drafting, and earnings import. Drafts only; it has no posting path.",
+            "allowed_providers": json.dumps(["anthropic", "openai", "deepseek", "gemini", "kimi", "qwen"]),
             "allowed_tools": None,
             "budget_limit_eur": None,
             "requires_approval": 0,
