@@ -74,8 +74,8 @@ class VideoJob:
 # Words that flip the meaning of what follows. "no explicit content" is a
 # perfectly good instruction to a video model, and a filter that refuses it is
 # a filter people learn to route around rather than one that protects anything.
-_NEGATIONS = ("no", "not", "non", "without", "avoid", "never", "excluding",
-              "zero", "exclude", "omit")
+_NEGATIONS = ("no", "not", "non", "none", "nothing", "neither", "without",
+              "avoid", "never", "excluding", "exclude", "omit", "zero")
 _NEGATION_PHRASES = ("free of", "devoid of", "clear of")
 
 
