@@ -125,6 +125,17 @@ CREATE TABLE IF NOT EXISTS manuscript_todos (
     notes       TEXT NOT NULL DEFAULT ''
 );
 
+-- Where the listener stopped. Keyed by path, so a resume survives restarts,
+-- rebuilds and reinstalls — the writable directory outlives the app bundle.
+CREATE TABLE IF NOT EXISTS audiobook_progress (
+    path          TEXT PRIMARY KEY,
+    title         TEXT NOT NULL DEFAULT '',
+    position_ms   INTEGER NOT NULL DEFAULT 0,
+    duration_ms   INTEGER NOT NULL DEFAULT 0,
+    finished      INTEGER NOT NULL DEFAULT 0,
+    last_played   TEXT NOT NULL DEFAULT ''
+);
+
 CREATE INDEX IF NOT EXISTS idx_usage_timestamp ON usage(timestamp);
 CREATE INDEX IF NOT EXISTS idx_runs_timestamp  ON runs(timestamp);
 CREATE INDEX IF NOT EXISTS idx_runs_run_id     ON runs(run_id);
