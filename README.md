@@ -1039,6 +1039,35 @@ The conversion runs as a `QProcess` so the GUI stays responsive. Output is strea
 
 ---
 
+#### Listening (the Listen tab)
+
+Converting a book used to be the end of it — the MP3 existed and nothing in the
+app could find or play it. The audiobook panel now has two tabs, **Convert** and
+**Listen**.
+
+`services/audiobook_library.py` scans the configured output folder recursively
+for audio files and tracks progress; `ui/audio_player.py` is a `QMediaPlayer`
+widget with play/pause, 30-second skips, a scrubber and 0.75×–2× speed. The
+button reads *Resume at 1:24:03* and picks up exactly there.
+
+Resume position is keyed by **file path**, not by a library index — the library
+is a directory scan, and files get renamed, moved and re-converted, so an index
+would quietly point at the wrong book. It is saved on a five-second timer as
+well as on stop, because people close laptops rather than quitting cleanly.
+
+Two bugs found by playing a real file, each of which silently defeated the
+whole feature:
+
+1. `stop()` saved the position, then `QMediaPlayer` reset position to 0 and the
+   resulting state change saved again, overwriting it. Every listen recorded 0.
+   The player now never persists a zero.
+2. The resume seek was applied on `durationChanged`, which arrives before the
+   media is seekable — accepted, then silently discarded. It now waits for
+   `LoadedMedia`.
+
+A book played to ~99% is marked finished rather than parked at the last second,
+so the next play starts over instead of resuming and stopping immediately.
+
 ### 5.7 Publisher Agent
 
 **Left-panel button:** 📚 Publisher  (category: **Creative**)
@@ -1236,6 +1265,84 @@ generation.
 gitignored — open `index.html` in a browser to review the generated course.
 
 ---
+
+### 5.9 Creator Agent
+
+`key: creator` · `agents/creator_agent.py` · panel `build_creator_panel()` ·
+full sheet in `docs/agents/creator.md`
+
+Plans and drafts for subscription creator accounts (OnlyFans and similar):
+content calendar, feed captions, PPV copy, welcome messages, off-platform
+promos, bios, and earnings tracking.
+
+**It has no posting path, by design.** OnlyFans has no public API — the limited
+access introduced in 2024 is for verified business partners only, and every
+third-party "OnlyFans API" is browser automation or a reverse-engineered
+private endpoint, which their terms prohibit with permanent ban and lost
+earnings as the documented outcome. Their terms draw the line themselves:
+automation that *assists* a human is acceptable, automation that *replaces* one
+is not. So the agent drafts, and the user posts.
+
+It will not write a message posing as a specific real person in a live
+conversation with a paying subscriber.
+
+#### Account types
+
+| Type | Meaning | Enforced requirement |
+|---|---|---|
+| `own` | The user's own account | — |
+| `managed` | Someone else's, run on their behalf | A recorded consent holder. `require_ready()` refuses to draft without one, on the drafting path rather than in the dialog — a rule enforced only by a UI prompt is not enforced. |
+| `persona` | A synthetic character the user operates | A disclosure line; drafts stay fictional in framing and never assert the persona is a real named human. |
+
+#### Voice and character
+
+`services/creator_profile.py` stores a **voice profile** per account — up to six
+of the creator's own posts plus tone, emoji habit, typical length and banned
+words — and injects it into every prompt. The samples are what the model
+imitates; without them every draft starts from nothing, which is exactly why
+generic AI copy reads the way it does.
+
+Persona accounts additionally carry a **character bible** (appearance,
+backstory, personality, boundaries) and a locked generation seed, so a
+synthetic account stays one character rather than becoming a new one each
+session.
+
+#### Higgsfield promo video
+
+`services/higgsfield_client.py` wraps the Higgsfield video API;
+`ui/workers.HiggsfieldWorker` submits, polls, downloads the mp4 and files it in
+the media library.
+
+Higgsfield's Terms of Use prohibit sexually explicit material and unauthorised
+images of other people, moderate prompts, reference images *and* outputs, and
+treat circumventing moderation as its own violation. `check_prompt()` refuses
+those locally, before the spend, with a reason attached — and is negation-aware,
+because a filter that rejects "no nudity" is one people route around rather than
+trust. The practical consequence: **explicit content cannot come from
+Higgsfield**; its role is the safe-for-work teaser for off-platform funnels.
+
+> ⚠️ Higgsfield renders currently bypass `authorize_request`, so they do not
+> count against the budget caps. Tracked as a `P1` in `TODO.md`.
+
+#### Earnings and attribution
+
+`services/creator_csv.py` imports statements exported from the platform — the
+same pattern as the KDP importer, because there is no API — keyed on
+`(account, filename)` so a re-import updates rather than double-counts.
+
+`services/creator_insights.py` turns that into a feedback loop:
+`price_history()` feeds back into the PPV drafter so the price argument is
+written against what has actually earned. Thin evidence is labelled as such;
+three sends at $15 is an anecdote, and presenting it as a finding would be
+worse than staying quiet.
+
+#### Performer records
+
+`creator_performers` records **that** age and identity documents exist for
+anyone depicted, and where they are held — never the documents themselves.
+In the US, 18 U.S.C. 2257 puts that obligation on the producer whether or not
+the tooling knows about it; keeping scans of passports in an app database would
+create a second problem rather than solve the first.
 
 ## 6. Tools
 

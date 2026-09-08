@@ -40,6 +40,9 @@ SHOTS: list[tuple[str, str, object]] = [
     ("agent-music.png", "music", None),
     ("agent-webdesign.png", "webdesign", None),
     ("agent-fiverr.png", "fiverr", None),
+    ("agent-creator.png", "creator", None),
+    ("agent-audiobook-listen.png", "audiobook",
+     lambda w: w.audiobook_tabs.setCurrentIndex(1)),
 ]
 
 

@@ -79,6 +79,21 @@ Point it at a folder with real files before selecting it.
 
 ---
 
+### Listening to what you made
+
+![The Listen tab](img/agent-audiobook-listen.png)
+
+The **Listen** tab is the library: every audio file in your output folder, with
+progress and position. Select one and the button reads *Resume at 1:24:03* — it
+picks up exactly there.
+
+Position is remembered per file and saved while you listen, not only when you
+stop, so closing the laptop mid-chapter does not lose your place. A book played
+to the end is marked finished and starts over next time rather than resuming
+three seconds from the end. **Start Over** resets one deliberately.
+
+---
+
 ## Audio → Music  *(music)*
 
 ![Music](img/agent-music.png)
@@ -112,6 +127,45 @@ Logo concepts via DALL·E, gig descriptions, and client delivery messages.
 **Generate Logos** is the paid, headline action — it bills per image. **Delivery
 Msg** and **Gig Description** are text-only and cheap. The order log tracks what
 you produced for whom.
+
+---
+
+## Creator → Creator  *(creator)*
+
+![Creator](img/agent-creator.png)
+
+Planning and drafting for subscription creator accounts: content calendar,
+captions, PPV copy, welcome messages, off-platform promos, and earnings.
+
+**It does not post.** OnlyFans has no usable API, and the tools that fake one
+get accounts permanently banned — so this drafts and you send. That is also the
+only kind of automation their terms allow: the kind that assists a human rather
+than replacing one.
+
+| Tab | What it holds |
+|---|---|
+| Draft | The generated copy, editable. |
+| Calendar | What is queued, and what each item earned once you record it. |
+| Earnings | Imported statements, price points that actually converted, top content. |
+| Voice | The account's own writing samples — the single biggest lever on quality. |
+| Media | Photosets, clips, and anything Higgsfield rendered. |
+| Agency | Every account side by side, for managed work. |
+| Records | That age and identity documents exist for anyone depicted, and where. |
+
+**Fill in Voice first.** Paste five of the account's own posts. Everything the
+agent writes afterwards imitates them, and without that step the drafts are
+competent and completely generic — the difference is larger than any other
+setting in the app.
+
+Accounts are typed **own**, **managed** or **persona**. A managed account —
+someone else's, run on their behalf — will not draft until you record who
+authorised it. A persona carries a character bible and a locked seed so it stays
+one character instead of becoming a new one each session.
+
+`🎬 Generate Teaser` renders promo video through Higgsfield. It is safe-for-work
+by construction: Higgsfield prohibits explicit material and moderates prompts,
+reference images and outputs, so explicit content has to come from elsewhere.
+Its role is the teaser that lives on X or Reddit.
 
 ---
 
