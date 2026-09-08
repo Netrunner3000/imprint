@@ -21,7 +21,7 @@ reference material for when something looks wrong.
 ## Before your first run
 
 1. **Add an API key.** `⚙ Settings`, or edit `.env` in
-   `~/Library/Application Support/Create & Publish/`. The `API KEYS` section in
+   `~/Library/Application Support/Imprint/`. The `API KEYS` section in
    the right rail shows which providers are live.
 2. **Check your budget.** `SPEND (€)` → `Session` and `Daily`. Defaults are €1
    and €5. A request that would exceed either is refused before it is sent, not
