@@ -14,6 +14,7 @@ def test_workspace_map_contains_only_creative_tools():
         "Audio": ("audiobook", "music"),
         "Web": ("webdesign",),
         "Gigs": ("fiverr",),
+        "Creator": ("creator",),
     }
 
 
