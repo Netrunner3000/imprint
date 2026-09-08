@@ -5004,10 +5004,11 @@ class GodAI(QWidget):
         cards_layout.setContentsMargins(2, 2, 2, 2)
         cards_layout.setSpacing(8)
 
-        # ── Card 1: System ──────────────────────────────────────────────
-        system_card = QGroupBox("SYSTEM")
-        system_card.setObjectName("RightCard")
-        system_layout = QVBoxLayout(system_card)
+        # Reference, not decision-making: what the machine is doing and how the
+        # router chose. Useful when something looks wrong, noise the rest of the
+        # time — so both start collapsed rather than occupying the rail.
+        system_card = CollapsibleSection("SYSTEM", expanded=False)
+        system_layout = QVBoxLayout()
         system_layout.setContentsMargins(10, 6, 10, 10)
         system_layout.setSpacing(6)
 
@@ -5024,12 +5025,14 @@ class GodAI(QWidget):
         self.realtime_monitor_btn.setEnabled(False)
         system_layout.addWidget(self.realtime_monitor_btn)
 
+        _system_body = QWidget()
+        _system_body.setLayout(system_layout)
+        system_card.addWidget(_system_body)
         cards_layout.addWidget(system_card)
 
         # ── Card 2: Routing & Recommendation ────────────────────────────
-        routing_card = QGroupBox("ROUTING")
-        routing_card.setObjectName("RightCard")
-        routing_layout = QVBoxLayout(routing_card)
+        routing_card = CollapsibleSection("ROUTING", expanded=False)
+        routing_layout = QVBoxLayout()
         routing_layout.setContentsMargins(10, 6, 10, 10)
         routing_layout.setSpacing(6)
 
@@ -5041,10 +5044,15 @@ class GodAI(QWidget):
         self.recommendation_label.setWordWrap(True)
         routing_layout.addWidget(self.recommendation_label)
 
+        _routing_body = QWidget()
+        _routing_body.setLayout(routing_layout)
+        routing_card.addWidget(_routing_body)
         cards_layout.addWidget(routing_card)
 
-        # ── Card 3: Cost ────────────────────────────────────────────────
-        cost_card = QGroupBox("COST")
+        # COST and BUDGET were two cards showing the same two numbers — spend
+        # and the cap it is measured against. One card: what this request will
+        # cost, what has been spent, and the limits, in that order.
+        cost_card = QGroupBox("SPEND (€)")
         cost_card.setObjectName("RightCard")
         cost_layout = QVBoxLayout(cost_card)
         cost_layout.setContentsMargins(10, 6, 10, 10)
@@ -5071,14 +5079,12 @@ class GodAI(QWidget):
         self.request_count_label = QLabel("Requests Today: 0 | Session: 0")
         cost_layout.addWidget(self.request_count_label)
 
-        cards_layout.addWidget(cost_card)
+        budget_divider = QFrame()
+        budget_divider.setFrameShape(QFrame.HLine)
+        budget_divider.setObjectName("CardDivider")
+        cost_layout.addWidget(budget_divider)
 
-        # ── Card 4: Budget ──────────────────────────────────────────────
-        budget_card = QGroupBox("BUDGET (€)")
-        budget_card.setObjectName("RightCard")
-        budget_layout = QVBoxLayout(budget_card)
-        budget_layout.setContentsMargins(10, 6, 10, 10)
-        budget_layout.setSpacing(6)
+        budget_layout = cost_layout
 
         self.budget_label = QLabel("Budget: not yet calculated")
         self.budget_label.setWordWrap(True)
@@ -5122,7 +5128,7 @@ class GodAI(QWidget):
         self.reset_session_budget_btn.clicked.connect(self.reset_session_spend)
         budget_layout.addWidget(self.reset_session_budget_btn)
 
-        cards_layout.addWidget(budget_card)
+        cards_layout.addWidget(cost_card)
 
         # ── Card 5: Quick Actions ───────────────────────────────────────
         actions_card = QGroupBox("ACTIONS")
@@ -5146,9 +5152,9 @@ class GodAI(QWidget):
         cards_layout.addWidget(actions_card)
 
         # ── Card 6: API Keys ────────────────────────────────────────────
-        keys_card = QGroupBox("API KEYS")
-        keys_card.setObjectName("RightCard")
-        keys_layout = QVBoxLayout(keys_card)
+        # Set once, then only consulted when a provider misbehaves.
+        keys_card = CollapsibleSection("API KEYS", expanded=False)
+        keys_layout = QVBoxLayout()
         keys_layout.setContentsMargins(10, 6, 10, 10)
         keys_layout.setSpacing(4)
 
@@ -5167,6 +5173,9 @@ class GodAI(QWidget):
         self.anthropic_key_label = QLabel(f"Anthropic: {self.safe_key_status(AnthropicClientWrapper)}")
         keys_layout.addWidget(self.anthropic_key_label)
 
+        _keys_body = QWidget()
+        _keys_body.setLayout(keys_layout)
+        keys_card.addWidget(_keys_body)
         cards_layout.addWidget(keys_card)
 
         cards_layout.addStretch()
