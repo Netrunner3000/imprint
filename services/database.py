@@ -125,6 +125,17 @@ CREATE TABLE IF NOT EXISTS manuscript_todos (
     notes       TEXT NOT NULL DEFAULT ''
 );
 
+-- Where the listener stopped. Keyed by path, so a resume survives restarts,
+-- rebuilds and reinstalls — the writable directory outlives the app bundle.
+CREATE TABLE IF NOT EXISTS audiobook_progress (
+    path          TEXT PRIMARY KEY,
+    title         TEXT NOT NULL DEFAULT '',
+    position_ms   INTEGER NOT NULL DEFAULT 0,
+    duration_ms   INTEGER NOT NULL DEFAULT 0,
+    finished      INTEGER NOT NULL DEFAULT 0,
+    last_played   TEXT NOT NULL DEFAULT ''
+);
+
 CREATE TABLE IF NOT EXISTS creator_accounts (
     id            INTEGER PRIMARY KEY AUTOINCREMENT,
     handle        TEXT NOT NULL UNIQUE,
