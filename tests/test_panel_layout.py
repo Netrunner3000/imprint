@@ -165,29 +165,29 @@ def test_panel_controls_stay_inside_the_window(app, window, agent):
     assert not escaped, "controls positioned outside the window: " + "; ".join(escaped[:5])
 
 
-# Music is excluded: its whole panel scrolls (its controls sit in the main
-# column, not a sidebar), and its setup grid genuinely needs more width than a
-# 1100px window leaves. It scrolls rather than clipping, so nothing is
-# unreachable — unlike the sidebars below, which had no scrollbar to reach for.
-_NO_CLIP_AGENTS = ["author", "manuscript", "webdesign", "fiverr"]
-
-
 @pytest.mark.parametrize("size", [(1900, 1200), (1500, 950), (1280, 820), (1100, 700)],
                          ids=lambda s: f"{s[0]}x{s[1]}")
-@pytest.mark.parametrize("agent", _NO_CLIP_AGENTS)
-def test_control_columns_are_not_clipped(app, window, agent, size):
-    """A column wider than its pane loses its right-hand edge — the fields cut
-    off mid-control. Two causes, both fixed: a combo sizing itself to its
-    longest item, and a QHBoxLayout reporting the sum of its children."""
+@pytest.mark.parametrize("agent", AGENTS)
+def test_no_control_is_unreachable(app, window, agent, size):
+    """Content wider than its pane is only a bug when you cannot scroll to it.
+
+    This replaces an earlier version that asserted "nothing is ever wider than
+    its pane" and carried a growing exclusion list — music, then webdesign,
+    then fiverr — as more panels were made to scroll as a whole. Excluding
+    panels one by one was weakening the test to fit the code. The property
+    that actually matters is that every control can be reached: a column may
+    overflow, but only if it can scroll.
+    """
+    from PySide6.QtCore import Qt
     from PySide6.QtWidgets import QScrollArea
     _settle(app, window, size, agent)
     panel = getattr(window, f"{agent}_panel")
-    clipped = []
+    unreachable = []
     for area in panel.findChildren(QScrollArea):
         if not area.isVisible() or area.widget() is None:
             continue
         need = area.widget().minimumSizeHint().width()
         have = area.viewport().width()
-        if need > have:
-            clipped.append(f"needs {need}px, pane is {have}px")
-    assert not clipped, f"[{agent}] control column clipped: " + "; ".join(clipped)
+        if need > have and area.horizontalScrollBarPolicy() == Qt.ScrollBarAlwaysOff:
+            unreachable.append(f"needs {need}px in a {have}px pane with no scrollbar")
+    assert not unreachable, f"[{agent}] " + "; ".join(unreachable)
