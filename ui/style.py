@@ -528,4 +528,28 @@ GLOBAL_STYLESHEET = f"""
             color: {TEXT_MUTE};
             background-color: {BG};
         }}
+
+        /* ── Form primitives (ui/forms.py) ─────────────────────────── */
+        /* The type scale lives here rather than on each widget, so a panel
+           never carries its own copy of it. */
+        QLabel#MicroLabel {{
+            color: {TEXT_MUTE};
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: 1.1px;
+        }}
+        QLabel#SectionLabel {{
+            color: {TEXT_MUTE};
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: 1.4px;
+        }}
+        QLabel#StatValue {{
+            color: {TEXT};
+            font-size: 20px;
+            font-weight: 600;
+        }}
+        /* One height for every single-line control, so a row of mixed inputs
+           and buttons sits on a line instead of stepping. */
+        QLineEdit, QComboBox, QPushButton {{ min-height: 32px; }}
 """

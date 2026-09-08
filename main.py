@@ -229,6 +229,10 @@ from ui.workers import (
     ChatWorker, SubprocessWorker, ModelPullWorker, FiverrImageWorker, ShortsWorker,
     HiggsfieldWorker,
 )
+from ui.forms import (
+    LG, MD, SM, XS, combo, field, form_grid, line_edit, micro, primary,
+    rule, section, stat,
+)
 from ui.widgets import (
     FlowLayout, CollapsibleSection, scrollable, let_combos_shrink,
 )
@@ -1954,53 +1958,43 @@ class GodAI(QWidget):
         layout.setSpacing(4)
 
         # ── Project bar ──────────────────────────────────────────────────────
+        # A grid, not a FlowLayout. FlowLayout packs each control against the
+        # previous one, so "Tone:" and "POV:" landed at whatever x the row
+        # before them happened to end on — which is most of why this screen
+        # read as ragged. Equal column stretch puts row two's labels directly
+        # under row one's.
         project_bar = QWidget()
         project_bar.setObjectName("AuthorProjectBar")
-        pb_layout = FlowLayout(project_bar, spacing=8)
-        pb_layout.setContentsMargins(4, 4, 4, 4)
-        pb_layout.setSpacing(8)
 
-        pb_layout.addWidget(QLabel("Title:"))
-        self.author_title_input = QLineEdit()
-        self.author_title_input.setPlaceholderText("Project title…")
-        self.author_title_input.setMinimumWidth(160)
-        pb_layout.addWidget(self.author_title_input)
-
-        pb_layout.addWidget(QLabel("Author:"))
-        self.author_name_input = QLineEdit()
-        self.author_name_input.setPlaceholderText("Pen name…")
-        pb_layout.addWidget(self.author_name_input)
-
-        pb_layout.addWidget(QLabel("Type:"))
-        self.author_content_type_box = QComboBox()
-        self.author_content_type_box.addItems(["Fiction", "Non-Fiction"])
-        self.author_content_type_box.currentTextChanged.connect(self._author_on_content_type_changed)
-        pb_layout.addWidget(self.author_content_type_box)
-
-        pb_layout.addWidget(QLabel("Genre:"))
-        self.author_genre_box = QComboBox()
-        self.author_genre_box.addItems([
+        self.author_title_input = line_edit("Project title…")
+        self.author_name_input = line_edit("Pen name…")
+        self.author_content_type_box = combo(["Fiction", "Non-Fiction"])
+        self.author_content_type_box.currentTextChanged.connect(
+            self._author_on_content_type_changed)
+        self.author_genre_box = combo([
             "Literary Fiction", "Thriller", "Fantasy", "Sci-Fi", "Horror",
             "Romance", "Historical", "Mystery", "Short Story", "Screenplay",
             "Poetry", "Blog / Essay", "Other",
         ])
-        pb_layout.addWidget(self.author_genre_box)
-
-        pb_layout.addWidget(QLabel("Tone:"))
-        self.author_tone_box = QComboBox()
-        self.author_tone_box.addItems([
+        self.author_tone_box = combo([
             "Neutral", "Dark", "Humorous", "Lyrical", "Tense", "Romantic",
             "Gritty", "Whimsical", "Philosophical", "Commercial",
         ])
-        pb_layout.addWidget(self.author_tone_box)
-
-        pb_layout.addWidget(QLabel("POV:"))
-        self.author_pov_box = QComboBox()
-        self.author_pov_box.addItems([
+        self.author_pov_box = combo([
             "Third Person Limited", "First Person",
             "Third Person Omniscient", "Second Person",
         ])
-        pb_layout.addWidget(self.author_pov_box)
+
+        pb_layout = form_grid([
+            ("Title", self.author_title_input),
+            ("Author", self.author_name_input),
+            ("Type", self.author_content_type_box),
+            ("Genre", self.author_genre_box),
+            ("Tone", self.author_tone_box),
+            ("Point of view", self.author_pov_box),
+        ], columns=3)
+        pb_layout.setContentsMargins(MD, MD, MD, MD)
+        project_bar.setLayout(pb_layout)
 
         layout.addWidget(project_bar)
 
@@ -2121,32 +2115,35 @@ class GodAI(QWidget):
         sidebar.setMaximumWidth(270)
         sb = QVBoxLayout(sidebar)
         sb.setContentsMargins(8, 4, 4, 4)
-        sb.setSpacing(6)
+        sb.setSpacing(MD)
 
-        sb.addWidget(QLabel("Direction:"))
+        # Sections and micro-labels rather than a run of "Label:" rows — see
+        # ui/forms.py. The labels line up down one column instead of each
+        # sitting wherever its own row started.
+        sb.addWidget(section("Compose"))
+
         self.author_direction_input = QTextEdit()
         self.author_direction_input.setPlaceholderText(
-            "Describe what to write, the next scene, or give revision instructions…"
+            "What happens next? One concrete instruction beats a paragraph."
         )
         self.author_direction_input.setFixedHeight(90)
-        sb.addWidget(self.author_direction_input)
+        sb.addWidget(field("Direction", self.author_direction_input))
 
-        sb.addWidget(QLabel("Task:"))
         self.author_task_box = QComboBox()
         # Populated by _author_on_content_type_changed() once the panel finishes building —
         # the task list depends on the Type combo (Fiction/Non-Fiction) in the Project Bar.
-        sb.addWidget(self.author_task_box)
+        sb.addWidget(field("Task", self.author_task_box))
 
-        sb.addWidget(QLabel("Provider:"))
+        sb.addWidget(rule())
+        sb.addWidget(section("Model"))
+
         self.author_panel_base = AgentPanel(
             self, "author", providers=tuple(["ollama", "openai", "deepseek", "kimi", "gemini", "anthropic", "qwen"]),
             default_provider="anthropic")
         self.author_provider_box = self.author_panel_base.provider_box
         self.author_model_box = self.author_panel_base.model_box
-        sb.addWidget(self.author_provider_box)
-
-        sb.addWidget(QLabel("Model:"))
-        sb.addWidget(self.author_model_box)
+        sb.addWidget(field("Provider", self.author_provider_box))
+        sb.addWidget(field("Model", self.author_model_box))
 
         self.author_write_btn = QPushButton("✍️  Write")
         self.author_write_btn.setMinimumHeight(34)
@@ -2670,13 +2667,26 @@ class GodAI(QWidget):
     def build_webdesign_panel(self):
         self.webdesign_panel = QWidget()
         self.webdesign_panel.setObjectName("WebdesignPanel")
-        layout = QVBoxLayout(self.webdesign_panel)
-        layout.setContentsMargins(0, 0, 0, 10)
-        layout.setSpacing(10)
+        # The whole panel scrolls, as the music panel does and for the same
+        # reason: its form lives in the main column rather than a sidebar, so
+        # at the window's own minimum there is genuinely less height than the
+        # content needs. Scrolling keeps every control reachable; without it
+        # the grid compresses past its minimum and the fields overlap.
+        _webdesign_outer = QVBoxLayout(self.webdesign_panel)
+        _webdesign_outer.setContentsMargins(0, 0, 0, 0)
+        _webdesign_content = QWidget()
+        _webdesign_outer.addWidget(scrollable(_webdesign_content))
+        layout = QVBoxLayout(_webdesign_content)
+        layout.setContentsMargins(MD, MD, MD, MD)
+        layout.setSpacing(MD)
 
         # ── Quick Setup ──────────────────────────────────────────────
         setup_group = QGroupBox("Quick Setup")
         setup_group.setObjectName("WebdesignSetupBox")
+        # Fixed vertically: a form of fixed-height rows should not be the
+        # thing that shrinks. Left flexible, a short window compresses this
+        # grid past its minimum and the fields draw over each other.
+        setup_group.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
         setup_layout = QGridLayout(setup_group)
         setup_layout.setSpacing(6)
 
@@ -2986,12 +2996,25 @@ class GodAI(QWidget):
     def build_fiverr_panel(self):
         self.fiverr_panel = QWidget()
         self.fiverr_panel.setObjectName("FiverrPanel")
-        layout = QVBoxLayout(self.fiverr_panel)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(10)
+        # The whole panel scrolls, as the music panel does and for the same
+        # reason: its form lives in the main column rather than a sidebar, so
+        # at the window's own minimum there is genuinely less height than the
+        # content needs. Scrolling keeps every control reachable; without it
+        # the grid compresses past its minimum and the fields overlap.
+        _fiverr_outer = QVBoxLayout(self.fiverr_panel)
+        _fiverr_outer.setContentsMargins(0, 0, 0, 0)
+        _fiverr_content = QWidget()
+        _fiverr_outer.addWidget(scrollable(_fiverr_content))
+        layout = QVBoxLayout(_fiverr_content)
+        layout.setContentsMargins(MD, MD, MD, MD)
+        layout.setSpacing(MD)
 
         brief_group = QGroupBox("Client Brief")
         brief_group.setObjectName("FiverrBriefBox")
+        # Fixed vertically: a form of fixed-height rows should not be the
+        # thing that shrinks. Left flexible, a short window compresses this
+        # grid past its minimum and the fields draw over each other.
+        brief_group.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
         brief_layout = QGridLayout(brief_group)
         brief_layout.setSpacing(6)
 
