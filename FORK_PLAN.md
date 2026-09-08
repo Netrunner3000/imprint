@@ -1,10 +1,10 @@
 # Atelier — what this fork is, and what still has to happen
 
 > **Status (as of the "Strip the security verticals" and "Rebrand the fork as
-> Create & Publish" commits):** steps 3, 5, and 6 below are done — the six
+> Imprint" commits):** steps 3, 5, and 6 below are done — the six
 > non-creative agents and `providers/` are deleted, the app is rebranded
-> (`APP_NAME`, `SINGLE_INSTANCE_KEY`, `DB_PATH` all say Create & Publish), it
-> has its own `scripts/install_app.sh` / `CreateAndPublish.spec`, and `lab_hub`
+> (`APP_NAME`, `SINGLE_INSTANCE_KEY`, `DB_PATH` all say Imprint), it
+> has its own `scripts/install_app.sh` / `Imprint.spec`, and `lab_hub`
 > already has a `create_and_publish` launcher entry. `chat` was kept, not
 > dropped. Step 4 (tabbed UI reshape — Write / Audio / Web / Gigs) is **not**
 > done — the left panel is still the collapsible-category sidebar (General /

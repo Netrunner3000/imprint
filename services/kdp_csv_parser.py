@@ -1,5 +1,5 @@
 """
-KDP Sales Report CSV parser for Create & Publish.
+KDP Sales Report CSV parser for Imprint.
 
 KDP has no public API. You download reports manually from:
   KDP Dashboard → Reports → Sales Dashboard → Download

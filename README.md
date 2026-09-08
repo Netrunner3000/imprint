@@ -1,4 +1,4 @@
-# Create & Publish — Documentation
+# Imprint — Documentation
 
 
 ![Screenshot](docs/screenshot.png)
@@ -55,7 +55,7 @@ hasn't been done.
 15. [File & Directory Structure](#15-file--directory-structure)
 16. [First-Run & Migration](#16-first-run--migration)
 17. [Configuration Reference](#17-configuration-reference)
-18. [Earning Income with Create & Publish](#18-earning-income-with-create--publish)
+18. [Earning Income with Imprint](#18-earning-income-with-create--publish)
     - 18.1 [Service-Based Income (Fiverr, Web Design, Author)](#181-service-based-income-fiverr-web-design-author)
     - 18.2 [Recurring Revenue (Music, Audiobook, Courses)](#182-recurring-revenue-music-audiobook-courses)
     - 18.3 [Required External Accounts & Tools](#183-required-external-accounts--tools)
@@ -65,7 +65,7 @@ hasn't been done.
 
 ## 1. Overview
 
-Create & Publish is a PySide6 desktop application for the creative/publishing
+Imprint is a PySide6 desktop application for the creative/publishing
 half of a wider split: it was forked from `sentinel_ai` (the full history is
 still in `git log`), which kept the research/security agents, while this app
 kept everything to do with writing, publishing, and selling creative work. It
@@ -82,7 +82,7 @@ local (Ollama) and cloud (Anthropic, OpenAI, DeepSeek, Gemini). It provides:
 - A standalone, GUI-less **Course Generator** (`run_course.py`) that turns a topic into a packaged mini-course — slides, narration, and an avatar-presented video (see §5.8).
 - A full Settings panel for configuring pricing, budgets, agents, and tools without touching any file.
 
-The application is entirely self-contained: no server, no web interface, no external database. All data is stored in a local SQLite database (`data/create_and_publish.db`).
+The application is entirely self-contained: no server, no web interface, no external database. All data is stored in a local SQLite database (`data/imprint.db`).
 
 ---
 
@@ -267,7 +267,7 @@ The output box is also used by the Audiobook agent to display conversion logs an
 
 ## 5. Agents
 
-Create & Publish ships with 7 first-party GUI agents, each defined by its own Python class in `agents/` and a tailored system prompt, plus one CLI-only Course Generator with no left-panel entry at all (§5.8). The left-panel navigator groups the GUI agents into three collapsible categories — General, Creative, Gigs; clicking an agent button either loads the standard Chat panel or swaps the centre area for a fully custom GUI built for that workflow. Most agents support all of Ollama (local), Anthropic, OpenAI, DeepSeek, and Gemini — Narrator is the exception, since it only ever calls OpenAI TTS (§5.6) — and most expose a Help button that opens this documentation at the relevant section. Anthropic Claude (Sonnet or Opus) typically gives the most structured output for the writing/publishing agents; Ollama works offline at no cost; the other cloud providers are interchangeable and chosen by taste, latency, or budget.
+Imprint ships with 7 first-party GUI agents, each defined by its own Python class in `agents/` and a tailored system prompt, plus one CLI-only Course Generator with no left-panel entry at all (§5.8). The left-panel navigator groups the GUI agents into three collapsible categories — General, Creative, Gigs; clicking an agent button either loads the standard Chat panel or swaps the centre area for a fully custom GUI built for that workflow. Most agents support all of Ollama (local), Anthropic, OpenAI, DeepSeek, and Gemini — Narrator is the exception, since it only ever calls OpenAI TTS (§5.6) — and most expose a Help button that opens this documentation at the relevant section. Anthropic Claude (Sonnet or Opus) typically gives the most structured output for the writing/publishing agents; Ollama works offline at no cost; the other cloud providers are interchangeable and chosen by taste, latency, or budget.
 
 ### 5.1 Chat Agent
 
@@ -1653,7 +1653,7 @@ Signals:
 
 ## 14. Database Schema
 
-The SQLite database is stored at `data/create_and_publish.db`. All tables use WAL journal mode and foreign key enforcement.
+The SQLite database is stored at `data/imprint.db`. All tables use WAL journal mode and foreign key enforcement.
 
 ### `agents`
 
@@ -1753,7 +1753,7 @@ Key-value store for application settings.
 ## 15. File & Directory Structure
 
 ```
-create_and_publish/
+imprint/
 ├── main.py                        # Entry point + main window (~7,100 lines — see
 │                                  #   docs/refactor_plan.md, TODO.md #2)
 ├── run_course.py                  # CLI runner for the Course Agent (no GUI needed)
@@ -1848,7 +1848,7 @@ create_and_publish/
 ├── assets/                        # Icons
 │
 └── data/
-    ├── create_and_publish.db      # Primary data store (SQLite)
+    ├── imprint.db      # Primary data store (SQLite)
     ├── chats/                     # Saved conversation JSON files
     ├── logs/                      # Legacy run log (superseded by DB)
     ├── reports/                   # Exported report text files
@@ -1907,7 +1907,7 @@ Run it after any UI move — import success is not enough. Missing imports and
 
 ## 16. First-Run & Migration
 
-On the first launch, `init_db()` detects that `data/create_and_publish.db` does not exist and runs `_migrate_from_json()`, which reads any existing JSON config files and populates the database tables:
+On the first launch, `init_db()` detects that `data/imprint.db` does not exist and runs `_migrate_from_json()`, which reads any existing JSON config files and populates the database tables:
 
 | Source file | Target tables |
 |-------------|--------------|
@@ -1991,9 +1991,9 @@ The Audiobook agent reads its paths and defaults from `services/tool_runner.py`,
 
 ---
 
-## 18. Earning Income with Create & Publish
+## 18. Earning Income with Imprint
 
-Create & Publish's agents are designed to produce **deliverables you can sell** — logos, websites, books, music, audiobooks, courses. This chapter is the practical, no-nonsense guide to converting agent output into income, broken down by income type.
+Imprint's agents are designed to produce **deliverables you can sell** — logos, websites, books, music, audiobooks, courses. This chapter is the practical, no-nonsense guide to converting agent output into income, broken down by income type.
 
 > ⚠️ Nothing in this chapter is financial, legal, or tax advice. Income from freelancing, music streaming, and self-publishing is taxable in most jurisdictions. Always check local laws, register your activity if required, and consult a qualified professional for serious decisions.
 
@@ -2145,7 +2145,7 @@ Recurring revenue compounds — once published, content keeps earning. These age
 
 **Setup workflow:**
 
-1. Click **🎵 Maestro** in Create & Publish and fill in the artist brief.
+1. Click **🎵 Maestro** in Imprint and fill in the artist brief.
 2. Use the generated Artist Profile (short + long bio) to claim your Spotify for Artists account at https://artists.spotify.com.
 3. Sign up with a distributor (DistroKid $22.99/year recommended for most independent artists; CD Baby for one-off releases).
 4. Upload the release with the generated metadata, ISRC handled by distributor.
@@ -2276,7 +2276,7 @@ A summary of what you can realistically expect from each path, based on public d
 | **Audiobook royalties** | $20–$100 | $100–$500 | $500–$3k/mo (catalogue) |
 | **Online course (Gumroad/Teachable/Udemy)** | $0–$200 | $100–$800 | $500–$5k/mo (established topic) |
 
-**Combined strategy** — most successful Create & Publish users **stack 2–4 income paths**, e.g.:
+**Combined strategy** — most successful Imprint users **stack 2–4 income paths**, e.g.:
 
 - Fiverr logo gigs (immediate cash) + freelance web design (medium ticket) + self-published books (backlist/passive).
 - Self-published book (§18.1) + companion online course (§18.2) sold as a bundle.

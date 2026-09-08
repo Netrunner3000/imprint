@@ -1,8 +1,8 @@
 # -*- mode: python ; coding: utf-8 -*-
-"""PyInstaller spec for Create & Publish — self-contained macOS .app bundle.
+"""PyInstaller spec for Imprint — self-contained macOS .app bundle.
 
-Build:   .venv/bin/pyinstaller --noconfirm CreateAndPublish.spec
-Output:  dist/Create & Publish.app
+Build:   .venv/bin/pyinstaller --noconfirm Imprint.spec
+Output:  dist/Imprint.app
 """
 from PyInstaller.utils.hooks import collect_all, collect_submodules
 
@@ -55,7 +55,7 @@ exe = EXE(
     a.scripts,
     [],
     exclude_binaries=True,
-    name="Create & Publish",
+    name="Imprint",
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
@@ -75,17 +75,17 @@ coll = COLLECT(
     strip=False,
     upx=False,
     upx_exclude=[],
-    name="Create & Publish",
+    name="Imprint",
 )
 
 app = BUNDLE(
     coll,
-    name="Create & Publish.app",
+    name="Imprint.app",
     icon="assets/icon-v2.icns",
-    bundle_identifier="com.netrunner3000.createandpublish",
+    bundle_identifier="com.netrunner3000.imprint",
     info_plist={
-        "CFBundleName": "Create & Publish",
-        "CFBundleDisplayName": "Create & Publish",
+        "CFBundleName": "Imprint",
+        "CFBundleDisplayName": "Imprint",
         "CFBundleShortVersionString": "1.0.1",
         "CFBundleVersion": "1.0.1",
         "NSHighResolutionCapable": True,
@@ -94,7 +94,7 @@ app = BUNDLE(
         "LSApplicationCategoryType": "public.app-category.productivity",
         # App writes only to ~/Library/Application Support, but it reads the
         # user's ebook folder etc. — declare a usage string for Documents access.
-        "NSDesktopFolderUsageDescription": "Create & Publish reads ebooks and saves outputs you choose.",
-        "NSDocumentsFolderUsageDescription": "Create & Publish reads ebooks and saves outputs you choose.",
+        "NSDesktopFolderUsageDescription": "Imprint reads ebooks and saves outputs you choose.",
+        "NSDocumentsFolderUsageDescription": "Imprint reads ebooks and saves outputs you choose.",
     },
 )

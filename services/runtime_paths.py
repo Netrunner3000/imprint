@@ -1,11 +1,11 @@
-"""Central path resolution for Create & Publish.
+"""Central path resolution for Imprint.
 
 In development (running `python main.py`) every path resolves to the project
 root exactly as before — behaviour is unchanged.
 
 When frozen by PyInstaller (`sys.frozen` is set) the app bundle is read-only,
 so writable state (SQLite DB, saved chats, logs, editable config, .env) is
-redirected to  ~/Library/Application Support/Create & Publish/  and seeded from
+redirected to  ~/Library/Application Support/Imprint/  and seeded from
 the read-only copies bundled inside the .app on first launch.
 
 Both main.py and services/database.py import from here so they always agree on
@@ -13,12 +13,21 @@ where the writable data lives.
 
 APP_NAME decides that directory, so it must differ from Sentinel AI's — the two
 apps are separate forks and sharing the name would mean sharing state.
+
+The app was called "Create & Publish" until it was renamed to Imprint. Changing
+APP_NAME moves the writable directory, which would have stranded the existing
+database, saved chats and — worst — the .env holding the API keys. See
+adopt_previous_app_dir().
 """
 import sys
 import shutil
 from pathlib import Path
 
-APP_NAME = "Create & Publish"
+APP_NAME = "Imprint"
+
+# Directories this app used to write to, newest first. Only ever read from, to
+# carry state forward across a rename.
+PREVIOUS_APP_NAMES = ("Create & Publish",)
 
 
 def is_frozen() -> bool:
@@ -40,13 +49,42 @@ def resource_base() -> Path:
     return Path(__file__).resolve().parent.parent
 
 
+def adopt_previous_app_dir() -> Path | None:
+    """Carry a previous name's data directory forward, once.
+
+    Renaming the app moves ~/Library/Application Support/<APP_NAME>/, and the
+    user's API keys live in a .env in there — so a rename without this looks
+    exactly like "the app forgot everything and lost my keys".
+
+    Renames rather than copies, so there is one directory afterwards and no
+    question about which is authoritative. Does nothing if the new directory
+    already has content, so it can never overwrite newer state.
+    """
+    if not is_frozen():
+        return None
+    support = Path.home() / "Library" / "Application Support"
+    target = support / APP_NAME
+    if target.exists() and any(target.iterdir()):
+        return None
+    for previous in PREVIOUS_APP_NAMES:
+        source = support / previous
+        if source.is_dir() and any(source.iterdir()):
+            target.parent.mkdir(parents=True, exist_ok=True)
+            if target.exists():
+                target.rmdir()          # empty, checked above
+            source.rename(target)
+            return target
+    return None
+
+
 def user_data_base() -> Path:
     """Writable base directory.
 
-    Frozen: ~/Library/Application Support/Create & Publish  (created if missing).
+    Frozen: ~/Library/Application Support/Imprint  (created if missing).
     Dev:    the project root, so `python main.py` keeps writing in-place.
     """
     if is_frozen():
+        adopt_previous_app_dir()
         d = Path.home() / "Library" / "Application Support" / APP_NAME
         d.mkdir(parents=True, exist_ok=True)
         return d

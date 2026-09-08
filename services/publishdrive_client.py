@@ -1,5 +1,5 @@
 """
-PublishDrive REST API client for Create & Publish.
+PublishDrive REST API client for Imprint.
 API docs: https://publishdrive.com/api-documentation
 
 Required env var:  PUBLISHDRIVE_API_KEY   (add to .env)
