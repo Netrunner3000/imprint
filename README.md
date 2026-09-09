@@ -117,7 +117,7 @@ tests run every panel down to that size.
 
 ## 3. Header Bar — Modes and Chrome
 
-**Mode tabs** — `Write` · `Audio` · `Web` · `Gigs` · `Creator`. Each opens the
+**Mode tabs** — `Write` · `Audio` · `Video` · `Social` · `Web` · `Gigs` · `Creator`. Each opens the
 last tool used in that workspace. Where a workspace holds two related tools
 (Write → Draft / Publish, Audio → Audiobooks / Music) a second tab row appears
 above the page title.
@@ -1323,7 +1323,84 @@ gitignored — open `index.html` in a browser to review the generated course.
 
 ---
 
-### 5.9 Creator Agent
+### 5.9 Video Agent
+
+**Mode tab:** Video
+
+Topic to finished video: script, narration, aligned captions, generated
+visuals, Ken Burns motion, music, loudness normalisation and a thumbnail.
+
+This is the **vidforge** pipeline running in-process. vidforge is a separate git
+repository nested at `imprint/vidforge/` and Imprint imports it rather than
+keeping a copy — one checkout, one pipeline, two front doors. `docs/agents/video.md`
+covers the trade and what it costs (a clone of `imprint` alone has no Video tab,
+which the panel explains rather than crashing on).
+
+**Format** is the only decision that changes the run. `Long-form` uses
+`config.yaml` as-is. `Social clip` overrides width, height, image shape, target
+length and scene cadence — the same `produce()` call, not a second code path,
+which is what lets Social ask for a clip without owning a video pipeline.
+
+The cost estimate is real: the pipeline's own per-stage arithmetic (images,
+narration characters, caption alignment), charged against the session and daily
+caps before the run starts. Roughly €1–2 long-form, €0.25 for a 30-second clip.
+
+**Stop** cancels at the next stage boundary rather than mid-ffmpeg, so a
+cancelled render is resumable rather than a half-written file.
+
+The **Library** tab reads vidforge's own history, so a render started in the
+standalone app appears here and vice versa. Frozen, both share
+`~/Library/Application Support/vidforge/`.
+
+---
+
+### 5.10 Social Agent
+
+**Mode tab:** Social
+
+The public funnel for everything else in the studio. A **campaign** is one
+subject — a book, a release, a product, a gig — and its goal; posts are written
+per platform, scheduled at each platform's own cadence, and posted or exported.
+
+Written *per platform*, not written once and truncated. Reddit removes a post
+that reads as marketing; Pinterest is a search engine wearing a mood board; X
+gives you seven words. That guidance lives in `services/social_platforms.py`
+and goes into the prompt verbatim. Character limits are checked live while
+editing, because models overshoot them.
+
+**Angle** decides what the post is for — `launch`, `behind_the_scenes`,
+`excerpt`, `value`, `question`, `milestone`. `launch` is the one everyone
+reaches for and the one that works least often.
+
+**Make a Clip** is where Video and Social meet: it writes a topic brief, hands
+it to the video pipeline at the platform's aspect and length, and files the
+finished mp4 against the campaign.
+
+#### What can actually post
+
+| Platform | Status |
+|---|---|
+| YouTube | Can post — through vidforge's existing uploader. Needs an OAuth client secret and one browser sign-in. |
+| Reddit | Can post — a personal "script" app on your own account, no review. |
+| Pinterest | Can post — needs a business account, free to convert to. |
+| X, Instagram, TikTok, Threads, LinkedIn | Drafting only — each needs a paid tier, a linked business account, or an app review Imprint cannot obtain for you. |
+
+The Accounts tab shows this live, naming the exact environment variables that
+are missing. None of it is verified against the live APIs from inside the app
+and platform terms change often, so treat it as a starting point for your own
+check rather than current fact.
+
+**Nothing posts unattended.** There is no scheduler thread and no "publish
+all" — the schedule is a plan you work through, one confirmed click at a time.
+A tool that posts on its own behalf while nobody is watching is how an account
+gets banned for something its owner never saw.
+
+The system prompt forbids inventing reviews, testimonials, sales figures and
+engagement bait, as a rule rather than a hope.
+
+---
+
+### 5.11 Creator Agent
 
 `key: creator` · `agents/creator_agent.py` · panel `build_creator_panel()` ·
 full sheet in `docs/agents/creator.md`
@@ -1579,7 +1656,38 @@ Before sending, `estimate_chat_cost()` provides a rough estimate based on charac
 - Output tokens ≈ `input_tokens × 1.2` (minimum 250)
 - Cost = `total_tokens × price_per_token` for the current provider
 
-This estimate drives three things: the live estimate label in the right panel, the cost estimate popup, and the budget validation checks. It is intentionally conservative.
+This estimate drives three things: the live estimate label in the right rail, the cost estimate popup, and the budget validation checks. It is intentionally conservative.
+
+### Work that is not billed per token
+
+Token pricing is correct for chat and wrong for everything else the app does. An
+image is priced per image, a video render per image and per audio-minute, speech
+per thousand characters. None of those can be expressed as an input/output token
+pair, so all of them used to count as nothing against the caps — not literally
+zero, which was worse: `dall-e-3` has no row of its own, so the token path fell
+through to OpenAI's default *text* rates and priced a $0.04 image at €0.000001.
+
+Any caller that knows the real price passes it:
+
+- `authorize_request(..., flat_cost_eur=)` hands the validator that number, so
+  the session and daily caps actually see it.
+- `usage_tracker.log_request(..., flat_cost_eur=)` skips the token arithmetic
+  and records `cost_type = "per_unit"`.
+
+Rates live in `config/pricing.json` under `per_unit_usd` and are read by
+`services/per_unit_pricing.py`, so they are data you can correct rather than
+constants buried in a client.
+
+> **Zero means unknown, not free.** An unfilled placeholder and a genuinely free
+> service look identical in JSON, and of the two readings, silently billing
+> nothing is the one that costs money. An unpriced action shows "cost not priced
+> yet" next to the button and, where it is about to spend, asks first.
+
+Currently priced this way: Gigs logo images, video renders, audiobook TTS.
+**Higgsfield renders are deliberately left at `0`** — the rate is not known, so
+the Creator panel warns before rendering rather than billing zero silently. Set
+`per_unit_usd.higgsfield_render` from an actual invoice to have it counted.
+
 
 ### Confirmation Dialog (Pre-Request)
 

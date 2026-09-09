@@ -109,16 +109,25 @@ ALL_AGENTS_FILTER = "All agents"
 WORKSPACES = {
     "Write": ("author", "manuscript"),
     "Audio": ("audiobook", "music"),
+    "Video": ("video",),
+    "Social": ("social",),
     "Web": ("webdesign",),
     "Gigs": ("fiverr",),
     "Creator": ("creator",),
 }
+
+# Agents that own a dedicated `<name>_panel` rather than sharing `normal_panel`.
+# update_agent_ui walks this instead of a chain of `is_x` booleans.
+CUSTOM_PANELS = ("audiobook", "author", "manuscript", "music", "video",
+                 "social", "fiverr", "webdesign", "creator")
 WORKSPACE_LABELS = {
     "author": "Draft",
     "manuscript": "Publish",
     "audiobook": "Audiobooks",
     "music": "Music",
     "webdesign": "Site Builder",
+    "video": "Video",
+    "social": "Social",
     "fiverr": "Client Gigs",
     "creator": "Creator",
 }
@@ -226,6 +235,7 @@ from services.audiobook_library import (
 )
 from ui.audio_player import AudiobookPlayer
 from ui.workers import (
+    VideoWorker,
     ChatWorker, SubprocessWorker, ModelPullWorker, FiverrImageWorker, ShortsWorker,
     HiggsfieldWorker,
 )
@@ -236,6 +246,10 @@ from ui.forms import (
 )
 from ui.widgets import (
     FlowLayout, CollapsibleSection, scrollable, let_combos_shrink,
+)
+from agents.social_agent import (
+    ANGLES, SUBJECT_KINDS, build_clip_brief_messages,
+    build_post_messages, over_limit, split_variants,
 )
 from ui.tooltips import seed_tooltips
 
@@ -1653,32 +1667,13 @@ class GodAI(QWidget):
 
         center_layout.addWidget(self.normal_panel)
 
-        self.build_audiobook_panel()
-        center_layout.addWidget(self.audiobook_panel)
+        # Built from the same list update_agent_ui switches on, so an agent
+        # cannot be constructed but unreachable, or reachable but never built.
+        for _panel_name in CUSTOM_PANELS:
+            getattr(self, f"build_{_panel_name}_panel")()
+            center_layout.addWidget(getattr(self, f"{_panel_name}_panel"))
 
-        self.build_author_panel()
-        center_layout.addWidget(self.author_panel)
-
-        self.build_manuscript_panel()
-        center_layout.addWidget(self.manuscript_panel)
-
-        self.build_music_panel()
-        center_layout.addWidget(self.music_panel)
-
-        self.build_webdesign_panel()
-        center_layout.addWidget(self.webdesign_panel)
-
-        self.build_fiverr_panel()
-        center_layout.addWidget(self.fiverr_panel)
-
-        self.build_creator_panel()
-        center_layout.addWidget(self.creator_panel)
-
-        self.output_label = QLabel("OUTPUT")
-        self.output_label.setStyleSheet(
-            "font-size: 10px; font-weight: bold; color: #707070; "
-            "letter-spacing: 1.5px; padding: 6px 0 2px 0; background: transparent;"
-        )
+        self.output_label = micro("Output")
         self.output_label.hide()
         center_layout.addWidget(self.output_label)
 
@@ -3114,19 +3109,1063 @@ class GodAI(QWidget):
     def _fiverr_update_estimate(self, *_args):
         """Keep the per-image estimate next to the button that spends it.
 
-        This is a display estimate only. The budget guard is denominated in
-        tokens and cannot express "one image", so image spend does not count
-        against the session or daily cap — see SUGGESTIONS.md.
+        Priced from `config/pricing.json`, the same table the budget guard now
+        reads, so what the label promises and what gets billed are one number.
         """
-        from services.openai_client import IMAGE_COST_USD
+        from services.per_unit_pricing import describe, image_cost_eur
         model = self.fiverr_image_model_box.currentText()
         count = self.fiverr_count_spin.value()
-        rate = IMAGE_COST_USD.get(model)
-        if rate is None:
-            self.fiverr_cost_label.setText(f"{count} images · cost unknown")
-            return
+        unit = f"{count} image{'s' if count != 1 else ''}"
         self.fiverr_cost_label.setText(
-            f"{count} image{'s' if count != 1 else ''} · ≈ ${rate * count:.2f}")
+            describe(image_cost_eur(model, count), unit))
+
+    # ── Social ───────────────────────────────────────────────────────────────
+    def build_social_panel(self):
+        """The public funnel for whatever the studio just made.
+
+        Every other mode produces something that then needs an audience, and
+        each had grown half a promotion story — Publish schedules quote
+        graphics, Creator drafts one promo post — while nobody owned the funnel
+        itself.
+
+        Two things it deliberately does not do. It does not post on a timer:
+        the schedule is a plan the user works through, and a tool that posts
+        unattended is how an account gets banned for something its owner never
+        saw. And it does not pretend every platform is postable — three are,
+        today, and the Accounts tab says exactly what stands in the way of the
+        rest rather than offering eight buttons of which five fail.
+        """
+        from services import social_platforms
+
+        self.social_panel = QWidget()
+        self.social_panel.setObjectName("SocialPanel")
+        outer = QVBoxLayout(self.social_panel)
+        outer.setContentsMargins(0, 0, 0, 0)
+        content = QWidget()
+        content.setObjectName("Transparent")
+        outer.addWidget(scrollable(content))
+        layout = QVBoxLayout(content)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(LG)
+
+        # ── Campaign ────────────────────────────────────────────────────
+        layout.addWidget(section("Campaign"))
+
+        self.social_campaign_box = QComboBox()
+        self.social_campaign_box.currentIndexChanged.connect(
+            self._social_campaign_changed)
+        self.social_subject_input = line_edit("The Salt Road")
+        self.social_kind_box = combo(list(SUBJECT_KINDS))
+        self.social_goal_input = line_edit("launch week sales")
+        self.social_audience_input = line_edit("literary fiction readers")
+        self.social_links_input = line_edit("https://…")
+
+        campaign = QGridLayout()
+        campaign.setHorizontalSpacing(MD)
+        campaign.setVerticalSpacing(MD)
+        campaign.addWidget(field("Campaign", self.social_campaign_box), 0, 0, Qt.AlignTop)
+        campaign.addWidget(field("Subject", self.social_subject_input), 0, 1, Qt.AlignTop)
+        campaign.addWidget(field("Subject is a", self.social_kind_box), 0, 2, Qt.AlignTop)
+        campaign.addWidget(field("Goal", self.social_goal_input), 1, 0, Qt.AlignTop)
+        campaign.addWidget(field("Audience", self.social_audience_input), 1, 1, Qt.AlignTop)
+        campaign.addWidget(field("Link", self.social_links_input), 1, 2, Qt.AlignTop)
+        for column in range(3):
+            campaign.setColumnStretch(column, 1)
+        layout.addLayout(campaign)
+
+        campaign_actions = QHBoxLayout()
+        campaign_actions.setSpacing(SM)
+        self.social_new_campaign_btn = QPushButton("New Campaign")
+        self.social_new_campaign_btn.clicked.connect(self.social_new_campaign)
+        campaign_actions.addWidget(self.social_new_campaign_btn)
+        self.social_save_campaign_btn = QPushButton("Save Campaign")
+        self.social_save_campaign_btn.clicked.connect(self.social_save_campaign)
+        campaign_actions.addWidget(self.social_save_campaign_btn)
+        self.social_delete_campaign_btn = quiet("Delete campaign")
+        self.social_delete_campaign_btn.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+        self.social_delete_campaign_btn.clicked.connect(self.social_delete_campaign)
+        campaign_actions.addWidget(self.social_delete_campaign_btn)
+        campaign_actions.addStretch()
+        layout.addLayout(campaign_actions)
+
+        # ── Compose ─────────────────────────────────────────────────────
+        layout.addWidget(section("Compose"))
+
+        self.social_platform_box = combo(list(social_platforms.names()))
+        self.social_platform_box.currentTextChanged.connect(self._social_platform_changed)
+        self.social_angle_box = combo(list(ANGLES))
+        self.social_variants_box = combo(["1", "2", "3"], "2")
+        self.social_notes_input = line_edit("Anything specific to include")
+
+        compose = QGridLayout()
+        compose.setHorizontalSpacing(MD)
+        compose.setVerticalSpacing(MD)
+        compose.addWidget(field("Platform", self.social_platform_box), 0, 0, Qt.AlignTop)
+        compose.addWidget(field("Angle", self.social_angle_box), 0, 1, Qt.AlignTop)
+        compose.addWidget(field("Variants", self.social_variants_box), 0, 2, Qt.AlignTop)
+        compose.addWidget(field("Specifics", self.social_notes_input), 1, 0, 1, 3, Qt.AlignTop)
+        for column in range(3):
+            compose.setColumnStretch(column, 1)
+        layout.addLayout(compose)
+
+        self.social_panel_base = AgentPanel(
+            self, "social",
+            providers=("anthropic", "openai", "deepseek", "kimi", "gemini",
+                       "qwen", "ollama"),
+            default_provider="anthropic")
+        self.social_provider_box = self.social_panel_base.provider_box
+        self.social_model_box = self.social_panel_base.model_box
+
+        models = QGridLayout()
+        models.setHorizontalSpacing(MD)
+        models.setVerticalSpacing(MD)
+        models.addWidget(field("Provider", self.social_provider_box), 0, 0, Qt.AlignTop)
+        models.addWidget(field("Model", self.social_model_box), 0, 1, Qt.AlignTop)
+        for column in range(3):
+            models.setColumnStretch(column, 1)
+        layout.addLayout(models)
+
+        actions = QHBoxLayout()
+        actions.setSpacing(SM)
+        self.social_write_btn = primary("Write Posts")
+        self.social_write_btn.setMinimumWidth(160)
+        self.social_write_btn.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+        self.social_write_btn.clicked.connect(self.social_write)
+        actions.addWidget(self.social_write_btn)
+
+        # The cooperation with Video: Social does not render anything itself,
+        # it asks the video pipeline for a clip sized for the platform.
+        self.social_clip_btn = QPushButton("Make a Clip")
+        self.social_clip_btn.setToolTip(
+            "Write a brief and hand it to the Video pipeline as a vertical "
+            "clip for this platform.")
+        self.social_clip_btn.clicked.connect(self.social_make_clip)
+        actions.addWidget(self.social_clip_btn)
+
+        self.social_schedule_btn = QPushButton("Schedule Drafts")
+        self.social_schedule_btn.setToolTip(
+            "Spread the campaign's undated drafts across the coming weeks at "
+            "each platform's own cadence.")
+        self.social_schedule_btn.clicked.connect(self.social_schedule_drafts)
+        actions.addWidget(self.social_schedule_btn)
+
+        self.social_stop_btn = QPushButton("Stop")
+        self.social_stop_btn.setObjectName("DangerAction")
+        self.social_stop_btn.clicked.connect(self.social_stop)
+        self.social_stop_btn.hide()
+        actions.addWidget(self.social_stop_btn)
+
+        actions.addStretch()
+        self.social_status_label = QLabel("")
+        self.social_status_label.setObjectName("EstimateLine")
+        actions.addWidget(self.social_status_label)
+        layout.addLayout(actions)
+
+        # ── Tabs ────────────────────────────────────────────────────────
+        self.social_tabs = QTabWidget()
+
+        drafts_page = QWidget()
+        drafts_page.setObjectName("Transparent")
+        drafts = QVBoxLayout(drafts_page)
+        drafts.setContentsMargins(MD, MD, MD, MD)
+        drafts.setSpacing(MD)
+        self.social_draft_box = QTextEdit()
+        self.social_draft_box.setPlaceholderText(
+            "Drafts appear here, fully editable. Nothing is sent until you "
+            "press Post on a row in the Schedule tab.")
+        drafts.addWidget(self.social_draft_box, 1)
+        draft_actions = QHBoxLayout()
+        draft_actions.setSpacing(SM)
+        self.social_limit_label = QLabel("")
+        self.social_limit_label.setObjectName("EstimateLine")
+        draft_actions.addWidget(self.social_limit_label)
+        draft_actions.addStretch()
+        self.social_save_draft_btn = QPushButton("Save to Schedule")
+        self.social_save_draft_btn.clicked.connect(self.social_save_draft)
+        draft_actions.addWidget(self.social_save_draft_btn)
+        drafts.addLayout(draft_actions)
+        self.social_draft_box.textChanged.connect(self._social_update_limit)
+        self.social_tabs.addTab(drafts_page, "Draft")
+
+        schedule_page = QWidget()
+        schedule_page.setObjectName("Transparent")
+        schedule = QVBoxLayout(schedule_page)
+        schedule.setContentsMargins(MD, MD, MD, MD)
+        schedule.setSpacing(MD)
+        self.social_schedule_table = QTableWidget(0, 6)
+        self.social_schedule_table.setHorizontalHeaderLabels(
+            ["When", "Platform", "Format", "Post", "Status", "Link"])
+        header = self.social_schedule_table.horizontalHeader()
+        header.setSectionResizeMode(3, QHeaderView.Stretch)
+        for column in (0, 1, 2, 4, 5):
+            header.setSectionResizeMode(column, QHeaderView.ResizeToContents)
+        self.social_schedule_table.setEditTriggers(QTableWidget.NoEditTriggers)
+        self.social_schedule_table.setSelectionBehavior(QTableWidget.SelectRows)
+        self.social_schedule_table.verticalHeader().setVisible(False)
+        schedule.addWidget(self.social_schedule_table, 1)
+
+        schedule_actions = QHBoxLayout()
+        schedule_actions.setSpacing(SM)
+        schedule_actions.addStretch()
+        self.social_copy_btn = QPushButton("Copy Text")
+        self.social_copy_btn.clicked.connect(self.social_copy_selected)
+        schedule_actions.addWidget(self.social_copy_btn)
+        self.social_mark_posted_btn = QPushButton("Mark Posted")
+        self.social_mark_posted_btn.setToolTip(
+            "For the platforms you post by hand.")
+        self.social_mark_posted_btn.clicked.connect(self.social_mark_posted)
+        schedule_actions.addWidget(self.social_mark_posted_btn)
+        self.social_post_btn = QPushButton("Post Now")
+        self.social_post_btn.setObjectName("WarnAction")
+        self.social_post_btn.setToolTip(
+            "Publishes this one post through the platform's API. Only enabled "
+            "where that is configured.")
+        self.social_post_btn.clicked.connect(self.social_post_selected)
+        schedule_actions.addWidget(self.social_post_btn)
+        self.social_delete_post_btn = quiet("Delete")
+        self.social_delete_post_btn.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+        self.social_delete_post_btn.clicked.connect(self.social_delete_post)
+        schedule_actions.addWidget(self.social_delete_post_btn)
+        schedule.addLayout(schedule_actions)
+        self.social_tabs.addTab(schedule_page, "Schedule")
+
+        accounts_page = QWidget()
+        accounts_page.setObjectName("Transparent")
+        accounts = QVBoxLayout(accounts_page)
+        accounts.setContentsMargins(MD, MD, MD, MD)
+        accounts.setSpacing(MD)
+        self.social_accounts_box = QTextBrowser()
+        accounts.addWidget(self.social_accounts_box, 1)
+        refresh_row = QHBoxLayout()
+        refresh_row.addStretch()
+        self.social_refresh_accounts_btn = quiet("Re-check")
+        self.social_refresh_accounts_btn.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+        self.social_refresh_accounts_btn.clicked.connect(self.social_refresh_accounts)
+        refresh_row.addWidget(self.social_refresh_accounts_btn)
+        accounts.addLayout(refresh_row)
+        self.social_tabs.addTab(accounts_page, "Accounts")
+
+        layout.addWidget(self.social_tabs, 1)
+
+        self.social_worker = None
+        self.social_panel_base.load_models()
+        self.social_refresh_campaigns()
+        self.social_refresh_accounts()
+        self._social_platform_changed(self.social_platform_box.currentText())
+        self.social_panel.hide()
+
+    # ── Social handlers ──────────────────────────────────────────────────────
+    def social_refresh_campaigns(self):
+        from services import social_store
+        self.social_campaign_box.blockSignals(True)
+        self.social_campaign_box.clear()
+        for campaign in social_store.list_campaigns():
+            self.social_campaign_box.addItem(
+                campaign["name"] or campaign["subject"] or "Untitled",
+                campaign["id"])
+        self.social_campaign_box.blockSignals(False)
+        self._social_campaign_changed(self.social_campaign_box.currentIndex())
+
+    def social_current_campaign(self) -> dict | None:
+        from services import social_store
+        campaign_id = self.social_campaign_box.currentData()
+        return social_store.get_campaign(campaign_id) if campaign_id else None
+
+    def _social_campaign_changed(self, _index):
+        campaign = self.social_current_campaign()
+        if not campaign:
+            for widget in (self.social_subject_input, self.social_goal_input,
+                           self.social_audience_input, self.social_links_input):
+                widget.clear()
+            self.social_refresh_schedule()
+            return
+        self.social_subject_input.setText(campaign.get("subject", ""))
+        self.social_kind_box.setCurrentText(campaign.get("subject_kind", "other"))
+        self.social_goal_input.setText(campaign.get("goal", ""))
+        self.social_audience_input.setText(campaign.get("audience", ""))
+        self.social_links_input.setText(campaign.get("links", ""))
+        self.social_refresh_schedule()
+
+    def social_new_campaign(self):
+        from services import social_store
+        subject = self.social_subject_input.text().strip() or "Untitled"
+        campaign_id = social_store.create_campaign(
+            name=subject, subject=subject,
+            subject_kind=self.social_kind_box.currentText(),
+            goal=self.social_goal_input.text().strip(),
+            audience=self.social_audience_input.text().strip(),
+            links=self.social_links_input.text().strip())
+        self.social_refresh_campaigns()
+        index = self.social_campaign_box.findData(campaign_id)
+        if index >= 0:
+            self.social_campaign_box.setCurrentIndex(index)
+        self.social_status_label.setText(f"Created “{subject}”")
+
+    def social_save_campaign(self):
+        from services import social_store
+        campaign = self.social_current_campaign()
+        if not campaign:
+            self.social_new_campaign()
+            return
+        subject = self.social_subject_input.text().strip()
+        social_store.update_campaign(
+            campaign["id"], name=subject or campaign["name"], subject=subject,
+            subject_kind=self.social_kind_box.currentText(),
+            goal=self.social_goal_input.text().strip(),
+            audience=self.social_audience_input.text().strip(),
+            links=self.social_links_input.text().strip())
+        self.social_refresh_campaigns()
+        self.social_status_label.setText("Saved")
+
+    def social_delete_campaign(self):
+        from services import social_store
+        campaign = self.social_current_campaign()
+        if not campaign:
+            return
+        confirm = QMessageBox.question(
+            self, "Delete campaign",
+            f"Delete “{campaign['name']}” and all of its posts?",
+            QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
+        if confirm != QMessageBox.Yes:
+            return
+        social_store.delete_campaign(campaign["id"])
+        self.social_refresh_campaigns()
+
+    def _social_platform(self):
+        from services import social_platforms
+        return social_platforms.get(
+            social_platforms.key_for_name(self.social_platform_box.currentText()))
+
+    def _social_platform_changed(self, _name=""):
+        self._social_update_limit()
+
+    def _social_update_limit(self):
+        """Character count against the platform ceiling, live.
+
+        The limit is in the prompt and models overshoot it anyway; posting an
+        over-length draft is a rejected API call at the worst moment, so the
+        count is visible while editing rather than checked at submit.
+        """
+        platform = self._social_platform()
+        if platform is None:
+            self.social_limit_label.setText("")
+            return
+        text = self.social_draft_box.toPlainText().strip()
+        if not platform.limit:
+            self.social_limit_label.setText(f"{len(text)} characters")
+            return
+        over = over_limit(text, platform)
+        suffix = f" · {over} over" if over else ""
+        self.social_limit_label.setText(
+            f"{len(text)} / {platform.limit} characters{suffix}")
+
+    # ── Writing ──────────────────────────────────────────────────────────────
+    def social_write(self):
+        campaign = self.social_current_campaign()
+        if not campaign:
+            QMessageBox.warning(self, "No Campaign",
+                                "Create a campaign first.")
+            return
+        platform = self._social_platform()
+        provider = self.social_provider_box.currentText()
+        model = self.social_model_box.currentText()
+        if not model:
+            QMessageBox.warning(self, "No Model", "Pick a model first.")
+            return
+
+        variants = int(self.social_variants_box.currentText() or 1)
+        messages = build_post_messages(
+            campaign, platform, self.social_angle_box.currentText(),
+            notes=self.social_notes_input.text().strip(), variants=variants)
+
+        if not self.authorize_request("social", provider, model,
+                                      messages[-1]["content"],
+                                      label=f"{platform.key} post"):
+            return
+
+        self.social_write_btn.setEnabled(False)
+        self.social_stop_btn.show()
+        self.social_stop_btn.setEnabled(True)
+        self.social_status_label.setText(f"Writing for {platform.name}…")
+
+        self.social_worker = ChatWorker(self.run_backend, provider, model,
+                                        messages, "")
+        self.social_worker.finished_signal.connect(self._social_on_written)
+        self.social_worker.usage_signal.connect(
+            lambda u: self.note_request_usage("social", u))
+        self.social_worker.error_signal.connect(self._social_on_error)
+        self.social_worker.start()
+
+    def _social_on_written(self, response: str):
+        self.record_request("social", response)
+        variants = split_variants(response)
+        separator = "\n\n" + "—" * 30 + "\n\n"
+        self.social_draft_box.setPlainText(separator.join(variants))
+        self.social_status_label.setText(
+            f"{len(variants)} variant(s) — edit, then Save to Schedule")
+        self._social_reset_buttons()
+        self.social_tabs.setCurrentIndex(0)
+
+    def _social_on_error(self, error: str):
+        self.abandon_request("social")
+        self.social_status_label.setText(f"[Error] {error}")
+        self._social_reset_buttons()
+
+    def _social_reset_buttons(self):
+        self.social_write_btn.setEnabled(True)
+        self.social_stop_btn.setEnabled(False)
+        self.social_stop_btn.hide()
+
+    def social_stop(self):
+        if self.social_worker is not None:
+            self.social_worker.stop()
+        self.abandon_request("social")
+        self._social_reset_buttons()
+
+    # ── Clips, via the Video pipeline ────────────────────────────────────────
+    def social_make_clip(self):
+        """Ask the Video mode for a clip sized for this platform.
+
+        Social owns no rendering of its own. It writes a topic brief and hands
+        it to the same `produce()` the Video tab uses, with the platform's
+        aspect and a short length — which is why adding video to social cost a
+        brief-writing prompt rather than a second video pipeline.
+        """
+        from services import video_studio
+
+        campaign = self.social_current_campaign()
+        if not campaign:
+            QMessageBox.warning(self, "No Campaign", "Create a campaign first.")
+            return
+        if not video_studio.available():
+            QMessageBox.warning(self, "Video Unavailable",
+                                video_studio.unavailable_reason())
+            return
+        platform = self._social_platform()
+        if "clip" not in platform.formats:
+            QMessageBox.information(
+                self, "Not a video platform",
+                f"{platform.name} does not take video posts.")
+            return
+
+        provider = self.social_provider_box.currentText()
+        model = self.social_model_box.currentText()
+        if not model:
+            QMessageBox.warning(self, "No Model", "Pick a model first.")
+            return
+
+        seconds = 30
+        messages = build_clip_brief_messages(campaign, platform, seconds,
+                                             self.social_notes_input.text().strip())
+        if not self.authorize_request("social", provider, model,
+                                      messages[-1]["content"],
+                                      label="clip brief"):
+            return
+
+        self.social_write_btn.setEnabled(False)
+        self.social_clip_btn.setEnabled(False)
+        self.social_status_label.setText("Writing the clip brief…")
+        self._social_pending_clip = (platform.key, seconds)
+
+        self.social_worker = ChatWorker(self.run_backend, provider, model,
+                                        messages, "")
+        self.social_worker.finished_signal.connect(self._social_on_clip_brief)
+        self.social_worker.usage_signal.connect(
+            lambda u: self.note_request_usage("social", u))
+        self.social_worker.error_signal.connect(self._social_on_clip_error)
+        self.social_worker.start()
+
+    def _social_on_clip_brief(self, brief: str):
+        from services import video_studio
+        from services.per_unit_pricing import eur_per_usd
+
+        self.record_request("social", brief)
+        platform_key, seconds = getattr(self, "_social_pending_clip",
+                                        ("tiktok", 30))
+        topic = brief.strip().split("\n")[0][:300]
+
+        aspect = ("Square 1:1" if platform_key == "pinterest"
+                  else "Vertical 9:16")
+        overrides = video_studio.clip_overrides(aspect, seconds)
+        estimate = video_studio.pre_estimate(video_studio.load_config(overrides))
+        cost_eur = round(estimate["total"] * eur_per_usd(), 4)
+
+        confirm = QMessageBox.question(
+            self, "Render this clip?",
+            f"Topic:\n{topic}\n\n{aspect}, {seconds}s, "
+            f"{estimate['scenes']} scenes — about €{cost_eur:.2f}.\n\nRender it?",
+            QMessageBox.Yes | QMessageBox.No, QMessageBox.Yes)
+        if confirm != QMessageBox.Yes:
+            self.social_status_label.setText("Clip cancelled")
+            self._social_clip_done()
+            return
+
+        if not self.authorize_request(
+                "video", "openai", "vidforge-pipeline", topic,
+                label=f"{platform_key} clip", flat_cost_eur=cost_eur):
+            self._social_clip_done()
+            return
+
+        self.social_status_label.setText("Rendering clip — see the Video tab")
+        self.social_worker = None
+        self._social_clip_worker = VideoWorker(topic=topic, overrides=overrides)
+        self._social_clip_worker.progress_signal.connect(
+            lambda pct, detail: self.social_status_label.setText(
+                f"Rendering clip… {pct}%"))
+        self._social_clip_worker.done_signal.connect(self._social_on_clip_done)
+        self._social_clip_worker.error_signal.connect(self._social_on_clip_error)
+        self._social_clip_worker.start()
+
+    def _social_on_clip_done(self, slug: str, path: str):
+        from services import social_store
+        self.record_request("video", f"social clip {slug}")
+        campaign = self.social_current_campaign()
+        platform_key, _seconds = getattr(self, "_social_pending_clip",
+                                         ("tiktok", 30))
+        if campaign:
+            social_store.add_post(
+                campaign["id"], platform_key,
+                self.social_draft_box.toPlainText().strip(),
+                fmt="clip", media_path=path)
+            self.social_refresh_schedule()
+        self.social_status_label.setText(f"Clip ready — {Path(path).name}")
+        self._social_clip_done()
+        self.refresh_video_library()
+
+    def _social_on_clip_error(self, error: str):
+        self.abandon_request("social")
+        self.abandon_request("video")
+        self.social_status_label.setText(f"[Error] {error}")
+        self._social_clip_done()
+
+    def _social_clip_done(self):
+        self.social_write_btn.setEnabled(True)
+        self.social_clip_btn.setEnabled(True)
+        self._social_reset_buttons()
+
+    # ── Schedule ─────────────────────────────────────────────────────────────
+    def social_save_draft(self):
+        """Split the editor on its variant separators and store each as a post."""
+        from services import social_store
+        campaign = self.social_current_campaign()
+        if not campaign:
+            QMessageBox.warning(self, "No Campaign", "Create a campaign first.")
+            return
+        text = self.social_draft_box.toPlainText().strip()
+        if not text:
+            return
+        platform = self._social_platform()
+        pieces = [p.strip() for p in text.split("—" * 30)]
+        pieces = [p for p in pieces if p]
+        for piece in pieces:
+            social_store.add_post(campaign["id"], platform.key, piece,
+                                  fmt="text")
+        self.social_refresh_schedule()
+        self.social_tabs.setCurrentIndex(1)
+        self.social_status_label.setText(
+            f"{len(pieces)} post(s) saved to the schedule")
+
+    def social_schedule_drafts(self):
+        """Give every undated draft a date at its platform's own cadence."""
+        from datetime import date
+
+        from services import social_store
+        campaign = self.social_current_campaign()
+        if not campaign:
+            return
+        undated = [p for p in social_store.list_posts(campaign["id"])
+                   if not p.get("scheduled_for")]
+        if not undated:
+            self.social_status_label.setText("Nothing undated to schedule")
+            return
+
+        platforms = sorted({p["platform"] for p in undated})
+        slots = social_store.build_schedule(platforms, weeks=4,
+                                            start=date.today())
+        by_platform: dict[str, list] = {}
+        for day, platform_key in slots:
+            by_platform.setdefault(platform_key, []).append(day)
+
+        scheduled = 0
+        for post in undated:
+            days = by_platform.get(post["platform"], [])
+            if not days:
+                continue
+            social_store.update_post(post["id"],
+                                     scheduled_for=days.pop(0).isoformat(),
+                                     status="scheduled")
+            scheduled += 1
+        self.social_refresh_schedule()
+        self.social_status_label.setText(f"{scheduled} post(s) scheduled")
+
+    def social_refresh_schedule(self):
+        from PySide6.QtWidgets import QTableWidgetItem
+
+        from services import social_platforms, social_store
+        if not hasattr(self, "social_schedule_table"):
+            return
+        campaign = self.social_current_campaign()
+        posts = social_store.list_posts(campaign["id"]) if campaign else []
+        self.social_schedule_table.setRowCount(0)
+        for post in posts:
+            row = self.social_schedule_table.rowCount()
+            self.social_schedule_table.insertRow(row)
+            platform = social_platforms.get(post["platform"])
+            body = " ".join(post["body"].split())
+            values = [
+                post.get("scheduled_for") or "—",
+                platform.name if platform else post["platform"],
+                post.get("format", "text"),
+                body[:120] + ("…" if len(body) > 120 else ""),
+                post.get("status", "draft"),
+                post.get("permalink") or "",
+            ]
+            for column, value in enumerate(values):
+                item = QTableWidgetItem(str(value))
+                if column == 0:
+                    item.setData(Qt.UserRole, post["id"])
+                self.social_schedule_table.setItem(row, column, item)
+
+    def _selected_social_post(self) -> dict | None:
+        from services import social_store
+        row = self.social_schedule_table.currentRow()
+        if row < 0:
+            return None
+        item = self.social_schedule_table.item(row, 0)
+        post_id = item.data(Qt.UserRole) if item else None
+        return social_store.get_post(post_id) if post_id else None
+
+    def social_copy_selected(self):
+        post = self._selected_social_post()
+        if not post:
+            return
+        QApplication.clipboard().setText(post["body"])
+        self.social_status_label.setText("Copied")
+
+    def social_mark_posted(self):
+        from services import social_store
+        post = self._selected_social_post()
+        if not post:
+            return
+        social_store.mark_posted(post["id"])
+        self.social_refresh_schedule()
+
+    def social_delete_post(self):
+        from services import social_store
+        post = self._selected_social_post()
+        if not post:
+            return
+        social_store.delete_post(post["id"])
+        self.social_refresh_schedule()
+
+    def social_post_selected(self):
+        """Publish one post. Never more than one, never unattended."""
+        from services import social_platforms, social_publishing, social_store
+
+        post = self._selected_social_post()
+        if not post:
+            return
+        platform = social_platforms.get(post["platform"])
+        publisher = social_publishing.publisher_for(post["platform"])
+        if publisher is None or not publisher.configured:
+            QMessageBox.information(
+                self, f"{platform.name if platform else post['platform']} cannot post",
+                (publisher.why_not() if publisher else platform.posting_note))
+            return
+
+        extra: dict = {}
+        if post["platform"] == "reddit":
+            subreddit, ok = QInputDialog.getText(
+                self, "Subreddit", "Post to which subreddit? (without r/)")
+            if not ok or not subreddit.strip():
+                return
+            title, ok = QInputDialog.getText(self, "Title", "Post title:")
+            if not ok or not title.strip():
+                return
+            extra = {"subreddit": subreddit.strip(), "title": title.strip()}
+        elif post["platform"] == "pinterest":
+            board_id, ok = QInputDialog.getText(self, "Board", "Pinterest board id:")
+            if not ok or not board_id.strip():
+                return
+            extra = {"board_id": board_id.strip(),
+                     "link": (self.social_links_input.text().strip() or "")}
+        elif post["platform"] == "youtube":
+            title, ok = QInputDialog.getText(self, "Title", "Video title:")
+            if not ok or not title.strip():
+                return
+            extra = {"title": title.strip(), "privacy": "private"}
+
+        confirm = QMessageBox.question(
+            self, "Post now?",
+            f"This publishes to {platform.name if platform else post['platform']} "
+            f"from your own account, immediately.\n\nContinue?",
+            QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
+        if confirm != QMessageBox.Yes:
+            return
+
+        self.social_status_label.setText("Posting…")
+        try:
+            result = publisher.publish(post["body"], post.get("media_path", ""),
+                                       **extra)
+        except Exception as exc:
+            social_store.mark_failed(post["id"], str(exc))
+            self.social_refresh_schedule()
+            QMessageBox.warning(self, "Post failed", str(exc))
+            self.social_status_label.setText("[Error] post failed")
+            return
+        social_store.mark_posted(post["id"], result.permalink)
+        self.social_refresh_schedule()
+        self.social_status_label.setText(f"Posted — {result.permalink or 'done'}")
+
+    def social_refresh_accounts(self):
+        """What can post today, and what stands in the way of the rest."""
+        from services import social_publishing
+
+        rows = []
+        for name, ready, note in social_publishing.status_lines():
+            colour = ACCENT if ready else TEXT_MUTE
+            label = "ready" if ready else "drafting only"
+            rows.append(
+                f"<p style='margin:0 0 10px 0'>"
+                f"<b style='color:{colour}'>{name}</b> "
+                f"<span style='color:{TEXT_MUTE}'>— {label}</span><br>"
+                f"<span style='color:{TEXT_DIM}'>{note}</span></p>")
+        self.social_accounts_box.setHtml(
+            f"<div style='color:{TEXT_DIM}; font-size:12px'>"
+            "<p style='margin:0 0 14px 0'>Writing works for every platform "
+            "below. Posting works for the ones marked ready — the rest need an "
+            "app review, a business account or a paid tier that this app "
+            "cannot obtain on your behalf.</p>"
+            + "".join(rows) + "</div>")
+
+    # ── Video (vidforge) ─────────────────────────────────────────────────────
+    def build_video_panel(self):
+        """Topic in, finished video out — vidforge driven in-process.
+
+        The pipeline is not vendored. `vidforge` is its own git repository
+        nested at `imprint/vidforge/`, and `services/video_studio.py` imports
+        it: one checkout, one pipeline, two front doors. See that module for
+        why a second copy would have been the worse trade.
+
+        Long-form and social clips are the same `produce()` call with different
+        numbers — the pipeline already sizes every stage from `video.width` /
+        `video.height` and the script from a target length — so Format is a
+        set of config overrides rather than a second rendering path. That is
+        what lets the Social mode ask this panel for a clip instead of growing
+        a video pipeline of its own.
+        """
+        from services import video_studio
+
+        self.video_panel = QWidget()
+        self.video_panel.setObjectName("VideoPanel")
+        outer = QVBoxLayout(self.video_panel)
+        outer.setContentsMargins(0, 0, 0, 0)
+
+        # A checkout of imprint alone has no vidforge. Explain that in place of
+        # a form that cannot work, rather than failing on the first click.
+        if not video_studio.available():
+            notice = QLabel(video_studio.unavailable_reason())
+            notice.setObjectName("EstimateLine")
+            notice.setWordWrap(True)
+            notice.setAlignment(Qt.AlignTop)
+            outer.addWidget(notice)
+            outer.addStretch()
+            self.video_panel.hide()
+            return
+
+        content = QWidget()
+        content.setObjectName("Transparent")
+        outer.addWidget(scrollable(content))
+        layout = QVBoxLayout(content)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(LG)
+
+        self.video_tabs = QTabWidget()
+
+        # ── Render tab ──────────────────────────────────────────────────
+        render_page = QWidget()
+        render_page.setObjectName("Transparent")
+        render = QVBoxLayout(render_page)
+        render.setContentsMargins(MD, MD, MD, MD)
+        render.setSpacing(LG)
+
+        render.addWidget(section("Brief"))
+
+        self.video_topic_input = line_edit(
+            "Leave empty to take the next topic from topics.txt")
+        self.video_format_box = combo(["Long-form", "Social clip"])
+        self.video_format_box.currentTextChanged.connect(self._video_format_changed)
+        self.video_aspect_box = combo(list(video_studio.ASPECTS),
+                                      video_studio.DEFAULT_ASPECT)
+        self.video_aspect_box.currentTextChanged.connect(self._video_update_estimate)
+        self.video_length_box = combo([f"{n}s" for n in video_studio.CLIP_SECONDS],
+                                      "30s")
+        self.video_length_box.currentTextChanged.connect(self._video_update_estimate)
+
+        self.video_aspect_field = field("Aspect", self.video_aspect_box)
+        self.video_length_field = field("Clip length", self.video_length_box)
+
+        brief = QGridLayout()
+        brief.setHorizontalSpacing(MD)
+        brief.setVerticalSpacing(MD)
+        brief.addWidget(field("Topic", self.video_topic_input), 0, 0, 1, 2, Qt.AlignTop)
+        brief.addWidget(field("Format", self.video_format_box), 0, 2, Qt.AlignTop)
+        brief.addWidget(self.video_aspect_field, 1, 0, Qt.AlignTop)
+        brief.addWidget(self.video_length_field, 1, 1, Qt.AlignTop)
+        for column in range(3):
+            brief.setColumnStretch(column, 1)
+        render.addLayout(brief)
+
+        # ── Actions ─────────────────────────────────────────────────────
+        actions = QHBoxLayout()
+        actions.setSpacing(SM)
+        self.video_render_btn = primary("Render Video")
+        self.video_render_btn.setMinimumWidth(160)
+        self.video_render_btn.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+        self.video_render_btn.clicked.connect(self.video_render)
+        actions.addWidget(self.video_render_btn)
+
+        self.video_folder_btn = QPushButton("Open Output Folder")
+        self.video_folder_btn.clicked.connect(
+            lambda: QDesktopServices.openUrl(
+                QUrl.fromLocalFile(str(video_studio.output_root()))))
+        actions.addWidget(self.video_folder_btn)
+
+        self.video_stop_btn = QPushButton("Stop")
+        self.video_stop_btn.setObjectName("DangerAction")
+        self.video_stop_btn.clicked.connect(self.video_stop)
+        self.video_stop_btn.hide()
+        actions.addWidget(self.video_stop_btn)
+
+        actions.addStretch()
+        self.video_cost_label = QLabel("")
+        self.video_cost_label.setObjectName("EstimateLine")
+        actions.addWidget(self.video_cost_label)
+        render.addLayout(actions)
+
+        # ── Progress ────────────────────────────────────────────────────
+        self.video_progress = QProgressBar()
+        self.video_progress.setRange(0, 100)
+        self.video_progress.setValue(0)
+        self.video_progress.setTextVisible(True)
+        render.addWidget(self.video_progress)
+
+        self.video_status_label = QLabel("Idle")
+        self.video_status_label.setObjectName("EstimateLine")
+        self.video_status_label.setWordWrap(True)
+        render.addWidget(self.video_status_label)
+
+        self.video_log = QTextEdit()
+        self.video_log.setReadOnly(True)
+        self.video_log.setPlaceholderText(
+            "The pipeline reports each stage here: script, narration, "
+            "captions, visuals, clips, audio, assembly, thumbnail.")
+        render.addWidget(self.video_log, 1)
+        self.video_tabs.addTab(render_page, "Render")
+
+        # ── Library tab ─────────────────────────────────────────────────
+        # Reads vidforge's own history, so a render started in the standalone
+        # app appears here and vice versa. One library, not two.
+        library_page = QWidget()
+        library_page.setObjectName("Transparent")
+        lib = QVBoxLayout(library_page)
+        lib.setContentsMargins(MD, MD, MD, MD)
+        lib.setSpacing(MD)
+
+        self.video_library_table = QTableWidget(0, 4)
+        self.video_library_table.setHorizontalHeaderLabels(
+            ["Title", "Created", "Length", "Status"])
+        header = self.video_library_table.horizontalHeader()
+        header.setSectionResizeMode(0, QHeaderView.Stretch)
+        for column in (1, 2, 3):
+            header.setSectionResizeMode(column, QHeaderView.ResizeToContents)
+        self.video_library_table.setEditTriggers(QTableWidget.NoEditTriggers)
+        self.video_library_table.setSelectionBehavior(QTableWidget.SelectRows)
+        self.video_library_table.verticalHeader().setVisible(False)
+        lib.addWidget(self.video_library_table, 1)
+
+        lib_actions = QHBoxLayout()
+        lib_actions.setSpacing(SM)
+        lib_actions.addStretch()
+        self.video_play_btn = QPushButton("Play")
+        self.video_play_btn.clicked.connect(self.video_play_selected)
+        lib_actions.addWidget(self.video_play_btn)
+        self.video_reveal_btn = QPushButton("Show in Finder")
+        self.video_reveal_btn.clicked.connect(self.video_reveal_selected)
+        lib_actions.addWidget(self.video_reveal_btn)
+        self.video_refresh_btn = quiet("Rescan")
+        self.video_refresh_btn.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+        self.video_refresh_btn.clicked.connect(self.refresh_video_library)
+        lib_actions.addWidget(self.video_refresh_btn)
+        lib.addLayout(lib_actions)
+        self.video_tabs.addTab(library_page, "Library")
+
+        layout.addWidget(self.video_tabs, 1)
+
+        self.video_worker = None
+        self._video_format_changed(self.video_format_box.currentText())
+        self.video_panel.hide()
+
+    # ── Video handlers ───────────────────────────────────────────────────────
+    def _video_format_changed(self, fmt: str):
+        """Clip controls only apply to a clip."""
+        is_clip = fmt == "Social clip"
+        self.video_aspect_field.setVisible(is_clip)
+        self.video_length_field.setVisible(is_clip)
+        if is_clip and self.video_aspect_box.currentText() == "Landscape 16:9":
+            self.video_aspect_box.setCurrentText("Vertical 9:16")
+        self._video_update_estimate()
+
+    def _video_overrides(self) -> dict:
+        from services import video_studio
+        if self.video_format_box.currentText() != "Social clip":
+            return {}
+        seconds = int(self.video_length_box.currentText().rstrip("s") or 30)
+        return video_studio.clip_overrides(
+            self.video_aspect_box.currentText(), seconds)
+
+    def _video_estimate(self) -> dict:
+        from services import video_studio
+        try:
+            cfg = video_studio.load_config(self._video_overrides())
+        except Exception:
+            return {}
+        return video_studio.pre_estimate(cfg)
+
+    def _video_update_estimate(self, *_args):
+        """What the run will cost, beside the button that starts it.
+
+        A render is billed per image, per character of narration and per audio
+        minute — none of which the token cost model can express. The number
+        comes from vidforge's own per-stage arithmetic and is handed to the
+        budget guard as a flat cost, so it counts against the caps rather than
+        landing as €0.00.
+        """
+        from services.per_unit_pricing import eur_per_usd
+        estimate = self._video_estimate()
+        if not estimate:
+            self.video_cost_label.setText("")
+            return
+        eur = estimate["total"] * eur_per_usd()
+        self.video_cost_label.setText(
+            f"{estimate['scenes']} scenes · ~{estimate['words']} words · "
+            f"≈ €{eur:.2f}")
+
+    def video_render(self):
+        from services import video_studio
+        from services.per_unit_pricing import eur_per_usd
+
+        if self.video_worker is not None and self.video_worker.isRunning():
+            return
+        estimate = self._video_estimate()
+        if not estimate:
+            QMessageBox.warning(self, "Video Unavailable",
+                                video_studio.unavailable_reason())
+            return
+
+        topic = self.video_topic_input.text().strip()
+        cost_eur = round(estimate["total"] * eur_per_usd(), 4)
+        if not self.authorize_request(
+                "video", "openai", "vidforge-pipeline",
+                topic or "next topic from topics.txt",
+                label=self.video_format_box.currentText().lower(),
+                flat_cost_eur=cost_eur):
+            return
+
+        self.video_log.clear()
+        self.video_progress.setValue(0)
+        self.video_status_label.setText("Starting…")
+        self.video_render_btn.setEnabled(False)
+        self.video_stop_btn.show()
+        self.video_stop_btn.setEnabled(True)
+
+        self.video_worker = VideoWorker(topic=topic,
+                                        overrides=self._video_overrides())
+        self.video_worker.stage_signal.connect(
+            lambda _key, label: self.video_status_label.setText(f"{label}…"))
+        self.video_worker.progress_signal.connect(self._video_on_progress)
+        self.video_worker.log_signal.connect(self.video_log.append)
+        self.video_worker.done_signal.connect(self._video_on_done)
+        self.video_worker.error_signal.connect(self._video_on_error)
+        self.video_worker.start()
+
+    def _video_on_progress(self, percent: int, detail: str):
+        self.video_progress.setValue(percent)
+        if detail:
+            self.video_status_label.setText(detail)
+
+    def _video_on_done(self, slug: str, path: str):
+        self.record_request("video", f"rendered {slug}")
+        self.video_status_label.setText(f"Done — {Path(path).name}")
+        self.video_render_btn.setEnabled(True)
+        self.video_stop_btn.hide()
+        self.refresh_video_library()
+
+    def _video_on_error(self, error: str):
+        # A cancelled or failed render still spent whatever it got through, but
+        # the authorised amount was for a whole video. Release it rather than
+        # bill for a video that does not exist.
+        self.abandon_request("video")
+        self.video_status_label.setText(f"[Error] {error}")
+        self.video_log.append(error)
+        self.video_render_btn.setEnabled(True)
+        self.video_stop_btn.hide()
+
+    def video_stop(self):
+        if self.video_worker is not None:
+            self.video_worker.cancel()
+            self.video_status_label.setText("Cancelling after this stage…")
+
+    def refresh_video_library(self):
+        from services import video_studio
+        if not hasattr(self, "video_library_table"):
+            return
+        entries = video_studio.library()
+        self.video_library_table.setRowCount(0)
+        from PySide6.QtWidgets import QTableWidgetItem
+        for entry in entries:
+            row = self.video_library_table.rowCount()
+            self.video_library_table.insertRow(row)
+            seconds = float(entry.get("duration_seconds") or 0)
+            length = f"{int(seconds // 60)}:{int(seconds % 60):02d}" if seconds else "—"
+            if not entry.get("complete"):
+                status = "Incomplete"
+            elif entry.get("published"):
+                status = "Published"
+            else:
+                status = "Ready"
+            values = [entry.get("title", entry.get("slug", "")),
+                      (entry.get("created") or "")[:16].replace("T", " "),
+                      length, status]
+            for column, value in enumerate(values):
+                item = QTableWidgetItem(str(value))
+                if column == 0:
+                    item.setData(Qt.UserRole, entry.get("path", ""))
+                self.video_library_table.setItem(row, column, item)
+
+    def _selected_video_path(self) -> Path | None:
+        row = self.video_library_table.currentRow()
+        if row < 0:
+            return None
+        item = self.video_library_table.item(row, 0)
+        raw = item.data(Qt.UserRole) if item else ""
+        return Path(raw) if raw else None
+
+    def video_play_selected(self):
+        path = self._selected_video_path()
+        if path and path.exists():
+            QDesktopServices.openUrl(QUrl.fromLocalFile(str(path)))
+        else:
+            QMessageBox.information(
+                self, "Not on disk",
+                "That render is in the library but its file is missing — it "
+                "was probably cancelled before the assembly stage.")
+
+    def video_reveal_selected(self):
+        path = self._selected_video_path()
+        target = path.parent if path else None
+        if target and target.exists():
+            QDesktopServices.openUrl(QUrl.fromLocalFile(str(target)))
 
     # ── Creator (subscription accounts) ──────────────────────────────────────
     def build_creator_panel(self):
@@ -3684,6 +4723,29 @@ class GodAI(QWidget):
             QMessageBox.warning(self, "Higgsfield Content Policy", str(exc))
             return
 
+        # A Higgsfield render is real money and, until the guard learned
+        # per-unit costs, went out with no budget check, no confirmation and no
+        # entry in the spend counters — the same class of bug as the 19
+        # unguarded ChatWorker sites, reintroduced by adding a second paid
+        # provider. It is priced per render, which the token model cannot say.
+        from services.per_unit_pricing import render_cost_eur
+        render_cost = render_cost_eur()
+        if render_cost is None:
+            proceed = QMessageBox.question(
+                self, "Render cost is not priced",
+                "Higgsfield bills per render and no rate is set, so this "
+                "render cannot be counted against your budget caps.\n\n"
+                'Set "higgsfield_render" under "per_unit_usd" in '
+                "config/pricing.json to have it billed.\n\nRender anyway?",
+                QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
+            if proceed != QMessageBox.Yes:
+                return
+        if not self.authorize_request(
+                "creator", "higgsfield", "higgsfield-video", prompt,
+                label="promo teaser",
+                flat_cost_eur=render_cost if render_cost is not None else 0.0):
+            return
+
         # Personas reuse their locked seed and reference image so successive
         # renders are the same character rather than a new one each time.
         seed = persona_seed(account["id"])
@@ -3709,6 +4771,7 @@ class GodAI(QWidget):
 
     def _creator_video_done(self, account_id: int, path: str):
         """Store the render in the media library rather than leaving it on disk."""
+        self.record_request("creator", f"teaser: {Path(path).name}")
         self._creator_store_media(account_id, path, source="higgsfield",
                                   caption="Higgsfield teaser")
         self.creator_video_btn.setEnabled(True)
@@ -3716,6 +4779,7 @@ class GodAI(QWidget):
         self.creator_refresh_media()
 
     def _creator_video_error(self, error: str):
+        self.abandon_request("creator")
         self.creator_video_btn.setEnabled(True)
         self.creator_video_status.setText(f"[Error] {error}")
 
@@ -4143,6 +5207,7 @@ class GodAI(QWidget):
         self._fiverr_pending_brief = brief
 
     def _fiverr_on_prompt_ready(self, image_prompt: str):
+        from services.per_unit_pricing import image_cost_eur
         self.record_request("fiverr", image_prompt)
         image_prompt = image_prompt.strip()
         count = self._fiverr_pending_count
@@ -4150,9 +5215,23 @@ class GodAI(QWidget):
         save_dir = DATA_DIR / "fiverr_output" / datetime.now().strftime("%Y%m%d_%H%M%S")
         self.fiverr_status_label.setText(f"Generating {count} concept(s)...")
 
+        # The images are a second paid request, billed per image rather than
+        # per token. Until the guard learned per-unit costs this ran entirely
+        # outside the budget caps.
+        image_model = self.fiverr_image_model_box.currentText()
+        image_cost = image_cost_eur(image_model, count)
+        if not self.authorize_request(
+                "fiverr", "openai", image_model,
+                f"{count} logo concepts: {image_prompt[:200]}",
+                label="logo images",
+                flat_cost_eur=image_cost if image_cost is not None else 0.0):
+            self._fiverr_reset_buttons()
+            return
+        self._fiverr_image_token = True
+
         self.fiverr_image_worker = FiverrImageWorker(
             self.openai, image_prompt, count, save_dir,
-            image_model=self.fiverr_image_model_box.currentText())
+            image_model=image_model)
         self.fiverr_image_worker.image_ready_signal.connect(self._fiverr_on_image_ready)
         self.fiverr_image_worker.all_done_signal.connect(self._fiverr_on_all_done)
         self.fiverr_image_worker.error_signal.connect(self._fiverr_on_image_error)
@@ -4183,27 +5262,34 @@ class GodAI(QWidget):
         self.fiverr_preview_status.setText(f"Concept {index + 1} ready — {Path(path).name}")
         self.fiverr_tabs.setCurrentIndex(0)
 
-    def _fiverr_on_all_done(self, paths: list):
-        self._fiverr_image_paths = paths
-        self.fiverr_status_label.setText(f"Done — {len(paths)} logo(s) generated.")
+    def _fiverr_reset_buttons(self):
+        """Back to idle. Every exit path from a run goes through here."""
         self.fiverr_generate_btn.setEnabled(True)
         self.fiverr_delivery_btn.setEnabled(True)
         self.fiverr_gig_btn.setEnabled(True)
         self.fiverr_stop_btn.setEnabled(False)
         self.fiverr_stop_btn.hide()
+
+    def _fiverr_on_all_done(self, paths: list):
+        self._fiverr_image_paths = paths
+        self.fiverr_status_label.setText(f"Done — {len(paths)} logo(s) generated.")
+        # Closes out the image request authorised in _fiverr_on_prompt_ready,
+        # billing the per-image cost it was authorised against.
+        self.record_request("fiverr", f"{len(paths)} logo images")
+        self._fiverr_reset_buttons()
         self.fiverr_save_images_btn.setEnabled(True)
         if hasattr(self, "_fiverr_order_row"):
             from PySide6.QtWidgets import QTableWidgetItem
             self.fiverr_order_table.setItem(self._fiverr_order_row, 2, QTableWidgetItem("Done"))
 
     def _fiverr_on_image_error(self, error: str):
+        # A failed render still consumed whatever it managed before failing,
+        # but the authorised amount was for the full set — release it rather
+        # than bill for images that were never produced.
+        self.abandon_request("fiverr")
         self.fiverr_status_label.setText(f"Error: {error}")
         self.fiverr_preview_status.setText(f"[Error] {error}")
-        self.fiverr_generate_btn.setEnabled(True)
-        self.fiverr_delivery_btn.setEnabled(True)
-        self.fiverr_gig_btn.setEnabled(True)
-        self.fiverr_stop_btn.setEnabled(False)
-        self.fiverr_stop_btn.hide()
+        self._fiverr_reset_buttons()
         if hasattr(self, "_fiverr_order_row"):
             from PySide6.QtWidgets import QTableWidgetItem
             self.fiverr_order_table.setItem(self._fiverr_order_row, 2, QTableWidgetItem("Error"))
@@ -4211,11 +5297,7 @@ class GodAI(QWidget):
     def _fiverr_on_text_error(self, error: str):
         self.abandon_request("fiverr")
         self.fiverr_status_label.setText(f"Error: {error}")
-        self.fiverr_generate_btn.setEnabled(True)
-        self.fiverr_delivery_btn.setEnabled(True)
-        self.fiverr_gig_btn.setEnabled(True)
-        self.fiverr_stop_btn.setEnabled(False)
-        self.fiverr_stop_btn.hide()
+        self._fiverr_reset_buttons()
 
     def fiverr_write_delivery(self):
         brief = self._fiverr_get_brief()
@@ -6472,7 +7554,8 @@ class GodAI(QWidget):
             "chat": "Studio Assistant", "fiverr": "Client Gigs",
             "author": "Draft", "manuscript": "Publish", "music": "Music",
             "webdesign": "Site Builder", "audiobook": "Audiobooks",
-            "creator": "Creator", }
+            "creator": "Creator", "video": "Video",
+            "social": "Social", }
         agent_subtitles = {
             "chat":        "General-purpose conversation. Pick a tool, pick a model, talk.",
             "fiverr":      "Create client-ready logo concepts, gig listings, and polished delivery messages.",
@@ -6482,6 +7565,8 @@ class GodAI(QWidget):
             "webdesign":   "Modern HTML, CSS, and JavaScript generation with responsive layout and design advice.",
             "audiobook":   "Turn PDF, EPUB, TXT, and MOBI books into production-ready MP3 audiobooks.",
             "creator":     "Plan, draft, and schedule subscription content across accounts you hold consent for.",
+            "video":       "Script, narrate, illustrate and cut a video — long-form for YouTube or a vertical clip for social.",
+            "social":      "Promote a book, release, product or gig: write per platform, schedule it, and post where the API allows.",
             }
         if hasattr(self, "agent_title_label"):
             self.agent_title_label.setText(
@@ -6492,24 +7577,16 @@ class GodAI(QWidget):
             self.agent_status_pill.setText("●  Ready")
             self.agent_status_pill.setStyleSheet("")
 
-        is_audiobook = agent_name == "audiobook"
-        is_author = agent_name == "author"
-        is_manuscript = agent_name == "manuscript"
-        is_music = agent_name == "music"
-        is_fiverr = agent_name == "fiverr"
-        is_webdesign = agent_name == "webdesign"
-        is_creator = agent_name == "creator"
-        is_custom = (is_audiobook or is_author or is_manuscript
-                     or is_music or is_fiverr or is_webdesign or is_creator)
-
+        # One list, not a chain of `is_x` booleans repeated in two blocks.
+        # Adding an agent used to mean editing both, and forgetting one is
+        # exactly the dangling-name failure that left sentinel_ai raising
+        # NameError on every agent click.
+        is_custom = agent_name in CUSTOM_PANELS
         self.normal_panel.setVisible(not is_custom)
-        self.audiobook_panel.setVisible(is_audiobook)
-        self.author_panel.setVisible(is_author)
-        self.manuscript_panel.setVisible(is_manuscript)
-        self.music_panel.setVisible(is_music)
-        self.fiverr_panel.setVisible(is_fiverr)
-        self.creator_panel.setVisible(is_creator)
-        self.webdesign_panel.setVisible(is_webdesign)
+        for name in CUSTOM_PANELS:
+            panel = getattr(self, f"{name}_panel", None)
+            if panel is not None:
+                panel.setVisible(name == agent_name)
         # Output area only relevant for standard (non-custom) agents like Chat.
         # Within those, auto-hide if there is no content yet — keeps the UI clean.
         standard_agent_with_output = not is_custom
@@ -6518,21 +7595,21 @@ class GodAI(QWidget):
         self.output_label.setVisible(show_output)
         self.output_box.setVisible(show_output)
 
-        if is_audiobook:
+        if agent_name == "audiobook":
             self.output_label.setText("Output Log")
             self.output_box.setPlainText("[Ready] Click Start to begin.")
             self.refresh_audiobook_books()
             self.refresh_audiobook_library()
-        elif is_manuscript:
+        elif agent_name == "manuscript":
             from services.kdp_csv_parser import manuscript_seed_todos
             manuscript_seed_todos()
             self._load_manuscript_todos()
             self._refresh_next_step_tip()
-        elif is_author:
+        elif agent_name == "author":
             self._refresh_next_step_tip()
-        elif is_music or is_fiverr or is_webdesign:
-            pass
-        else:
+        elif agent_name == "video":
+            self.refresh_video_library()
+        elif not is_custom:
             self.output_label.setText("Output")
 
     def get_audiobook_defaults(self):
@@ -6601,19 +7678,70 @@ class GodAI(QWidget):
         if folder:
             self.audiobook_output_path.setText(folder)
 
+    def _audiobook_estimate(self, path: Path) -> dict | None:
+        """Real cost for converting `path`, from its actual text.
+
+        The converter has carried `load_text`, `count_text_tokens` and
+        `estimate_costs_usd` all along; the panel ignored all three and guessed
+        from the file size instead — `min(25, max(0.5, megabytes * 0.80))`,
+        a number with no relationship to what OpenAI charges. A PDF of scanned
+        images and a PDF of dense text are the same size and nothing like the
+        same price.
+        """
+        from services.narrator.converter import (
+            count_text_tokens, estimate_audio_seconds_from_text,
+            estimate_audio_tokens_from_seconds, estimate_costs_usd,
+        )
+        from services.per_unit_pricing import eur_per_usd
+
+        try:
+            text = self._audiobook_text(path)
+        except Exception:
+            return None
+        if not text.strip():
+            return None
+
+        text_tokens = count_text_tokens(text)
+        seconds = estimate_audio_seconds_from_text(text)
+        audio_tokens = estimate_audio_tokens_from_seconds(seconds)
+        usd = estimate_costs_usd(text_tokens, audio_tokens)["total_usd"]
+        return {
+            "characters": len(text),
+            "seconds": seconds,
+            "eur": round(usd * eur_per_usd(), 4),
+        }
+
+    def _audiobook_text(self, path: Path) -> str:
+        """Extracted text for `path`, cached by (path, mtime).
+
+        Extraction is the expensive part and the selection handler runs on
+        every arrow-key press, so the same book is not re-parsed each time.
+        """
+        from services.narrator.converter import load_text
+
+        key = (str(path), path.stat().st_mtime_ns)
+        cache = getattr(self, "_audiobook_text_cache", None)
+        if cache is None:
+            cache = self._audiobook_text_cache = {}
+        if key not in cache:
+            cache.clear()          # one book at a time; books are large
+            cache[key] = load_text(path)
+        return cache[key]
+
     def estimate_audiobook_cost_from_selection(self):
         item = self.audiobook_book_list.currentItem()
         if not item:
-            self.audiobook_cost_label.setText("Estimated cost: select a book first")
+            self.audiobook_cost_label.setText("Select a book")
             return
 
         path = Path(item.data(Qt.UserRole))
-        try:
-            mb = max(0.1, path.stat().st_size / (1024 * 1024))
-            rough = min(25.0, max(0.50, mb * 0.80))
-            self.audiobook_cost_label.setText(f"Estimated cost: rough €{rough:.2f}–€{rough * 1.8:.2f} (file-size estimate)")
-        except Exception:
-            self.audiobook_cost_label.setText("Estimated cost: unavailable")
+        estimate = self._audiobook_estimate(path)
+        if estimate is None:
+            self.audiobook_cost_label.setText("Cost: could not read this file")
+            return
+        minutes = estimate["seconds"] / 60
+        self.audiobook_cost_label.setText(
+            f"~{minutes:.0f} min audio · ≈ €{estimate['eur']:.2f}")
 
     def start_selected_audiobook_book(self):
         item = self.audiobook_book_list.currentItem()
@@ -6648,17 +7776,22 @@ class GodAI(QWidget):
             QMessageBox.warning(self, "Invalid Value", "Chunk tokens must be a number.")
             return
 
-        msg = QMessageBox(self)
-        msg.setWindowTitle("Confirm Audiobook Conversion")
-        msg.setText(
-            f"Start audiobook conversion?\n\n"
-            f"Book: {Path(book_path).name}\n"
-            f"Voice: {voice}\n"
-            f"Chunk tokens: {chunk_tokens}\n\n"
-            f"This uses OpenAI TTS API and may cost real money."
-        )
-        msg.setStandardButtons(QMessageBox.Yes | QMessageBox.No)
-        if msg.exec() != QMessageBox.Yes:
+        # Converting a book is a paid OpenAI call — often the most expensive
+        # single action in the app — and it went out with a hand-rolled Yes/No
+        # box instead of the guard: no budget check, no entry in the spend
+        # counters, nothing against the daily cap. Same class as the 19
+        # unguarded ChatWorker sites, and the last one left.
+        estimate = self._audiobook_estimate(Path(book_path))
+        if estimate is None:
+            QMessageBox.warning(
+                self, "Unreadable Book",
+                f"No text could be extracted from {Path(book_path).name}, so "
+                "the conversion cost cannot be estimated.")
+            return
+        if not self.authorize_request(
+                "audiobook", "openai", "gpt-4o-mini-tts",
+                f"{Path(book_path).name} · {estimate['characters']} characters",
+                label="audiobook", flat_cost_eur=estimate["eur"]):
             return
 
         config = {"input": book_path, "output": output_path, "voice": voice, "chunk_tokens": chunk_tokens}
@@ -6756,6 +7889,15 @@ class GodAI(QWidget):
         quota_hit = any(k in output_text for k in (
             "insufficient_quota", "exceeded your current quota", "Billing hard limit"))
         paused = "Conversion paused" in output_text or "⏸️" in output_text
+
+        # Close out the request authorised in start_selected_audiobook_book.
+        # A conversion that was stopped, crashed or hit the quota billed some
+        # of the book but not the amount authorised for the whole of it, so it
+        # is released rather than charged in full.
+        if success:
+            self.record_request("audiobook", "conversion complete")
+        else:
+            self.abandon_request("audiobook")
 
         if quota_hit:
             self.tool_progress.setValue(0)
@@ -7072,7 +8214,8 @@ class GodAI(QWidget):
             "allow_qwen": self.allow_qwen_checkbox.isChecked(),
         }
 
-    def authorize_request(self, agent, provider, model, prompt, tool=None, label=None) -> bool:
+    def authorize_request(self, agent, provider, model, prompt, tool=None,
+                          label=None, flat_cost_eur=None) -> bool:
         """Budget-check and confirm one request. False means: do not send it.
 
         `tool` is a registry tool name and is validated as one — pass it only
@@ -7086,7 +8229,13 @@ class GodAI(QWidget):
         record_request()/abandon_request(); passing the agent name still works
         and resolves to that agent's oldest outstanding request.
         """
-        estimated_cost, approx_tokens = self.estimate_chat_cost(provider, model, prompt)
+        # `flat_cost_eur` is for work billed per unit rather than per token —
+        # an image, a video render, a minute of speech. Without it the guard
+        # prices those at zero and they slip past the caps entirely.
+        if flat_cost_eur is not None:
+            estimated_cost, approx_tokens = float(flat_cost_eur), 0
+        else:
+            estimated_cost, approx_tokens = self.estimate_chat_cost(provider, model, prompt)
 
         validation = self.validator.validate(
             agent_name=agent,
@@ -7117,6 +8266,7 @@ class GodAI(QWidget):
             "model": model,
             "prompt": prompt,
             "usage": None,
+            "flat_cost_eur": flat_cost_eur,
             "run_id": self.run_logger.start(
                 agent=agent,
                 tool=descriptor,
@@ -7171,6 +8321,7 @@ class GodAI(QWidget):
             prompt_text=context["prompt"],
             response_text=response,
             usage=context["usage"],
+            flat_cost_eur=context.get("flat_cost_eur"),
         )
 
         self.last_request_cost = entry.get("cost_eur", entry.get("estimated_cost", 0.0))
@@ -7875,7 +9026,90 @@ def _hand_off_to_running_instance() -> bool:
     return True
 
 
+def _selftest() -> int:
+    """Check the things only a packaged run can break.
+
+    Three of the four traps in AGENTS.md are invisible from source — there is
+    nothing to inherit, nothing to resolve and no bundle to read from until the
+    app is frozen. Video mode adds a fourth: vidforge is a nested sibling
+    repository imported at runtime, so PyInstaller's static analysis never sees
+    it and only a real bundle proves it shipped.
+
+    Run:  /Applications/Imprint.app/Contents/MacOS/Imprint --selftest
+    """
+    from pathlib import Path as _Path
+
+    failures: list[str] = []
+
+    def check(label: str, ok: bool, detail: str = "") -> None:
+        print(f"  {'PASS' if ok else 'FAIL'}  {label}" + (f" — {detail}" if detail else ""))
+        if not ok:
+            failures.append(label)
+
+    print(f"Imprint self-test  (frozen={is_frozen()})")
+
+    # 1. Writable data directory. A frozen app that writes inside its own
+    #    bundle breaks its signature and loses everything on reinstall.
+    try:
+        data_dir = _Path(BASE_DIR)
+        probe = data_dir / ".selftest"
+        probe.write_text("ok", encoding="utf-8")
+        probe.unlink()
+        inside_bundle = ".app/Contents/" in str(data_dir)
+        check("data directory is writable", True, str(data_dir))
+        check("data directory is outside the bundle", not inside_bundle)
+    except Exception as exc:
+        check("data directory is writable", False, str(exc))
+
+    # 2. Database opens and carries the agents the shell switches between.
+    try:
+        from services.registry import Registry
+        registry = Registry()
+        missing = [a for a in CUSTOM_PANELS if not registry.is_agent_enabled(a)]
+        check("every panel agent is registered", not missing, ", ".join(missing))
+    except Exception as exc:
+        check("registry is readable", False, str(exc))
+
+    # 3. vidforge, imported rather than vendored — the whole Video mode.
+    try:
+        from services import video_studio
+        ok = video_studio.available()
+        check("vidforge imports", ok,
+              "" if ok else video_studio.unavailable_reason().split("\n")[0])
+        if ok:
+            cfg = video_studio.load_config()
+            check("vidforge config loads", bool(cfg.get("video.width")))
+            check("vidforge output root is writable",
+                  video_studio.output_root().is_dir(),
+                  str(video_studio.output_root()))
+    except Exception as exc:
+        check("vidforge imports", False, f"{type(exc).__name__}: {exc}")
+
+    # 4. Libraries that resolve through entry points or data files silently
+    #    no-op once packaged unless they were collected.
+    for module in ("yaml", "tiktoken", "PIL"):
+        try:
+            __import__(module)
+            check(f"{module} importable", True)
+        except Exception as exc:
+            check(f"{module} importable", False, str(exc))
+
+    # 5. Read-only resources that are seeded from the bundle on first run.
+    for name in ("docs/agents", "docs/learn", "config"):
+        check(f"bundled resource: {name}", (_Path(RESOURCE_DIR) / name).exists())
+
+    print()
+    if failures:
+        print(f"{len(failures)} check(s) failed: {', '.join(failures)}")
+        return 1
+    print("all checks passed")
+    return 0
+
+
 if __name__ == "__main__":
+    if "--selftest" in sys.argv:
+        sys.exit(_selftest())
+
     app = QApplication([])
 
     # Second launch: focus the window that is already open and leave. The exit

@@ -37,3 +37,8 @@ google-genai         # Gemini provider
 psutil               # resource monitor
 python-docx           # manuscript DOCX export (book_exporter)
 reportlab             # manuscript PDF export (book_exporter)
+
+# ── Video mode (vidforge, imported from the nested repo) ──
+PyYAML                # vidforge reads config.yaml
+google-api-python-client   # YouTube upload
+google-auth-oauthlib       # YouTube OAuth flow
