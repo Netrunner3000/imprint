@@ -10,9 +10,9 @@ Ideas not yet committed to. Status: `IDEA` · `CONSIDERING` · `PLANNED` · `DON
 |---|---|---|---|---|
 | 1 | Refactor Phase 4 — one module per agent panel (`ui/panels/author.py`, …). Phase 3 (the `AgentHost` protocol + shared `AgentPanel` base) shipped; see `TODO.md`. | design | L | PLANNED |
 | 3 | Remove the dead `ops_identity` sidebar entry — listed in `agent_titles` with no implementation behind it | bug | XS | DONE |
-| 5 | Budget card layout — the €1 session / €5 daily figures deserve a progress bar, not two labels. Session and Daily now share one row (the € moved into the card heading to make room), but neither field is a progress bar yet. | design | S | CONSIDERING |
+| 5 | DONE — Budget card layout. Both caps are progress bars now, and the four spend figures are stat blocks rather than nine lines of prose. The bar turns red at 100%. | design | S | DONE |
 | 6 | Per-agent cost breakdown in the cost dialog, so it's visible which agent is eating the daily cap | feature | M | IDEA |
-| 13 | Reshape the left-nav sidebar into tabs (Write / Audio / Web / Gigs) per FORK_PLAN.md step 4 | design | L | CONSIDERING |
+| 13 | DONE — mode tabs, now in the header bar rather than centred over the canvas. | design | L | DONE |
 
 ## Creator agent — next arc
 
@@ -64,6 +64,8 @@ consequences of what just landed rather than new ideas.
 
 | Suggestion | When |
 |---|---|
+| GUI overhaul — header bar plus two fixed rails instead of a splitter; every panel rebuilt on `ui/forms.py`; one control height enforced in the stylesheet; 58 emoji and 36 colon captions removed; spend as stat blocks and budget bars | Sep 2026 |
+| The Gigs image model is a control (`dall-e-3` / `gpt-image-1`) rather than a hardcoded call, and `generate_image()` returns bytes so both models have one caller | Sep 2026 |
 | Refactor Phase 3 — `ui/host.py`'s `AgentHost` protocol and `ui/panels/base.py`'s `AgentPanel`, absorbing the five `*_load_models` methods | Sep 2026 |
 | `_pending_requests` keyed by request token instead of agent name — two concurrent runs of one agent no longer clobber each other's context | Sep 2026 |
 | Kimi prompt caching — `cached_input_per_1m_usd` on the pricing table, captured from the response and billed at the cached rate. Uncovered a bigger bug while wiring it up: the pricing table had no reconciliation path against `config/pricing.json` outside first-run migration, so Kimi/OpenAI/DeepSeek/Gemini were all silently billing €0.00 on this project's own database. `_seed_pricing_from_json()` now reconciles on every launch. | Sep 2026 |

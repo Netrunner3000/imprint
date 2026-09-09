@@ -74,7 +74,7 @@ class AudiobookPlayer(QWidget):
         layout.addLayout(scrub_row)
 
         controls = QHBoxLayout()
-        self.back_btn = QPushButton("⏪ 30s")
+        self.back_btn = QPushButton("−30s")
         self.back_btn.clicked.connect(lambda: self.skip(-SKIP_MS))
         controls.addWidget(self.back_btn)
 
@@ -83,7 +83,7 @@ class AudiobookPlayer(QWidget):
         self.play_btn.clicked.connect(self.toggle)
         controls.addWidget(self.play_btn)
 
-        self.forward_btn = QPushButton("30s ⏩")
+        self.forward_btn = QPushButton("+30s")
         self.forward_btn.clicked.connect(lambda: self.skip(SKIP_MS))
         controls.addWidget(self.forward_btn)
 

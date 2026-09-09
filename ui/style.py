@@ -89,6 +89,16 @@ GLOBAL_STYLESHEET = f"""
             border: 1px solid {ACCENT_LINE};
         }}
 
+        QSpinBox, QDoubleSpinBox, QDateEdit, QTimeEdit {{
+            background-color: {SUNKEN};
+            color: {TEXT};
+            border: 1px solid {BORDER};
+            border-radius: {RADIUS_SM};
+            padding: 7px 10px;
+        }}
+        QSpinBox:focus, QDoubleSpinBox:focus, QDateEdit:focus,
+        QTimeEdit:focus {{ border: 1px solid {ACCENT_LINE}; }}
+
         QLineEdit {{
             background-color: {SUNKEN};
             color: {TEXT};
@@ -107,7 +117,7 @@ GLOBAL_STYLESHEET = f"""
         }}
 
         QComboBox {{
-            background-color: {ELEVATED};
+            background-color: {SUNKEN};
             color: {TEXT};
             border: 1px solid {BORDER};
             border-radius: {RADIUS_SM};
@@ -236,22 +246,26 @@ GLOBAL_STYLESHEET = f"""
         }}
 
         /* Mode switch inside a panel (Write / Publish · Market). */
+        /* The stage switcher inside a workspace (Draft|Publish,
+           Audiobooks|Music). A segmented control, not two more buttons: it
+           sits directly above the page title, and as accent-filled pills it
+           read as the most important thing on the screen when it is only
+           navigation. */
         QPushButton#WorkspaceTool {{
             background-color: transparent;
-            color: {TEXT_DIM};
-            border: 1px solid {BORDER};
-            border-radius: {RADIUS};
-            padding: 9px 16px;
-            font-weight: 600;
+            color: {TEXT_MUTE};
+            border: none;
+            border-bottom: 2px solid transparent;
+            border-radius: 0;
+            padding: 0 2px;
+            margin-right: 20px;
+            font-weight: 550;
         }}
-        QPushButton#WorkspaceTool:hover {{
-            color: {TEXT};
-            background-color: {ELEVATED};
-        }}
+        QPushButton#WorkspaceTool:hover {{ color: {TEXT_DIM}; }}
         QPushButton#WorkspaceTool:checked {{
-            background-color: {ACCENT_WASH};
-            color: {ACCENT};
-            border: 1px solid {ACCENT_LINE};
+            color: {TEXT};
+            border-bottom: 2px solid {ACCENT};
+            font-weight: 650;
         }}
 
         /* Left rail nav rows. */
@@ -304,6 +318,10 @@ GLOBAL_STYLESHEET = f"""
             border: 1px solid {BORDER};
             border-radius: {RADIUS_LG};
         }}
+        QFrame#HeaderDivider {{
+            background-color: {BORDER};
+            border: none;
+        }}
         QFrame#CardDivider {{
             background-color: {BORDER};
             border: none;
@@ -321,8 +339,7 @@ GLOBAL_STYLESHEET = f"""
         QLabel#AgentTitle {{
             color: {TEXT};
             font-size: 21px;
-            font-weight: 700;
-            letter-spacing: 0.4px;
+            font-weight: 650;
         }}
         QLabel#AgentSubtitle {{ color: {TEXT_MUTE}; font-size: 12px; }}
 
@@ -335,14 +352,22 @@ GLOBAL_STYLESHEET = f"""
         QLabel#StudioBrandNote {{ color: {TEXT_MUTE}; font-size: 11px; }}
 
         QLabel#StatusPill {{
-            background-color: {ACCENT_WASH};
             color: {ACCENT};
-            border: 1px solid {ACCENT_LINE};
-            border-radius: 10px;
-            padding: 3px 10px;
-            font-size: 11px;
+            font-size: 12px;
             font-weight: 600;
+            padding: 0;
         }}
+        /* The "next step" hint. Both panels carried their own copy of these
+           five declarations inline. */
+        QLabel#NextStepBanner {{
+            background-color: {ACCENT_WASH};
+            border: 1px solid {ACCENT_LINE};
+            border-radius: {RADIUS_SM};
+            padding: 9px 12px;
+            color: {ACCENT};
+            font-size: 12px;
+        }}
+        QLabel#EstimateLine {{ color: {TEXT_MUTE}; font-size: 11px; }}
         QLabel#ResourceLabel {{ color: {TEXT_DIM}; font-size: 12px; }}
 
         /* Section headers in the rails. */
@@ -377,26 +402,26 @@ GLOBAL_STYLESHEET = f"""
             font-weight: 600;
         }}
 
-        /* The top-level mode switch reads as segmented pills, not tabs. */
+        /* The mode switch lives in the header bar, so it reads as navigation:
+           text with an accent underline. As pills it looked like five more
+           buttons, competing with the one button on the page that spends
+           money. */
         QTabBar#WorkspaceTabs {{ background: transparent; }}
         QTabBar#WorkspaceTabs::tab {{
-            background-color: {SURFACE};
-            color: {TEXT_DIM};
-            border: 1px solid {BORDER};
-            border-bottom: 1px solid {BORDER};
-            border-radius: {RADIUS};
-            padding: 9px 22px;
-            margin-right: 6px;
-            font-weight: 600;
+            background: transparent;
+            color: {TEXT_MUTE};
+            border: none;
+            border-bottom: 2px solid transparent;
+            border-radius: 0;
+            padding: 0 4px;
+            margin: 0 12px;
+            font-weight: 550;
         }}
-        QTabBar#WorkspaceTabs::tab:hover {{
-            background-color: {ELEVATED};
-            color: {TEXT};
-        }}
+        QTabBar#WorkspaceTabs::tab:hover {{ color: {TEXT_DIM}; }}
         QTabBar#WorkspaceTabs::tab:selected {{
-            background-color: {ACCENT_WASH};
-            color: {ACCENT};
-            border: 1px solid {ACCENT_LINE};
+            color: {TEXT};
+            border-bottom: 2px solid {ACCENT};
+            font-weight: 650;
         }}
 
         /* ── Feedback ──────────────────────────────────────────────── */
@@ -551,5 +576,109 @@ GLOBAL_STYLESHEET = f"""
         }}
         /* One height for every single-line control, so a row of mixed inputs
            and buttons sits on a line instead of stepping. */
-        QLineEdit, QComboBox, QPushButton {{ min-height: 32px; }}
+        /* One control height, enforced. Qt stylesheet min/max-height apply to
+           the *content* box, so each rule subtracts its own padding and border
+           to land on the same 44px total. Left to their natural size hints
+           these came out at 48 / 46 / 53 — and a QSpinBox three pixels taller
+           than the QLineEdit beside it drops its whole field below the row. */
+        QLineEdit, QPushButton {{ min-height: 28px; max-height: 28px; }}
+        QComboBox {{ min-height: 30px; max-height: 30px; }}
+        QSpinBox, QDoubleSpinBox, QDateEdit,
+        QTimeEdit {{ min-height: 28px; max-height: 28px; }}
+
+        /* ── Shell chrome ──────────────────────────────────────────── */
+        /* Header and rails are one surface lifted off the page, separated by a
+           hairline rather than a gap. Three floating panes with gutters between
+           them read as three apps; one surface with divisions reads as one. */
+        QFrame#AppHeader {{
+            background-color: {SURFACE};
+            border: none;
+            border-bottom: 1px solid {BORDER};
+        }}
+        QFrame#RailLeft {{
+            background-color: {SURFACE};
+            border: none;
+            border-right: 1px solid {BORDER};
+        }}
+        QFrame#RailRight {{
+            background-color: {SURFACE};
+            border: none;
+            border-left: 1px solid {BORDER};
+        }}
+        /* Layout containers must not paint. The global QWidget background
+           otherwise lands behind every helper container and stamps a page-
+           coloured rectangle onto the rail surface. */
+        QWidget#Transparent {{ background: transparent; }}
+
+        QLabel#Wordmark {{
+            color: {TEXT};
+            font-size: 15px;
+            font-weight: 700;
+            letter-spacing: 2.4px;
+        }}
+        QLabel#WordmarkDot {{ color: {ACCENT}; font-size: 11px; }}
+
+        /* Navigation, not action: an underline marks the current mode. A pill
+           here would compete with the buttons that actually spend money. */
+        QPushButton#NavTab {{
+            background: transparent;
+            border: none;
+            border-bottom: 2px solid transparent;
+            border-radius: 0;
+            color: {TEXT_MUTE};
+            font-weight: 550;
+            padding: 0 2px;
+            margin: 0 10px;
+        }}
+        QPushButton#NavTab:hover {{ color: {TEXT_DIM}; }}
+        QPushButton#NavTab:checked {{
+            color: {TEXT};
+            border-bottom: 2px solid {ACCENT};
+            font-weight: 650;
+        }}
+
+        /* Opens a window, changes nothing. Reads as a link. */
+        QPushButton#QuietAction {{
+            background: transparent;
+            border: none;
+            border-radius: 0;
+            color: {TEXT_DIM};
+            font-weight: 500;
+            padding: 0 8px;
+            text-align: left;
+        }}
+        QPushButton#QuietAction:hover {{ color: {TEXT}; }}
+        QPushButton#QuietAction:disabled {{ color: {TEXT_MUTE}; }}
+
+        QProgressBar#BudgetBar {{
+            background-color: rgba(255, 255, 255, 0.07);
+            border: none;
+            border-radius: 3px;
+            min-height: 5px;
+            max-height: 5px;
+        }}
+        QProgressBar#BudgetBar::chunk {{
+            background-color: {ACCENT_DIM};
+            border-radius: 3px;
+        }}
+        /* Over the cap is a state, not a decoration — the one place a budget
+           bar is allowed to change colour. */
+        QProgressBar#BudgetBar[over="true"]::chunk {{ background-color: {DANGER}; }}
+
+        /* The project rail: a list, not a boxed widget inside a boxed panel. */
+        QFrame#RailLeft QListWidget {{
+            background: transparent;
+            border: none;
+            font-size: 13px;
+            color: {TEXT_DIM};
+        }}
+        QFrame#RailLeft QListWidget::item {{
+            padding: 7px 8px;
+            border-radius: {RADIUS_SM};
+        }}
+        QFrame#RailLeft QListWidget::item:hover {{ background-color: {ELEVATED}; }}
+        QFrame#RailLeft QListWidget::item:selected {{
+            background-color: {ACCENT_WASH};
+            color: {ACCENT};
+        }}
 """

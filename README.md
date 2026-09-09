@@ -88,56 +88,96 @@ The application is entirely self-contained: no server, no web interface, no exte
 
 ## 2. Application Layout
 
-The window is divided into three columns, separated by draggable splitters:
+A header bar across the top, and three columns beneath it. The outer two are a
+fixed width and cannot be dragged.
 
-| Column | Width | Purpose |
+| Region | Width | Purpose |
 |--------|-------|---------|
-| **Left panel** | ~230 px | Agent selection buttons + saved chat history |
-| **Centre panel** | ~870 px (fills remaining space) | All input controls, agent-specific panels, output |
-| **Right panel** | ~300 px | System resources, cost labels, budget controls, action buttons |
+| **Header bar** | full width, 56 px | Wordmark, the five mode tabs, agent status, Docs / Tooltips / Settings |
+| **Left rail** | 236 px | Projects: filter, search, list, New Project |
+| **Centre** | fills the remainder | The current agent's panel |
+| **Right rail** | 268 px | Spend, budget limits, utilities, and collapsed reference panels |
 
-The window always opens maximised. The splitter widths are the default starting point; they can be dragged at runtime.
+Everything starts from one left edge: the wordmark, the mode tabs and the page
+title are all on the same axis. Before the September 2026 GUI pass they were on
+three — wordmark pinned to the rail, tabs centred over the canvas, title a
+third of the way across — which is most of why the app read as untidy no matter
+how tidy any individual panel was.
 
----
+The rails are fixed rather than splitter panes on purpose. A `QSplitter` lets
+the user drag a pane below the minimum width its own children need, and Qt
+resolves that by letting widgets overlap rather than refusing; every
+overlapping-control bug this app has had started there. Both rails scroll when
+the window is short, which is the vertical half of the same problem.
 
-## 3. Left Panel — Navigation & Chat History
-
-### Agent Buttons
-
-The left panel groups agents into collapsible categories (each starts
-collapsed — launch shows just the category list):
-
-| Category | Agents |
-|----------|--------|
-| **General** | 💬 Chat |
-| **Creative** | ✍️ Manuscript (author), 📚 Publisher (manuscript), 🎵 Maestro (music), 🎨 Site Builder (webdesign), 🎧 Narrator (audiobook) |
-| **Gigs** | 💼 Atelier (fiverr) |
-
-Clicking an agent button:
-1. Highlights the button (green border, checked state).
-2. Updates the hidden `agent_box` combo to match the selected agent name.
-3. Calls `update_agent_ui()` which shows or hides the correct centre panel.
-
-**Note:** "Writing" and "Coding" are **Tool** selections inside the Chat
-agent's Tool combo (see Chapter 6) — they frame the same Chat panel with a
-different system prompt, not separate agent classes. Dedicated
-`WritingAgent`/`CodingAgent` classes existed before the fork's "strip the
-security verticals" commit removed them along with the six deleted agents;
-the Tool-based framing is what's left and still works.
+The window always opens maximised. Its minimum is 1000 × 600, and the layout
+tests run every panel down to that size.
 
 ---
 
-### Saved Chats
+## 3. Header Bar — Modes and Chrome
 
-Below the agent buttons:
+**Mode tabs** — `Write` · `Audio` · `Web` · `Gigs` · `Creator`. Each opens the
+last tool used in that workspace. Where a workspace holds two related tools
+(Write → Draft / Publish, Audio → Audiobooks / Music) a second tab row appears
+above the page title.
 
-**Search box** — Filters the chat list in real time. The filter is case-insensitive and matches against the chat title (agent name + first user message).
+They are underline tabs, not filled pills: they are navigation, and a pill here
+competed with the one button on each page that actually spends money.
 
-**History list** — Displays all saved chats from `data/chats/`, ordered newest-first. Each item shows the agent name and the first 52 characters of the initial user message. Clicking an item opens that chat.
+**Status** — `● Ready` while idle; changes colour while a request runs or after
+one fails.
 
-**🗑 Delete Selected** — Permanently deletes the selected saved chat file after a confirmation prompt.
+**Docs** — opens the documentation sheet for the current agent.
+**Tooltips: On/Off** — toggles hover help across the whole app.
+**Settings** — opens the settings dialog.
 
-**✳️ New Chat** — Clears the input box, output box, and the current message history so a fresh conversation can begin. Does not delete any saved chats.
+---
+
+## 3a. Left Rail — Projects
+
+Agent navigation lives in the header, so the rail is projects only.
+
+**Agent filter** — narrows the list to one agent. Populated from the chats that
+exist, so it only ever offers agents you have actually used.
+
+**Search** — filters the list in real time, case-insensitively, against the
+chat title (agent name + first user message).
+
+**Project list** — every saved chat from `data/chats/`, newest first. Click to
+open; double-click to rename. It takes the rail's spare height rather than
+being capped, so the buttons below it sit under the list rather than at the
+bottom of the window.
+
+**New Project** — clears the input, output and message history. Deletes
+nothing.
+
+**Remove** — deletes the selected saved chat after a confirmation prompt.
+
+---
+
+## 3b. Right Rail — Spend and Utilities
+
+**Spend** — four numbers, each over its own caption: this session, today,
+requests, last request. Hovering a stat gives the detail (session vs. today
+counts, which tool ran last).
+
+**Session budget / Daily budget** — spend against the cap as a bar. The bar
+turns red at 100%. This replaced two lines of prose that gave the cap and the
+remainder and left you to subtract.
+
+**Next request** — the estimate for whatever is currently configured: cost,
+whether it is a paid API, the provider, model and rough token count.
+
+**Limits** — the session and daily caps in euros, and **Save Limits**.
+**Reset session spend** zeroes the session counter only.
+
+**Cost History · Run Log · Learning Centre** — utilities that open a window and
+change nothing, so they read as links rather than buttons.
+
+**SYSTEM · ROUTING · API KEYS** — collapsed by default. Reference material,
+wanted only when something looks wrong: machine load, how the router chose, and
+which provider keys are set.
 
 ---
 
@@ -271,7 +311,7 @@ Imprint ships with 7 first-party GUI agents, each defined by its own Python clas
 
 ### 5.1 Chat Agent
 
-**Left-panel button:** 💬 Chat  (category: **General**)
+**Left-panel button:** Chat  (category: **General**)
 
 The default, general-purpose agent. Chat is the one agent that does *not* swap in a custom panel — it runs inside the standard centre panel (Tool combo, Command combo, prompt input, output box) described in Section 4. Use it for anything that doesn't have a dedicated specialist agent: open-ended questions, code help, drafting, summarisation, translation, follow-up conversation, brainstorming.
 
@@ -296,20 +336,20 @@ Chat uses the **standard `normal_panel`** described in Chapter 4 (no custom GUI)
 | **Prompt input** | Multi-line message box. |
 | **Send / Stop** buttons | Send the prompt or cancel the in-flight request. |
 | **Output box** | Streaming response display; conversation history is preserved within the session. |
-| **✳️ New Chat** | Clears `current_messages` and starts a fresh conversation. |
-| **🗑 Delete Selected** | Removes the selected saved chat from `data/chats/`. |
+| **New Project** | Clears `current_messages` and starts a fresh conversation. |
+| **Remove** | Removes the selected saved chat from `data/chats/`. |
 
 ---
 
 #### How to Use — Step by Step
 
-1. Click **💬 Chat** in the **General** category of the left panel.
+1. Click **Chat** in the **General** category of the left panel.
 2. Pick a **Tool** if you want a domain frame (e.g. Coding, Writing).
 3. Optionally pick a **Command** template.
 4. Choose **Provider** and **Model**.
 5. Type a message in the prompt input and click **Send** (or press the configured submit shortcut).
 6. The response streams into the output box. Type a follow-up to continue the same conversation.
-7. Use **✳️ New Chat** to clear context and start over. The previous conversation is auto-saved to `data/chats/`.
+7. Use **New Project** to clear context and start over. The previous conversation is auto-saved to `data/chats/`.
 8. To re-open an older chat, click it in the **Saved Chats** list.
 
 ---
@@ -344,7 +384,7 @@ Chat uses the **standard `normal_panel`** described in Chapter 4 (no custom GUI)
 
 ### 5.2 Atelier Agent
 
-**Left-panel button:** 💼 Atelier  (category: **Gigs**)
+**Left-panel button:** Client Gigs  (category: **Gigs**)
 
 A logo-design freelancer assistant. The Fiverr agent generates **DALL-E 3 logo concepts**, a polished **delivery message** for the client, and a complete **Fiverr gig description** — all from a single client brief form. Image generation runs through OpenAI's DALL-E 3 API; the text deliverables can use any provider.
 
@@ -360,60 +400,77 @@ Three distinct outputs, generated independently:
 
 ---
 
-#### Fiverr Panel Layout
+#### Gigs Panel Layout
 
-##### Client Brief (form group)
+##### Client brief
 
 | Field | Description |
 |-------|-------------|
-| **Business Name** | e.g. Apex Fitness Studio. **Required for image generation.** |
-| **Industry / Niche** | e.g. fitness, law firm, bakery. |
+| **Business name** | e.g. Apex Fitness Studio. **Required for image generation.** |
+| **Industry / niche** | e.g. fitness, law firm, bakery. |
 | **Style** | Minimalist / Bold / Vintage / Playful / Corporate / Luxury / Futuristic. |
-| **Primary Colors** | Free text — `navy blue and gold` or `#1a1a2e, #e94560`. |
-| **# Concepts** | 1–4 logo concepts (spin box, default 2). |
+| **Primary colours** | Free text — `navy blue and gold` or `#1a1a2e, #e94560`. |
+| **Concepts** | 1–4 logo concepts (spin box, default 2). |
 | **Notes** | Optional tagline, mood, audience, competitors to avoid. |
-| **Text Provider / Model** | Default Anthropic — used for prompt-building and copy generation. |
 
-##### Action Row
+##### Models
+
+| Field | Description |
+|-------|-------------|
+| **Text provider / Text model** | Default Anthropic. Drives the delivery message and the gig listing, and builds the image prompt. |
+| **Image model** | `dall-e-3` (default) or `gpt-image-1`. This is what "Generate Logos" actually runs. |
+
+Until September 2026 the image model was hardcoded in
+`services/openai_client.py` and had no control at all, while the one model box
+on screen was labelled "Text Provider" because it only drove the text outputs.
+That is why nothing in the app appeared to recommend DALL·E for the graphics
+work it was already doing. `dall-e-3` remains the default because it is what
+every previously saved order was generated with; `gpt-image-1` is newer and
+markedly better at text inside an image, which is most of what a logo is.
+
+The two models differ in ways the client handles rather than exposes: dall-e-3
+returns a short-lived URL and takes `quality: standard|hd`, gpt-image-1 always
+returns base64 and takes `low|medium|high|auto`. `generate_image()` returns PNG
+bytes either way.
+
+##### Actions
 
 | Button | Action |
 |--------|--------|
-| **Generate Logos** | Builds the DALL-E prompt and renders N concepts. |
-| **Write Delivery Msg** | Generates the under-200-word client delivery note. |
-| **Write Gig Description** | Generates the Fiverr listing copy. |
-| **Stop** | Cancels the current job. |
+| **Generate Logos** | Builds the image prompt and renders N concepts. The only filled button on the page — it is the one that spends per click. |
+| **Delivery Message** | Generates the under-200-word client delivery note. |
+| **Gig Description** | Generates the Fiverr listing copy. |
+| **Stop** | Appears only while a job is running. |
 
-##### Results Tabs
+The per-image estimate sits at the right-hand end of this row, beside the
+control that incurs it. It is a **display estimate only** — the budget guard is
+denominated in tokens and cannot express "one image", so image spend does not
+count against the session or daily cap. See `SUGGESTIONS.md`.
+
+##### Results tabs
 
 | Tab | Content |
 |-----|---------|
-| **Logo Preview** | Live grid of generated concepts as thumbnails. Includes a **Save All Images** button. |
+| **Logo Preview** | Grid of generated concepts, with **Save All Images**. |
 | **Delivery Message** | Editable text area with the generated message. |
 | **Gig Description** | Editable text area with the gig listing. |
+| **Orders** | Business, concepts and status for every run this session, with **Clear log**. Was a 190px sidebar column in which all three columns were truncated. |
 
-##### Sidebar
-
-| Section | Content |
-|---------|---------|
-| **Status** | Live status text. |
-| **Est. Cost** | DALL-E 3 cost estimate (`~$0.04 × N` images). |
-| **Order Log** | A small table (Business, # concepts, Status) tracking every generation run during the session. |
-
-A **Clear** button at the bottom resets the panel.
+Live status appears as a line under the action row.
 
 ---
 
 #### How to Use — Step by Step
 
-1. Click **💼 Atelier** under **Finance & Business**.
-2. Fill in **Business Name**, **Industry**, **Style**, and **Primary Colors**.
+1. Open the **Gigs** tab in the header.
+2. Fill in **Business name**, **Industry**, **Style**, and **Primary colours**.
 3. Choose how many concepts to render (1–4) and add optional notes.
-4. Pick **Text Provider** + **Model** for the prompt-and-copy LLM.
-5. Click **Generate Logos**. The status shows "Building image prompt…" then "Generating N concept(s)…". Thumbnails appear in the Logo Preview tab as each render completes.
+4. Pick the **Text provider / model** for the prompt and copy, and the **Image model** for the logos.
+5. Click **Generate Logos**. The status line shows "Building image prompt…" then "Generating N concept(s)…". Thumbnails appear in Logo Preview as each render completes.
 6. Click **Save All Images** to copy the PNGs out of `data/fiverr_output/<timestamp>/`.
-7. When you are ready to ship to a client, click **Write Delivery Msg** — the Delivery Message tab fills with a copy-ready note.
-8. To productise the offering, click **Write Gig Description** — the Gig Description tab fills with a complete Fiverr listing.
-9. The **Order Log** sidebar tracks each run; **Clear** wipes everything.
+7. When you are ready to ship to a client, click **Delivery Message** — the tab fills with a copy-ready note.
+8. To productise the offering, click **Gig Description** — the tab fills with a complete Fiverr listing.
+9. The **Orders** tab tracks each run; **Clear log** wipes it.
 
 ---
 
@@ -451,7 +508,7 @@ A **Clear** button at the bottom resets the panel.
 
 ### 5.3 Manuscript Agent
 
-**Left-panel button:** ✍️ Manuscript  (category: **Creative**)
+**Left-panel button:** Draft  (category: **Creative**)
 
 A full creative writing suite for novelists, screenwriters, short-story writers, and bloggers. The panel has **three distinct modes** accessed via a toggle at the top: a manuscript workspace for drafting, and a Publish & Market system for producing everything needed to take a finished book to market — from query letters and synopses to Amazon copy and Instagram posts.
 
@@ -503,7 +560,7 @@ Switching **Type** also swaps the **Task** dropdown: fiction gets Write Scene / 
 | **Tone** | Neutral / Dark / Humorous / Lyrical / Tense / Romantic / Gritty / Whimsical / Philosophical / Commercial. |
 | **POV** | Third Person Limited / First Person / Third Person Omniscient / Second Person. |
 
-##### 📖 Book Profile (collapsible, below the Project Bar)
+##### Book Profile (collapsible, below the Project Bar)
 
 | Field | Description |
 |-------|-------------|
@@ -511,7 +568,7 @@ Switching **Type** also swaps the **Task** dropdown: fiction gets Write Scene / 
 | **Target reader** | Who the book is for, specifically. |
 | **Comp titles** | Comparable published titles. |
 | **Publishing path** | Undecided / Self-Publishing (KDP) / Traditional. |
-| **💾 Save Profile** | Persists the whole profile (including Title/Author/Type from the Project Bar) to the settings DB — auto-loads on next launch. |
+| **Save Profile** | Persists the whole profile (including Title/Author/Type from the Project Bar) to the settings DB — auto-loads on next launch. |
 
 This is injected as a "BOOK CONTEXT" block into every Write, Publish, and Market request. Collapsed by default; expand once, fill it in, save — it carries forward automatically after that.
 
@@ -519,22 +576,22 @@ This is injected as a "BOOK CONTEXT" block into every Write, Publish, and Market
 
 | Button | Description |
 |--------|-------------|
-| **✍️ Write** | Switches to the manuscript workspace (write, outline, characters, world notes). |
-| **📣 Publish & Market** | Switches to the Publish & Market panel. |
+| **Write** | Switches to the manuscript workspace (write, outline, characters, world notes). |
+| **Publish & Market** | Switches to the Publish & Market panel. |
 
 ---
 
-##### ✍️ Write Mode
+##### Write Mode
 
 ###### Workspace Tabs
 
 | Tab | Purpose |
 |-----|---------|
-| **✍️ Draft** | Your manuscript draft. Editable. Word and scene counts update live. |
-| **📋 Outline** | Chapter and scene outline. Editable. |
-| **👤 Characters** | Character profiles, arcs, relationships. Editable — automatically fed into every Write/Continue request so generated scenes stay consistent with what's already established. |
-| **🌍 World Notes** | World-building, lore, setting rules. Editable — same auto-injection as Characters. |
-| **📑 Chapters** | Read-only. Parses the Draft live (on tab switch) into a numbered chapter list with per-chapter word counts, detected from `Chapter N` / `Part N` / `Prologue` / `Epilogue` headings. Double-click a chapter to jump the Draft cursor there. |
+| **Draft** | Your manuscript draft. Editable. Word and scene counts update live. |
+| **Outline** | Chapter and scene outline. Editable. |
+| **Characters** | Character profiles, arcs, relationships. Editable — automatically fed into every Write/Continue request so generated scenes stay consistent with what's already established. |
+| **World Notes** | World-building, lore, setting rules. Editable — same auto-injection as Characters. |
+| **Chapters** | Read-only. Parses the Draft live (on tab switch) into a numbered chapter list with per-chapter word counts, detected from `Chapter N` / `Part N` / `Prologue` / `Epilogue` headings. Double-click a chapter to jump the Draft cursor there. |
 
 ###### Sidebar (right)
 
@@ -543,23 +600,23 @@ This is injected as a "BOOK CONTEXT" block into every Write, Publish, and Market
 | **Direction** | Free-text — what to write, the next scene, revision instructions. |
 | **Task** | Write Scene / Continue Draft / Generate Outline / Develop Characters / Build World / Write Dialogue / Revise / Improve. |
 | **Provider / Model** | Default Anthropic. Shared by all three modes. |
-| **✍️ Write** | Sends the brief; output streams into the relevant tab depending on Task. |
-| **▶ Continue** | Appends to the existing draft from the cursor position — does not clear. |
-| **⬛ Stop** | Cancels the in-flight request. |
+| **Write** | Sends the brief; output streams into the relevant tab depending on Task. |
+| **Continue** | Appends to the existing draft from the cursor position — does not clear. |
+| **Stop** | Cancels the in-flight request. |
 | **Words** | Live word count of the Draft tab (large, prominent, updates on every token). |
 | **Scenes / Chapters** | Live scene count parsed from chapter/scene headings and scene breaks. |
-| **💾 Save Draft** | Saves the current Draft tab to `.txt` or `.md`. |
+| **Save Draft** | Saves the current Draft tab to `.txt` or `.md`. |
 | **Author name** | Name printed on the export title page (not the same as the Project Bar title). |
-| **Format + 📤 Export Book** | Renders the Draft tab to **EPUB**, **DOCX**, or **PDF** — title page + auto-detected chapter breaks. No external tools required (EbookLib / python-docx / reportlab). |
+| **Format + Export Book** | Renders the Draft tab to **EPUB**, **DOCX**, or **PDF** — title page + auto-detected chapter breaks. No external tools required (EbookLib / python-docx / reportlab). |
 | **Clear All** | Clears all four tabs and resets the project bar. |
 
 ---
 
-##### 📣 Publish & Market Mode
+##### Publish & Market Mode
 
-A sub-toggle row switches between **📄 Publish** and **📢 Market**. Both pages follow the same layout: a large editable output area on the left, a control sidebar on the right.
+A sub-tab row switches between **Publish** and **Market**. Both pages follow the same layout: a large editable output area on the left, a control column on the right.
 
-###### 📄 Publish Page
+###### Publish Page
 
 | Control | Options / Description |
 |---------|-----------------------|
@@ -585,7 +642,7 @@ Document standards enforced by the Publish system prompt:
 | Author Bio | 75–150 words | Third person. Credentials + warm personal line. |
 | Chapter Breakdown | Per chapter | 2–4 sentence summaries, numbered, present tense. |
 
-###### 📢 Market Page
+###### Market Page
 
 | Control | Options / Description |
 |---------|-----------------------|
@@ -625,22 +682,22 @@ Platform format rules enforced by the Market system prompt:
 
 **Writing a new book:**
 
-1. Click **✍️ Manuscript** in the left panel.
+1. Click **Draft** in the left panel.
 2. Fill in the **Project Bar**: Title, Author, Type (Fiction/Non-Fiction — this sets the Task list below), Genre, Tone, POV.
-3. Expand **📖 Book Profile** and fill in Hook, Target Reader, Comp Titles, Publishing Path — then click **💾 Save Profile**. Do this once; it persists across restarts and feeds Write, Publish, and Market automatically from here on.
-4. In the **Write** sidebar, pick Task: `Generate Outline`. Write a brief in Direction.
+3. Expand **Book Profile** and fill in Hook, Target Reader, Comp Titles, Publishing Path — then click **Save Profile**. Do this once; it persists across restarts and feeds Write, Publish, and Market automatically from here on.
+4. In the **Write** control column, pick Task: `Generate Outline`. Write a brief in Direction.
 5. Select **Provider / Model** (Claude Opus or GPT-4o for best prose).
-6. Click **✍️ Write** — the outline streams into the Outline tab.
+6. Click **Write** — the outline streams into the Outline tab.
 7. Switch Task to `Write Scene` (or `Write Chapter` for non-fiction). Write the scene/chapter brief in Direction.
-8. Click **✍️ Write** — draft appears in the Draft tab.
-9. Click **▶ Continue** to extend from where the draft ends.
-10. Edit directly in any tab — they are all fully editable. Check **📑 Chapters** any time for a live word-count breakdown.
-11. Click **💾 Save Draft** for a plain-text backup, or pick a **Format** and click **📤 Export Book** for a submittable EPUB/DOCX/PDF. Add `Chapter 1`, `Chapter 2`, etc. as line headings in the Draft to get real chapter breaks in the export — without them, the whole draft exports as one chapter.
+8. Click **Write** — draft appears in the Draft tab.
+9. Click **Continue** to extend from where the draft ends.
+10. Edit directly in any tab — they are all fully editable. Check **Chapters** any time for a live word-count breakdown.
+11. Click **Save Draft** for a plain-text backup, or pick a **Format** and click **Export Book** for a submittable EPUB/DOCX/PDF. Add `Chapter 1`, `Chapter 2`, etc. as line headings in the Draft to get real chapter breaks in the export — without them, the whole draft exports as one chapter.
 
 **Preparing to publish:**
 
-1. Click **📣 Publish & Market** to enter the publishing workspace.
-2. Click **📄 Publish** (sub-toggle).
+1. Click **Publish & Market** to enter the publishing workspace.
+2. Click **Publish** (sub-toggle).
 3. Choose **Output Type** — start with `Back-Cover Blurb` for a fast hook test.
 4. Fill in **Comp Titles**, **Word Count Target**, and any **Extra Notes**.
 5. Select **Pitch Tone** (Professional for query submissions; High-Concept for pitching agents cold).
@@ -650,7 +707,7 @@ Platform format rules enforced by the Market system prompt:
 
 **Creating marketing copy:**
 
-1. Still in **📣 Publish & Market**, click **📢 Market** (sub-toggle).
+1. Still in **Publish & Market**, click **Market** (sub-toggle).
 2. Choose **Platform** — start with `Amazon Description`, or `KDP Listing` for the full categories/keywords/pricing package.
 3. Enter your **Hook / Logline** and **Comp Titles** (optional if a Book Profile is saved — see above).
 4. Select **Tone** and add any **Extra Notes**.
@@ -677,7 +734,7 @@ Platform format rules enforced by the Market system prompt:
 
 > **Continue** appends to the existing draft without clearing it. **Write** starts fresh. Use Write for new scenes, Continue to extend a scene in progress.
 
-> The Publish and Market pages both use the **Provider / Model** set in the Write sidebar. Make sure a model is selected before switching modes.
+> The Publish and Market pages both use the **Provider / Model** set in the Write control column. Make sure a model is selected before switching modes.
 
 > Publish and Market outputs are editable — the agent produces a first draft, not a final document. Always review and personalise before submitting to agents or posting publicly.
 
@@ -716,7 +773,7 @@ Platform format rules enforced by the Market system prompt:
 
 ### 5.4 Maestro Agent
 
-**Left-panel button:** 🎵 Maestro  (category: **Creative**)
+**Left-panel button:** Music  (category: **Creative**)
 
 A Spotify Artist Setup specialist that produces a complete, copy-paste-ready release-and-monetisation plan for independent artists. The agent's system prompt forces every response to mark **[AI OUTPUT — COPY-PASTE READY]** vs **[HUMAN ACTION REQUIRED]** so you always know which bits to paste and which require manual steps in Spotify for Artists, DistroKid, etc.
 
@@ -775,7 +832,7 @@ One tab per section: **Artist Profile**, **Release Setup**, **Distribution**, **
 
 #### How to Use — Step by Step
 
-1. Click **🎵 Maestro** under **Creative**.
+1. Click **Music** under **Creative**.
 2. Fill in **Artist / Project Name**, **Genre**, **Release Type**, **Distributor**, and **Describe Your Music**.
 3. (Optional) Specify **Target Audience**.
 4. Pick **Provider** and **Model** (Claude works well for long structured plans).
@@ -824,7 +881,7 @@ One tab per section: **Artist Profile**, **Release Setup**, **Distribution**, **
 
 ### 5.5 Site Builder Agent
 
-**Left-panel button:** 🎨 Site Builder  (category: **Creative**)
+**Left-panel button:** Site Builder  (category: **Creative**)
 
 A front-end design and prototyping agent. Given a brief, Web Design produces complete, self-contained HTML / CSS / JS — landing pages, portfolios, dashboards, forms, blogs, or single components — split across three editable tabs and ready to copy or save as an `.html` file.
 
@@ -840,7 +897,7 @@ When invoked with a brief, the agent delivers a single complete code block (or t
 - Vanilla ES6+ JavaScript (no jQuery) by default; Tailwind or Bootstrap if requested.
 - Hover/focus states and basic accessibility (aria, alt, tab order).
 
-The panel splits the output into HTML / CSS / JS tabs and computes line counts for the sidebar.
+The panel splits the output into HTML / CSS / JS tabs and reports responsive, framework and line count as stats above them.
 
 ---
 
@@ -887,7 +944,7 @@ The panel splits the output into HTML / CSS / JS tabs and computes line counts f
 
 #### How to Use — Step by Step
 
-1. Click **🎨 Site Builder** under **Creative**.
+1. Click **Site Builder** under **Creative**.
 2. Pick **Page Type** and **Style**.
 3. Enter a **Colour Palette** (or leave blank to let the model propose one).
 4. Choose a **Framework**.
@@ -931,7 +988,7 @@ The panel splits the output into HTML / CSS / JS tabs and computes line counts f
 
 ### 5.6 Narrator Agent
 
-**Left-panel button:** 🎧 Narrator  (category: **Creative**)
+**Left-panel button:** Audiobooks  (category: **Creative**)
 
 A completely separate workflow that converts ebook files into MP3 audiobooks using OpenAI's Text-to-Speech API. The Audiobook agent is unusual in two ways: (1) it does not stream LLM output — it runs an **external Python script** as a subprocess, and (2) it has no system-prompt-style "agent class" beyond a thin **AudiobookConnector** that parses configuration input. The conversion engine lives in the sibling project at `narrator/`.
 
@@ -958,8 +1015,8 @@ The conversion runs as a `QProcess` so the GUI stays responsive. Output is strea
 | Element | Purpose |
 |---------|---------|
 | **Book list** | Populated from the configured input folder. Supports `.pdf`, `.epub`, `.txt`, `.mobi`. |
-| **🔄 Refresh List** | Re-scans the input folder. |
-| **▶ Start** | Begins conversion of the selected book (confirmation dialog first). |
+| **Refresh List** | Re-scans the input folder. |
+| **Start** | Begins conversion of the selected book (confirmation dialog first). |
 | **⛔ Stop** | Kills the running conversion subprocess. |
 
 ##### Conversion Settings (group box)
@@ -996,11 +1053,11 @@ The conversion runs as a `QProcess` so the GUI stays responsive. Output is strea
 #### How to Use — Step by Step
 
 1. Drop one or more ebooks into the configured input folder.
-2. Click **🎧 Narrator** under **Creative**.
-3. Click **🔄 Refresh List** to populate the book list.
+2. Click **Audiobooks** under **Creative**.
+3. Click **Refresh List** to populate the book list.
 4. Pick a **Voice** and (optionally) adjust **Chunk Tokens**.
 5. If you want a different output destination, click **Change**.
-6. Select a book and click **▶ Start**.
+6. Select a book and click **Start**.
 7. Confirm the cost estimate in the dialog.
 8. Watch the progress bar and live log; if you hit quota issues, the panel will explain where to top up.
 9. Find the finished MP3(s) in the output folder when the status reads `[Done]`.
@@ -1020,7 +1077,7 @@ The conversion runs as a `QProcess` so the GUI stays responsive. Output is strea
 
 > The Audiobook agent has **no LLM provider selector** — the only AI involved is OpenAI TTS. Other Sentinel providers are irrelevant here.
 
-> If conversion is `[Blocked]`, top up OpenAI billing then click **▶ Start** again — partial progress is preserved.
+> If conversion is `[Blocked]`, top up OpenAI billing then click **Start** again — partial progress is preserved.
 
 > Smaller chunk tokens mean more API calls and slightly more cost; larger chunks risk hitting API per-request limits. The default 1400 is a good trade-off.
 
@@ -1070,7 +1127,7 @@ so the next play starts over instead of resuming and stopping immediately.
 
 ### 5.7 Publisher Agent
 
-**Left-panel button:** 📚 Publisher  (category: **Creative**)
+**Left-panel button:** Publish  (category: **Creative**)
 
 Picks up where the Manuscript (writing studio) agent stops: real sales data, launch-content generation, and a publishing checklist. Five tabs: **Overview**, **Quote Finder**, **Quote Graphics**, **Shorts**, **Calendar**.
 
@@ -1081,13 +1138,13 @@ Picks up where the Manuscript (writing studio) agent stops: real sales data, lau
 **Overview tab:**
 - Pulls PublishDrive sales/royalty data for a selected period (Last 30 days / This month / Last 7 days / All time).
 - Ingests KDP sales CSVs dropped into `data/kdp_reports/`, deduplicated by filename.
-- A chat sidebar answers questions grounded in the last-fetched sales JSON (`ManuscriptAgent.build_messages()` injects it as system-prompt context — the agent is instructed not to fabricate figures).
+- An Ask box answers questions grounded in the last-fetched sales JSON (`ManuscriptAgent.build_messages()` injects it as system-prompt context — the agent is instructed not to fabricate figures).
 - A publishing todo checklist, auto-seeded on first use with a standard launch list (KDP upload, Draft2Digital, IngramSpark, cover files, description, categories, pricing, ARC requests, BookBub, influencer outreach).
 
 **Quote Finder tab:**
 - Load the manuscript directly (`.txt` / `.pdf` / `.epub` / `.mobi` via `services/narrator/converter.py: load_text()`) or paste an excerpt.
 - **Suggest Quotes** sends the text to the LLM with a prompt that requires every returned quote to be an exact, verbatim substring of the source — no paraphrasing. Returned as a JSON array, parsed with a markdown-fence-aware parser and a line-based fallback.
-- Each candidate quote appears as a row with two inline one-click buttons: **🖼** generates a graphic immediately, **🎬** generates a narrated short — no retyping, no switching tabs.
+- Each candidate quote appears as a row with two inline one-click buttons: **Graphic** generates a graphic immediately, **Short** generates a narrated short — no retyping, no switching tabs.
 
 **Quote Graphics tab:**
 - Renders a single quote as a styled PNG: 3 themes (Midnight / Blush / Zodiac), 2 sizes (1080×1080 square, 1080×1920 vertical).
@@ -1099,7 +1156,7 @@ Picks up where the Manuscript (writing studio) agent stops: real sales data, lau
 **Calendar tab:**
 - Distributes the Quote Finder candidates across a posting schedule — TikTok 4×/week (short), Instagram 3×/week (alternating graphic/short), Pinterest 7×/week (graphic) — cycling quotes if there are more slots than quotes. Pure scheduling, no LLM call, deterministic.
 - One batched LLM call writes a platform-native caption per post (all at once, not one call per row) — TikTok casual with hashtags, Instagram warmer, Pinterest keyword-rich with no hashtags.
-- Every row has a one-click 🖼/🎬 button using the exact same generation code as Quote Finder/Shorts.
+- Every row has a one-click Graphic / Short button using the exact same generation code as Quote Finder/Shorts.
 - **Export Calendar (CSV)** writes the full schedule — date, platform, format, quote, caption — for manual posting.
 
 ---
@@ -1112,7 +1169,7 @@ Picks up where the Manuscript (writing studio) agent stops: real sales data, lau
 |---------|-------------|
 | **Period** | Last 30 days / This month / Last 7 days / All time. |
 | **⟳ Refresh Data** | Fetches PublishDrive sales for the selected period. |
-| **📥 Ingest KDP CSV** | Parses any new CSVs in `data/kdp_reports/`. |
+| **Ingest KDP CSV** | Parses any new CSVs in `data/kdp_reports/`. |
 | **Ask box + Provider/Model** | Chat Q&A grounded in the last-fetched sales JSON. |
 | **Publishing Todos** | List + Add/Done — persisted in the `manuscript_todos` table. |
 
@@ -1121,11 +1178,11 @@ Picks up where the Manuscript (writing studio) agent stops: real sales data, lau
 | Control | Description |
 |---------|-------------|
 | **Manuscript text** | Paste an excerpt directly. |
-| **📄 Load File…** | `.txt` / `.pdf` / `.epub` / `.mobi` — extracts full text via the Narrator converter. |
+| **Load File…** | `.txt` / `.pdf` / `.epub` / `.mobi` — extracts full text via the Narrator converter. |
 | **Quotes** | How many candidates to request (5 / 10 / 15 / 20). |
 | **Theme / Voice / Attribution** | Applied to every graphic/short generated from this tab's candidates. |
-| **🔍 Suggest Quotes** | Runs the extraction prompt; populates the candidate list. |
-| **🖼 / 🎬 per row** | One-click graphic or narrated short for that specific quote. |
+| **Suggest Quotes** | Runs the extraction prompt; populates the candidate list. |
+| **Graphic / Short per row** | One-click graphic or narrated short for that specific quote. |
 
 ##### Quote Graphics Tab
 
@@ -1135,7 +1192,7 @@ Picks up where the Manuscript (writing studio) agent stops: real sales data, lau
 | **Theme** | Midnight / Blush / Zodiac. |
 | **Size** | Square (1080×1080) / Story-Reel-Pin (1080×1920). |
 | **✨ Generate Graphic** | Renders and previews the PNG; saved to `data/quote_graphics/`. |
-| **📂 Open Folder** | Reveals the output folder. |
+| **Open Folder** | Reveals the output folder. |
 
 ##### Shorts Tab
 
@@ -1145,8 +1202,8 @@ Picks up where the Manuscript (writing studio) agent stops: real sales data, lau
 | **Theme** | Same 3 themes as Quote Graphics. |
 | **Voice source** | System (Free) or ElevenLabs. |
 | **Voice** | Populated from the selected source. |
-| **🎬 Generate Short** | Narrates + renders on a background thread; saved to `data/shorts/`. |
-| **▶ Play / 📂 Folder** | Open the last-generated short or its folder. |
+| **Short Generate Short** | Narrates + renders on a background thread; saved to `data/shorts/`. |
+| **Play / 📂 Folder** | Open the last-generated short or its folder. |
 
 ##### Calendar Tab
 
@@ -1156,9 +1213,9 @@ Picks up where the Manuscript (writing studio) agent stops: real sales data, lau
 | **Start** | Calendar-picker start date. |
 | **TikTok / Instagram / Pinterest** | Checkboxes — which platforms to schedule. |
 | **Theme / Voice / Attribution** | Applied to every asset generated from this tab. |
-| **📅 Generate Calendar** | Builds the schedule (instant), then writes all captions in one LLM call. |
-| **Table rows** | Date, Platform, Format, Quote, Caption, and a 🖼/🎬 action button per row. |
-| **📤 Export Calendar (CSV)** | Saves the full schedule + captions to a CSV file. |
+| **Generate Calendar** | Builds the schedule (instant), then writes all captions in one LLM call. |
+| **Table rows** | Date, Platform, Format, Quote, Caption, and a Graphic / Short action button per row. |
+| **Export Calendar (CSV)** | Saves the full schedule + captions to a CSV file. |
 
 ---
 
@@ -1166,28 +1223,28 @@ Picks up where the Manuscript (writing studio) agent stops: real sales data, lau
 
 **Checking sales and staying on top of launch tasks:**
 
-1. Click **📚 Publisher** in the left panel.
+1. Click **Publish** in the left panel.
 2. Set `PUBLISHDRIVE_API_KEY` in `.env` (once) to enable live sales data.
-3. Click **⟳ Refresh Data** for the current period, or **📥 Ingest KDP CSV** after dropping a report into `data/kdp_reports/`.
-4. Ask a question in the sidebar ("What did I earn this month?") — answered from the fetched data, not guessed.
+3. Click **⟳ Refresh Data** for the current period, or **Ingest KDP CSV** after dropping a report into `data/kdp_reports/`.
+4. Ask a question in the Ask box ("What did I earn this month?") — answered from the fetched data, not guessed.
 5. Work through the **Publishing Todos** checklist; add your own items as they come up.
 
 **Turning a manuscript into a batch of social content:**
 
 1. Switch to **Quote Finder**.
-2. Click **📄 Load File…** and select the finished manuscript (or paste a chapter).
+2. Click **Load File…** and select the finished manuscript (or paste a chapter).
 3. Set quote count, theme, voice, and attribution.
-4. Click **🔍 Suggest Quotes** — candidates appear as a list.
-5. Click **🖼** on any quote for an instant graphic, or **🎬** for a narrated vertical short.
+4. Click **Suggest Quotes** — candidates appear as a list.
+5. Click **Graphic** on any quote for an instant graphic, or **Short** for a narrated vertical short.
 6. Repeat across candidates to build a week's batch in minutes — upload manually to TikTok/Instagram/Pinterest (see Tips below on why posting isn't automated).
 
 **Scheduling a full week/month in one pass:**
 
 1. Run **Suggest Quotes** on Quote Finder first — Calendar reads its candidate list.
 2. Switch to **Calendar**, pick weeks, start date, and platforms.
-3. Click **📅 Generate Calendar** — the schedule appears instantly, captions stream in a few seconds later.
-4. Click 🖼/🎬 on any row to produce that asset immediately, or work through the table at your own pace.
-5. Click **📤 Export Calendar (CSV)** for a day-by-day file to post from manually (or hand to whoever manages your socials).
+3. Click **Generate Calendar** — the schedule appears instantly, captions stream in a few seconds later.
+4. Click Graphic / Short on any row to produce that asset immediately, or work through the table at your own pace.
+5. Click **Export Calendar (CSV)** for a day-by-day file to post from manually (or hand to whoever manages your socials).
 
 ---
 
@@ -1196,7 +1253,7 @@ Picks up where the Manuscript (writing studio) agent stops: real sales data, lau
 - **PublishDrive API key** (`PUBLISHDRIVE_API_KEY` in `.env`) for live sales data — optional, the rest of the panel works without it.
 - **ElevenLabs API key** (`ELEVENLABS_API_KEY`) for higher-quality short narration — optional, macOS `say` is the free default.
 - **ffmpeg** (already required elsewhere in the project, e.g. Narrator/course video) for Shorts.
-- LLM provider key for Quote Finder's extraction step and the Overview Q&A sidebar.
+- LLM provider key for Quote Finder's extraction step and the Overview Ask box.
 
 ---
 
@@ -1206,7 +1263,7 @@ Picks up where the Manuscript (writing studio) agent stops: real sales data, lau
 
 > The agent does not post to social platforms itself, and does not create social media accounts — both are either against platform terms for automated tools or require an app-review process (Meta, TikTok) that isn't worth building for a single-author use case. Graphics/shorts are generated locally; posting is a manual step, or route through a scheduler like Buffer/Metricool if you want that automated.
 
-> Shorts generation blocks the Generate button and disables all Quote Finder row 🎬 buttons while one short is rendering — Calendar rows share the same lock, since both use the same background worker slot. Only one narration/encode runs at a time across the whole panel.
+> Shorts generation blocks the Generate button and disables all Quote Finder row Short buttons while one short is rendering — Calendar rows share the same lock, since both use the same background worker slot. Only one narration/encode runs at a time across the whole panel.
 
 > Nothing on this panel writes back into the manuscript — it only consumes a finished or in-progress draft. Drafting, editing, and EPUB/DOCX/PDF export live on the Manuscript writing-studio agent (§5.3), not here.
 
@@ -1942,7 +1999,7 @@ imprint/
 │   └── manual_test_cases.md
 │
 ├── docs/
-│   ├── agents/*.md                # One reference page per agent (the 📖 Docs button)
+│   ├── agents/*.md                # One reference page per agent (the Docs button)
 │   ├── refactor_plan.md           # main.py split — phases, measurements, decisions
 │   ├── app_split.md               # Why this fork is tabbed rather than sidebar-driven
 │   ├── projects_roadmap.md
@@ -2231,12 +2288,12 @@ Service income is the **fastest path to revenue**: you sell a deliverable, you g
 
 **Full self-publishing workflow (Amazon KDP):**
 
-1. **Write** — Use the **✍️ Write** mode: generate outline → characters → draft chapter by chapter using Continue to build the manuscript without clearing previous work.
+1. **Write** — Use the **Write** mode: generate outline → characters → draft chapter by chapter using Continue to build the manuscript without clearing previous work.
 2. **Edit** — Edit directly in the Draft tab. AI prose needs a human voice pass — read it aloud, cut anything that sounds robotic.
 3. **Format** — Export via **Save Draft**. Import into Reedsy Studio (free) or Vellum ($249, Mac) for KDP-ready formatting.
 4. **Cover** — DIY in Canva, or hire on Fiverr for $20–$100.
-5. **Back-cover copy** — Switch to **📣 Publish & Market → 📄 Publish**. Generate `Back-Cover Blurb`. Edit and use as your Amazon/KDP description.
-6. **Amazon listing** — In **📢 Market**, generate `Amazon Description`. Paste directly into the KDP book details page.
+5. **Back-cover copy** — Switch to **Publish & Market → Publish**. Generate `Back-Cover Blurb`. Edit and use as your Amazon/KDP description.
+6. **Amazon listing** — In **Market**, generate `Amazon Description`. Paste directly into the KDP book details page.
 7. **Social launch** — Still in Market, generate `Instagram Post`, `Twitter/X Thread`, and `TikTok Caption` for launch week. Generate a `Newsletter` for your mailing list.
 8. **Publish** — Upload to Amazon KDP (https://kdp.amazon.com) — paperback + Kindle. Set price, categories, keywords.
 9. **Audio** — Optional: produce audio via the Narrator agent and publish on ACX/Findaway.
@@ -2247,7 +2304,7 @@ Service income is the **fastest path to revenue**: you sell a deliverable, you g
 2. Enter client details into the Project Bar (their title, genre, tone, POV).
 3. Generate outline with the Author agent. Share with client for approval before drafting.
 4. Draft chapter by chapter. Use **Continue** to extend. Deliver chapter-by-chapter for client review.
-5. On delivery: use **📄 Publish → Synopsis** to produce a 1-page and 3-page synopsis the client can use for their pitch or back matter.
+5. On delivery: use **Publish → Synopsis** to produce a 1-page and 3-page synopsis the client can use for their pitch or back matter.
 6. Charge a premium for the synopsis and query letter as add-ons — clients often need these and don't know they can ask for them.
 
 **Realistic earnings:**
@@ -2287,7 +2344,7 @@ Recurring revenue compounds — once published, content keeps earning. These age
 
 **Setup workflow:**
 
-1. Click **🎵 Maestro** in Imprint and fill in the artist brief.
+1. Click **Music** in Imprint and fill in the artist brief.
 2. Use the generated Artist Profile (short + long bio) to claim your Spotify for Artists account at https://artists.spotify.com.
 3. Sign up with a distributor (DistroKid $22.99/year recommended for most independent artists; CD Baby for one-off releases).
 4. Upload the release with the generated metadata, ISRC handled by distributor.
@@ -2322,7 +2379,7 @@ Recurring revenue compounds — once published, content keeps earning. These age
 **Workflow:**
 
 1. Drop ebooks (`.pdf`, `.epub`, `.txt`, `.mobi`) into the configured input folder.
-2. Click **🎧 Narrator**, refresh the list, select a book.
+2. Click **Audiobooks**, refresh the list, select a book.
 3. Pick a voice (`alloy`, `verse`, `aria`, `coral`, `sage`).
 4. Confirm the cost estimate (typically $2–$10 per book in OpenAI TTS).
 5. Click **Start**. Monitor progress in the output log.

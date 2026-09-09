@@ -1,6 +1,6 @@
 # 2 · The agents, one by one
 
-Six agents across four modes. Each one has a `📖 Docs` button that opens its own
+Six agents across four modes. Each one has a `Docs` button that opens its own
 reference sheet from `docs/agents/`; this page is the working guide.
 
 ---
@@ -162,7 +162,7 @@ someone else's, run on their behalf — will not draft until you record who
 authorised it. A persona carries a character bible and a locked seed so it stays
 one character instead of becoming a new one each session.
 
-`🎬 Generate Teaser` renders promo video through Higgsfield. It is safe-for-work
+`Generate Teaser` renders promo video through Higgsfield. It is safe-for-work
 by construction: Higgsfield prohibits explicit material and moderates prompts,
 reference images and outputs, so explicit content has to come from elsewhere.
 Its role is the teaser that lives on X or Reddit.
