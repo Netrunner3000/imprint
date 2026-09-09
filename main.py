@@ -230,8 +230,9 @@ from ui.workers import (
     HiggsfieldWorker,
 )
 from ui.forms import (
-    LG, MD, SM, XS, combo, field, form_grid, line_edit, micro, primary,
-    rule, section, stat,
+    CONTENT_MAX_WIDTH, HEADER_HEIGHT, LG, MD, RAIL_LEFT_WIDTH,
+    RAIL_RIGHT_WIDTH, SM, XS, Meter, StatBlock, combo, field, form_grid,
+    line_edit, micro, nav_tab, primary, quiet, rail, rule, section, stat,
 )
 from ui.widgets import (
     FlowLayout, CollapsibleSection, scrollable, let_combos_shrink,
@@ -489,23 +490,23 @@ class GodAI(QWidget):
             return
 
         estimated_cost, approx_tokens, backend, model = self.get_current_cost_estimate()
+        if not backend or not model:
+            self.live_estimate_label.setText("Next request: nothing selected yet")
+            return
 
+        # One line, beside the bars it will move. The cost comes first because
+        # it is the only part that decides anything.
         if backend == "ollama":
             self.live_estimate_label.setText(
-                f"Estimated Request Cost: FREE (local execution)\n"
-                f"{model} · ~{approx_tokens} tokens"
-            )
-        elif backend in {"openai", "deepseek", "kimi", "gemini"}:
+                f"Next request: free · {model} · ~{approx_tokens} tokens")
+        elif backend in {"openai", "deepseek", "kimi", "gemini", "anthropic"}:
             self.live_estimate_label.setText(
-                f"Estimated Request Cost: ~€{estimated_cost:.2f}\n"
-                f"{backend} · {model} · ~{approx_tokens} tokens\n"
-                f"⚠ Paid API"
-            )
+                f"Next request: ~€{estimated_cost:.2f} · paid · "
+                f"{backend} {model} · ~{approx_tokens} tokens")
         else:
             self.live_estimate_label.setText(
-                f"Estimated Request Cost: ~€{estimated_cost:.2f}\n"
-                f"{backend} · {model} · ~{approx_tokens} tokens"
-            )
+                f"Next request: ~€{estimated_cost:.2f} · "
+                f"{backend} {model} · ~{approx_tokens} tokens")
 
     def show_cost_estimate_popup(self):
         estimated_cost, approx_tokens, backend, model = self.get_current_cost_estimate()
@@ -1237,21 +1238,33 @@ class GodAI(QWidget):
                 )
 
     def build_ui(self):
-        outer_layout = QVBoxLayout(self)
-        splitter = QSplitter(Qt.Horizontal)
-        splitter.setChildrenCollapsible(False)
+        """Header bar over three columns; the outer two are fixed.
 
+        This replaced a QSplitter. A splitter lets the user drag a pane below
+        the minimum width its own children need, and Qt resolves that by
+        letting widgets overlap rather than by refusing — which is where every
+        overlapping-control bug in this app came from. Two widths you cannot
+        drag are worth more than three you can.
+        """
+        outer_layout = QVBoxLayout(self)
+        outer_layout.setContentsMargins(0, 0, 0, 0)
+        outer_layout.setSpacing(0)
+
+        header = self.build_header_bar()
         left_widget = self.build_left_panel()
         center_widget = self.build_center_panel()
         right_widget = self.build_right_panel()
         self.update_recommendation_label()
 
-        splitter.addWidget(left_widget)
-        splitter.addWidget(center_widget)
-        splitter.addWidget(right_widget)
-        splitter.setSizes([230, 870, 300])
+        body = QHBoxLayout()
+        body.setContentsMargins(0, 0, 0, 0)
+        body.setSpacing(0)
+        body.addWidget(left_widget)
+        body.addWidget(center_widget, 1)
+        body.addWidget(right_widget)
 
-        outer_layout.addWidget(splitter)
+        outer_layout.addWidget(header)
+        outer_layout.addLayout(body, 1)
 
         # After every panel exists: a combo sized to its longest item pins the
         # control columns wider than the panes they live in, which is what cut
@@ -1260,43 +1273,86 @@ class GodAI(QWidget):
 
         self.apply_global_style()
 
-    def build_left_panel(self) -> QWidget:
-        left_widget = QWidget()
-        left_widget.setObjectName("LeftPanel")
-        left_layout = QVBoxLayout(left_widget)
-        left_layout.setContentsMargins(6, 6, 6, 6)
-        left_layout.setSpacing(4)
+    def build_header_bar(self) -> QWidget:
+        """Brand, mode tabs, status and utilities on one line.
 
+        These three were previously on three different alignment axes — the
+        wordmark pinned to the far left of the rail, the mode tabs centred over
+        the canvas, and the page title starting a third of the way across. One
+        row, one left edge, and the eye has a single place to start.
+        """
+        header = QFrame()
+        header.setObjectName("AppHeader")
+        header.setFixedHeight(HEADER_HEIGHT)
+        row = QHBoxLayout(header)
+        row.setContentsMargins(LG, 0, LG, 0)
+        row.setSpacing(0)
+
+        dot = QLabel("●")
+        dot.setObjectName("WordmarkDot")
+        row.addWidget(dot)
+        row.addSpacing(SM)
         brand = QLabel("IMPRINT")
-        brand.setObjectName("StudioBrand")
-        left_layout.addWidget(brand)
+        brand.setObjectName("Wordmark")
+        row.addWidget(brand)
 
-        brand_note = QLabel(
-            "One studio for drafting, publishing, audio, websites, and client work."
-        )
-        brand_note.setObjectName("StudioBrandNote")
-        brand_note.setWordWrap(True)
-        left_layout.addWidget(brand_note)
-
-        # Agent navigation lives in the workspace tabs above the canvas. The
-        # slim rail is now reserved for projects, where persistent context is
-        # genuinely useful.
-        self.agent_buttons = {}
-        left_layout.addStretch(1)
-
-        # ── Divider ──────────────────────────────────────────────
+        row.addSpacing(LG)
         divider = QFrame()
-        divider.setFrameShape(QFrame.HLine)
-        divider.setObjectName("CardDivider")
-        left_layout.addWidget(divider)
+        divider.setObjectName("HeaderDivider")
+        divider.setFixedSize(1, 22)
+        row.addWidget(divider)
+        row.addSpacing(MD)
 
-        saved_header = QLabel("  RECENT PROJECTS")
-        saved_header.setStyleSheet(
-            "color: #707070; font-weight: bold; font-size: 10px; "
-            "letter-spacing: 1.5px; padding: 8px 0 4px 8px; "
-            "background: transparent;"
-        )
-        left_layout.addWidget(saved_header)
+        # Five outcome-oriented workspaces replace Sentinel's long agent menu.
+        self.workspace_tabs = QTabBar()
+        self.workspace_tabs.setObjectName("WorkspaceTabs")
+        self.workspace_tabs.setExpanding(False)
+        self.workspace_tabs.setDrawBase(False)
+        for workspace_name in WORKSPACES:
+            self.workspace_tabs.addTab(workspace_name)
+        # Connected only after every tab exists: addTab on an empty bar sets the
+        # current index and would fire the handler before the panels are built.
+        self.workspace_tabs.currentChanged.connect(self._workspace_changed)
+        row.addWidget(self.workspace_tabs, 0, Qt.AlignVCenter)
+
+        row.addStretch()
+
+        self.agent_status_pill = QLabel("●  Ready")
+        self.agent_status_pill.setObjectName("StatusPill")
+        row.addWidget(self.agent_status_pill)
+        row.addSpacing(LG)
+
+        self.agent_docs_btn = quiet("Docs")
+        self.agent_docs_btn.setFixedWidth(56)
+        self.agent_docs_btn.clicked.connect(self.show_agent_docs)
+        row.addWidget(self.agent_docs_btn)
+
+        self.tooltips_toggle_btn = quiet("Tooltips: On")
+        self.tooltips_toggle_btn.setFixedWidth(110)
+        self.tooltips_toggle_btn.setCheckable(True)
+        self.tooltips_toggle_btn.setChecked(True)
+        self.tooltips_toggle_btn.clicked.connect(self._toggle_tooltips)
+        row.addWidget(self.tooltips_toggle_btn)
+
+        self.settings_btn = quiet("Settings")
+        self.settings_btn.setFixedWidth(78)
+        self.settings_btn.clicked.connect(self.show_settings)
+        row.addWidget(self.settings_btn)
+
+        return header
+
+    def build_left_panel(self) -> QWidget:
+        """The project rail. Projects only — navigation lives in the header."""
+        left_widget = rail("RailLeft", RAIL_LEFT_WIDTH)
+        left_layout = QVBoxLayout(left_widget)
+        left_layout.setContentsMargins(MD, LG, MD, LG)
+        left_layout.setSpacing(MD)
+
+        # Agent navigation lives in the workspace tabs. The rail is reserved
+        # for projects, where persistent context is genuinely useful.
+        self.agent_buttons = {}
+
+        left_layout.addWidget(section("Projects"))
 
         # Narrow the list to one agent. Populated from the chats that exist, so
         # it only ever offers agents you have actually used.
@@ -1306,7 +1362,7 @@ class GodAI(QWidget):
         left_layout.addWidget(self.history_agent_filter)
 
         self.history_search = QLineEdit()
-        self.history_search.setPlaceholderText("Search projects...")
+        self.history_search.setPlaceholderText("Search projects")
         self.history_search.textChanged.connect(self.load_history_list)
         left_layout.addWidget(self.history_search)
 
@@ -1315,45 +1371,34 @@ class GodAI(QWidget):
         # Double-click renames: chat_title_from_data already prefers a stored
         # "title" over the truncated first prompt, it was just never written.
         self.history_list.itemDoubleClicked.connect(self.rename_selected_chat)
-        # Keep the saved-chats list bounded so the agents area always has room
-        self.history_list.setMinimumHeight(120)
-        self.history_list.setMaximumHeight(200)
-        left_layout.addWidget(self.history_list)
+        # The list takes the rail's spare height rather than being capped at
+        # 200px with the buttons stranded at the bottom of the window.
+        self.history_list.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Expanding)
+        left_layout.addWidget(self.history_list, 1)
 
-        self.delete_chat_btn = QPushButton("🗑 Remove Project")
-        self.delete_chat_btn.clicked.connect(self.delete_selected_chat)
-        left_layout.addWidget(self.delete_chat_btn)
+        left_layout.addWidget(rule())
 
-        self.new_chat_btn = QPushButton("✳️ New Project")
+        self.new_chat_btn = QPushButton("New Project")
         self.new_chat_btn.clicked.connect(self.new_chat)
         left_layout.addWidget(self.new_chat_btn)
 
-        left_widget.setMinimumWidth(230)
-        left_widget.setMaximumWidth(300)
-
-        # Rail styling lives in ui/style.py (QWidget#LeftPanel rules) so the
-        # palette has one definition.
+        # Destructive and rarely wanted: quiet, and below the thing it acts on.
+        self.delete_chat_btn = quiet("Remove")
+        self.delete_chat_btn.clicked.connect(self.delete_selected_chat)
+        left_layout.addWidget(self.delete_chat_btn)
 
         return left_widget
 
     def build_center_panel(self) -> QWidget:
         center_widget = QWidget()
+        center_widget.setObjectName("Transparent")
         center_layout = QVBoxLayout(center_widget)
-        center_layout.setContentsMargins(20, 16, 20, 16)
-        center_layout.setSpacing(12)
+        center_layout.setContentsMargins(LG + SM, LG + SM, LG + SM, LG + SM)
+        center_layout.setSpacing(MD)
 
-        # Four outcome-oriented workspaces replace Sentinel's long agent menu.
-        # A smaller stage switcher appears only when the workspace contains two
+        # The workspace tabs moved to the header bar. What stays here is the
+        # stage switcher, which appears only when a workspace contains two
         # related tools (Draft/Publish or Audiobooks/Music).
-        self.workspace_tabs = QTabBar()
-        self.workspace_tabs.setObjectName("WorkspaceTabs")
-        self.workspace_tabs.setExpanding(False)
-        self.workspace_tabs.setDrawBase(False)
-        for workspace_name in WORKSPACES:
-            self.workspace_tabs.addTab(workspace_name)
-        self.workspace_tabs.currentChanged.connect(self._workspace_changed)
-        center_layout.addWidget(self.workspace_tabs)
-
         self.workspace_tool_row = QWidget()
         tool_row = QHBoxLayout(self.workspace_tool_row)
         tool_row.setContentsMargins(0, 0, 0, 0)
@@ -1371,39 +1416,14 @@ class GodAI(QWidget):
         tool_row.addStretch()
         center_layout.addWidget(self.workspace_tool_row)
 
-        # ── Agent header bar: big accent title + status pill ─────────────
-        header_row = QHBoxLayout()
-        header_row.setSpacing(12)
-
-        self.agent_title_label = QLabel("CHAT")
+        # ── Page title ──────────────────────────────────────────────────
+        # Docs, tooltips and the status pill moved to the header bar: they are
+        # application chrome, not part of this page, and having them here put a
+        # row of controls between the title and the form it belongs to.
+        self.agent_title_label = QLabel("Chat")
         self.agent_title_label.setObjectName("AgentTitle")
-        header_row.addWidget(self.agent_title_label)
+        center_layout.addWidget(self.agent_title_label)
 
-        header_row.addStretch()
-
-        self.agent_docs_btn = QPushButton("📖  Docs")
-        self.agent_docs_btn.setObjectName("ChipBtn")
-        self.agent_docs_btn.setToolTip("Open the documentation for the current agent.")
-        self.agent_docs_btn.clicked.connect(self.show_agent_docs)
-        header_row.addWidget(self.agent_docs_btn)
-
-        self.tooltips_toggle_btn = QPushButton("💡 Tooltips: On")
-        self.tooltips_toggle_btn.setObjectName("ChipBtn")
-        self.tooltips_toggle_btn.setCheckable(True)
-        self.tooltips_toggle_btn.setChecked(True)
-        self.tooltips_toggle_btn.setToolTip(
-            "Toggle hover tooltips across the entire app. Tooltips explain what each control does."
-        )
-        self.tooltips_toggle_btn.clicked.connect(self._toggle_tooltips)
-        header_row.addWidget(self.tooltips_toggle_btn)
-
-        self.agent_status_pill = QLabel("●  READY")
-        self.agent_status_pill.setObjectName("StatusPill")
-        header_row.addWidget(self.agent_status_pill)
-
-        center_layout.addLayout(header_row)
-
-        # ── Subtitle: short function description under the title ────────
         self.agent_subtitle_label = QLabel("")
         self.agent_subtitle_label.setObjectName("AgentSubtitle")
         self.agent_subtitle_label.setWordWrap(True)
@@ -6145,230 +6165,146 @@ class GodAI(QWidget):
         return result
 
     def build_right_panel(self) -> QWidget:
-        right_widget = QWidget()
-        right_widget.setObjectName("RightPanel")
+        """Spend, limits, and the utilities that open a window.
 
-        right_layout = QVBoxLayout(right_widget)
-        right_layout.setContentsMargins(8, 8, 8, 8)
-        right_layout.setSpacing(0)
+        This was five cards — SYSTEM, ROUTING, SPEND, ACTIONS, API KEYS — each
+        with its own border and title bar, stacked inside a scroll area inside
+        a panel. The spend card alone was nine lines of prose at one weight
+        ("Session Cost: €0.00", "Cost Today: €0.00", …), which is five
+        sentences to read before you know whether you can afford a request.
 
-        # ── Inner container that holds all cards (scrollable) ───────────
-        cards_container = QWidget()
-        cards_container.setObjectName("RightCardsContainer")
-        cards_layout = QVBoxLayout(cards_container)
-        cards_layout.setContentsMargins(2, 2, 2, 2)
-        cards_layout.setSpacing(8)
+        Now: four numbers, two bars, and the limits that set them. The
+        reference material that is only wanted when something looks wrong
+        (system load, routing, key status) stays, collapsed, at the bottom.
+        """
+        right_widget = rail("RailRight", RAIL_RIGHT_WIDTH)
+        layout = QVBoxLayout(right_widget)
+        layout.setContentsMargins(MD + XS, LG, MD + XS, LG)
+        layout.setSpacing(MD)
 
-        # Reference, not decision-making: what the machine is doing and how the
-        # router chose. Useful when something looks wrong, noise the rest of the
-        # time — so both start collapsed rather than occupying the rail.
-        system_card = CollapsibleSection("SYSTEM", expanded=False)
-        system_layout = QVBoxLayout()
-        system_layout.setContentsMargins(10, 6, 10, 10)
-        system_layout.setSpacing(6)
+        layout.addWidget(section("Spend"))
 
-        self.resource_label = QLabel()
-        self.resource_label.setTextFormat(Qt.RichText)
-        self.resource_label.setWordWrap(True)
-        # Sized to its content rather than pinned: the stat block is a fixed
-        # number of lines, and 130px left a visible gap above the button.
-        self.resource_label.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Minimum)
-        self.resource_label.setObjectName("ResourceLabel")
-        system_layout.addWidget(self.resource_label)
+        stats = QGridLayout()
+        stats.setHorizontalSpacing(MD)
+        stats.setVerticalSpacing(MD)
+        self.session_cost_stat = StatBlock("this session", "€0.00")
+        self.today_cost_stat = StatBlock("today", "€0.00")
+        self.request_count_stat = StatBlock("requests", "0")
+        self.last_request_stat = StatBlock("last request", "—")
+        stats.addWidget(self.session_cost_stat, 0, 0)
+        stats.addWidget(self.today_cost_stat, 0, 1)
+        stats.addWidget(self.request_count_stat, 1, 0)
+        stats.addWidget(self.last_request_stat, 1, 1)
+        stats.setColumnStretch(0, 1)
+        stats.setColumnStretch(1, 1)
+        layout.addLayout(stats)
 
-        self.realtime_monitor_btn = QPushButton("⚡ Realtime Monitor")
-        self.realtime_monitor_btn.setEnabled(False)
-        system_layout.addWidget(self.realtime_monitor_btn)
+        # "Session remaining: €1 / €1" is two numbers you have to subtract. A
+        # bar answers the question before you have read anything.
+        self.session_meter = Meter("Session budget")
+        self.daily_meter = Meter("Daily budget")
+        layout.addWidget(self.session_meter)
+        layout.addWidget(self.daily_meter)
 
-        _system_body = QWidget()
-        _system_body.setLayout(system_layout)
-        system_card.addWidget(_system_body)
-        cards_layout.addWidget(system_card)
-
-        # ── Card 2: Routing & Recommendation ────────────────────────────
-        routing_card = CollapsibleSection("ROUTING", expanded=False)
-        routing_layout = QVBoxLayout()
-        routing_layout.setContentsMargins(10, 6, 10, 10)
-        routing_layout.setSpacing(6)
-
-        self.route_result_label = QLabel("Router: not yet computed")
-        self.route_result_label.setWordWrap(True)
-        routing_layout.addWidget(self.route_result_label)
-
-        self.recommendation_label = QLabel("Recommendation: not yet calculated")
-        self.recommendation_label.setWordWrap(True)
-        routing_layout.addWidget(self.recommendation_label)
-
-        _routing_body = QWidget()
-        _routing_body.setLayout(routing_layout)
-        routing_card.addWidget(_routing_body)
-        cards_layout.addWidget(routing_card)
-
-        # COST and BUDGET were two cards showing the same two numbers — spend
-        # and the cap it is measured against. One card: what this request will
-        # cost, what has been spent, and the limits, in that order.
-        cost_card = QGroupBox("SPEND (€)")
-        cost_card.setObjectName("RightCard")
-        cost_layout = QVBoxLayout(cost_card)
-        cost_layout.setContentsMargins(10, 6, 10, 10)
-        cost_layout.setSpacing(6)
-
-        self.live_estimate_label = QLabel("Estimated Request Cost: -")
+        self.live_estimate_label = QLabel("No request pending")
+        self.live_estimate_label.setObjectName("EstimateLine")
         self.live_estimate_label.setWordWrap(True)
-        cost_layout.addWidget(self.live_estimate_label)
+        layout.addWidget(self.live_estimate_label)
 
-        self.last_request_label = QLabel("Last Request Cost: €0.00")
-        cost_layout.addWidget(self.last_request_label)
-
-        cost_divider = QFrame()
-        cost_divider.setFrameShape(QFrame.HLine)
-        cost_divider.setObjectName("CardDivider")
-        cost_layout.addWidget(cost_divider)
-
-        self.session_cost_label = QLabel("Session Cost: €0.00")
-        cost_layout.addWidget(self.session_cost_label)
-
-        self.today_cost_label = QLabel("Cost Today: €0.00")
-        cost_layout.addWidget(self.today_cost_label)
-
-        self.request_count_label = QLabel("Requests Today: 0 | Session: 0")
-        cost_layout.addWidget(self.request_count_label)
-
-        budget_divider = QFrame()
-        budget_divider.setFrameShape(QFrame.HLine)
-        budget_divider.setObjectName("CardDivider")
-        cost_layout.addWidget(budget_divider)
-
-        budget_layout = cost_layout
-
-        self.budget_label = QLabel("Budget: not yet calculated")
-        self.budget_label.setWordWrap(True)
-        budget_layout.addWidget(self.budget_label)
-
-        # Both limits share one row, saving ~34px of a panel that is 260px wide
-        # at its narrowest. It only fits because the euro sign moved out of the
-        # two labels and into the card heading — "Session €" and "Daily €" at
-        # 70px each did not leave room for both fields.
+        layout.addWidget(section("Limits"))
         limits_row = QHBoxLayout()
-        limits_row.setSpacing(6)
-
-        session_lbl = QLabel("Session")
-        limits_row.addWidget(session_lbl)
-        self.session_budget_input = QLineEdit(str(int(self.session_budget_eur)))
-        self.session_budget_input.setPlaceholderText("1")
+        limits_row.setSpacing(SM)
+        self.session_budget_input = line_edit("1", str(int(self.session_budget_eur)))
         self.session_budget_input.setAlignment(Qt.AlignRight)
-        self.session_budget_input.setMaximumWidth(52)
-        self.session_budget_input.setToolTip("Maximum spend for this session, in euros.")
-        limits_row.addWidget(self.session_budget_input)
-
-        limits_row.addSpacing(6)
-
-        daily_lbl = QLabel("Daily")
-        limits_row.addWidget(daily_lbl)
-        self.daily_budget_input = QLineEdit(str(int(self.daily_budget_eur)))
-        self.daily_budget_input.setPlaceholderText("5")
+        self.daily_budget_input = line_edit("5", str(int(self.daily_budget_eur)))
         self.daily_budget_input.setAlignment(Qt.AlignRight)
-        self.daily_budget_input.setMaximumWidth(52)
-        self.daily_budget_input.setToolTip("Maximum spend per day, in euros.")
-        limits_row.addWidget(self.daily_budget_input)
-
-        limits_row.addStretch()
-        budget_layout.addLayout(limits_row)
+        limits_row.addWidget(field("Session €", self.session_budget_input))
+        limits_row.addWidget(field("Daily €", self.daily_budget_input))
+        layout.addLayout(limits_row)
 
         self.save_budget_btn = QPushButton("Save Limits")
         self.save_budget_btn.clicked.connect(self.save_budget_limits)
-        budget_layout.addWidget(self.save_budget_btn)
+        layout.addWidget(self.save_budget_btn)
 
-        self.reset_session_budget_btn = QPushButton("Reset Session Spend")
+        self.reset_session_budget_btn = quiet("Reset session spend")
         self.reset_session_budget_btn.clicked.connect(self.reset_session_spend)
-        budget_layout.addWidget(self.reset_session_budget_btn)
+        layout.addWidget(self.reset_session_budget_btn)
 
-        cards_layout.addWidget(cost_card)
+        layout.addStretch()
 
-        # ── Card 5: Quick Actions ───────────────────────────────────────
-        actions_card = QGroupBox("ACTIONS")
-        actions_card.setObjectName("RightCard")
-        actions_layout = QVBoxLayout(actions_card)
-        actions_layout.setContentsMargins(10, 6, 10, 10)
-        actions_layout.setSpacing(6)
-
-        self.cost_history_btn = QPushButton("📊  Cost History")
+        # ── Utilities: open a window, change nothing. Links, not buttons. ──
+        layout.addWidget(rule())
+        links = QVBoxLayout()
+        links.setSpacing(0)
+        self.cost_history_btn = quiet("Cost History")
         self.cost_history_btn.clicked.connect(self.show_cost_history)
-        actions_layout.addWidget(self.cost_history_btn)
+        links.addWidget(self.cost_history_btn)
 
-        self.run_log_btn = QPushButton("📜  Run Log")
+        self.run_log_btn = quiet("Run Log")
         self.run_log_btn.clicked.connect(self.show_run_log)
-        actions_layout.addWidget(self.run_log_btn)
+        links.addWidget(self.run_log_btn)
 
-        self.learn_btn = QPushButton("🎓  Learning Centre")
+        self.learn_btn = quiet("Learning Centre")
         self.learn_btn.clicked.connect(self.show_learning_center)
-        actions_layout.addWidget(self.learn_btn)
+        links.addWidget(self.learn_btn)
+        layout.addLayout(links)
 
-        self.settings_btn = QPushButton("⚙   Settings")
-        self.settings_btn.clicked.connect(self.show_settings)
-        actions_layout.addWidget(self.settings_btn)
+        # ── Reference: wanted only when something looks wrong ──────────────
+        reference = QVBoxLayout()
+        reference.setSpacing(0)
 
-        cards_layout.addWidget(actions_card)
+        system_card = CollapsibleSection("SYSTEM", expanded=False)
+        system_body = QWidget()
+        system_body.setObjectName("Transparent")
+        system_layout = QVBoxLayout(system_body)
+        system_layout.setContentsMargins(SM, XS, SM, SM)
+        system_layout.setSpacing(SM)
+        self.resource_label = QLabel()
+        self.resource_label.setTextFormat(Qt.RichText)
+        self.resource_label.setWordWrap(True)
+        self.resource_label.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Minimum)
+        self.resource_label.setObjectName("ResourceLabel")
+        system_layout.addWidget(self.resource_label)
+        self.realtime_monitor_btn = QPushButton("Realtime Monitor")
+        self.realtime_monitor_btn.setEnabled(False)
+        system_layout.addWidget(self.realtime_monitor_btn)
+        system_card.addWidget(system_body)
+        reference.addWidget(system_card)
 
-        # ── Card 6: API Keys ────────────────────────────────────────────
-        # Set once, then only consulted when a provider misbehaves.
+        routing_card = CollapsibleSection("ROUTING", expanded=False)
+        routing_body = QWidget()
+        routing_body.setObjectName("Transparent")
+        routing_layout = QVBoxLayout(routing_body)
+        routing_layout.setContentsMargins(SM, XS, SM, SM)
+        routing_layout.setSpacing(XS)
+        self.route_result_label = QLabel("Router: not yet computed")
+        self.route_result_label.setWordWrap(True)
+        routing_layout.addWidget(self.route_result_label)
+        self.recommendation_label = QLabel("Recommendation: not yet calculated")
+        self.recommendation_label.setWordWrap(True)
+        routing_layout.addWidget(self.recommendation_label)
+        routing_card.addWidget(routing_body)
+        reference.addWidget(routing_card)
+
         keys_card = CollapsibleSection("API KEYS", expanded=False)
-        keys_layout = QVBoxLayout()
-        keys_layout.setContentsMargins(10, 6, 10, 10)
-        keys_layout.setSpacing(4)
-
+        keys_body = QWidget()
+        keys_body.setObjectName("Transparent")
+        keys_layout = QVBoxLayout(keys_body)
+        keys_layout.setContentsMargins(SM, XS, SM, SM)
+        keys_layout.setSpacing(XS)
         self.openai_key_label = QLabel(f"OpenAI: {self.safe_key_status(OpenAIClientWrapper)}")
-        keys_layout.addWidget(self.openai_key_label)
-
         self.deepseek_key_label = QLabel(f"DeepSeek: {self.safe_key_status(DeepSeekClientWrapper)}")
-        keys_layout.addWidget(self.deepseek_key_label)
-
         self.kimi_key_label = QLabel(f"Kimi: {self.safe_key_status(KimiClientWrapper)}")
-        keys_layout.addWidget(self.kimi_key_label)
-
         self.gemini_key_label = QLabel(f"Gemini: {self.safe_key_status(GeminiClientWrapper)}")
-        keys_layout.addWidget(self.gemini_key_label)
-
         self.anthropic_key_label = QLabel(f"Anthropic: {self.safe_key_status(AnthropicClientWrapper)}")
-        keys_layout.addWidget(self.anthropic_key_label)
+        for key_label in (self.openai_key_label, self.deepseek_key_label,
+                          self.kimi_key_label, self.gemini_key_label,
+                          self.anthropic_key_label):
+            keys_layout.addWidget(key_label)
+        keys_card.addWidget(keys_body)
+        reference.addWidget(keys_card)
 
-        _keys_body = QWidget()
-        _keys_body.setLayout(keys_layout)
-        keys_card.addWidget(_keys_body)
-        cards_layout.addWidget(keys_card)
-
-        cards_layout.addStretch()
-
-        # ── Scroll area wrapping all cards ──────────────────────────────
-        scroll_area = QScrollArea()
-        scroll_area.setWidget(cards_container)
-        scroll_area.setWidgetResizable(True)
-        scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        scroll_area.setFrameShape(QFrame.NoFrame)
-        scroll_area.setStyleSheet("QScrollArea { background: transparent; border: none; }")
-        right_layout.addWidget(scroll_area)
-
-        right_widget.setMinimumWidth(260)
-        right_widget.setMaximumWidth(320)
-
-        # ── Sizing for buttons/inputs ───────────────────────────────────
-        for w in [
-            self.realtime_monitor_btn,
-            self.save_budget_btn,
-            self.reset_session_budget_btn,
-            self.cost_history_btn,
-            self.run_log_btn,
-            self.settings_btn,
-        ]:
-            w.setFixedHeight(30)
-            w.setMinimumWidth(0)
-            w.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-
-        self.session_budget_input.setFixedHeight(28)
-        self.daily_budget_input.setFixedHeight(28)
-
-        # ── VPN-Agent-inspired card stylesheet ──────────────────────────
-        # Card styling lives in ui/style.py (QGroupBox#RightCard rules).
+        layout.addLayout(reference)
 
         return right_widget
 
@@ -6579,9 +6515,10 @@ class GodAI(QWidget):
         self._current_agent = agent_name  # track for show_agent_docs()
         # ── Update the agent header bar (title + subtitle + status pill) ─
         agent_titles = {
-            "chat": "STUDIO ASSISTANT", "fiverr": "CLIENT GIGS",
-            "author": "DRAFT", "manuscript": "PUBLISH",
-            "music": "MUSIC", "webdesign": "SITE BUILDER", "audiobook": "AUDIOBOOKS", }
+            "chat": "Studio Assistant", "fiverr": "Client Gigs",
+            "author": "Draft", "manuscript": "Publish", "music": "Music",
+            "webdesign": "Site Builder", "audiobook": "Audiobooks",
+            "creator": "Creator", }
         agent_subtitles = {
             "chat":        "General-purpose conversation. Pick a tool, pick a model, talk.",
             "fiverr":      "Create client-ready logo concepts, gig listings, and polished delivery messages.",
@@ -6590,13 +6527,15 @@ class GodAI(QWidget):
             "music":       "Plan releases, distribution, promotion, and sustainable artist income.",
             "webdesign":   "Modern HTML, CSS, and JavaScript generation with responsive layout and design advice.",
             "audiobook":   "Turn PDF, EPUB, TXT, and MOBI books into production-ready MP3 audiobooks.",
+            "creator":     "Plan, draft, and schedule subscription content across accounts you hold consent for.",
             }
         if hasattr(self, "agent_title_label"):
-            self.agent_title_label.setText(agent_titles.get(agent_name, agent_name.upper()))
+            self.agent_title_label.setText(
+                agent_titles.get(agent_name, agent_name.title()))
         if hasattr(self, "agent_subtitle_label"):
             self.agent_subtitle_label.setText(agent_subtitles.get(agent_name, ""))
         if hasattr(self, "agent_status_pill"):
-            self.agent_status_pill.setText("●  READY")
+            self.agent_status_pill.setText("●  Ready")
             self.agent_status_pill.setStyleSheet("")
 
         is_audiobook = agent_name == "audiobook"
@@ -7567,31 +7506,28 @@ class GodAI(QWidget):
         self.resource_label.setText(html)
 
     def update_usage_labels(self):
+        """Push spend into the stat blocks and the two budget bars."""
+        if not hasattr(self, "session_cost_stat"):
+            return
         today_total = self.usage_tracker.get_today_total()
         today_requests = self.usage_tracker.get_total_requests_today()
-        tool_name = getattr(self, "last_tool_name", "-")
+        tool_name = getattr(self, "last_tool_name", "") or "-"
 
-        # ✅ updated last request label (now includes tool name)
-        self.last_request_label.setText(
-            f"Last Request Cost: €{self.last_request_cost:.2f} ({tool_name})"
-        )
+        self.session_cost_stat.set_value(f"€{self.session_cost_total:.2f}")
+        self.today_cost_stat.set_value(f"€{today_total:.2f}")
+        self.request_count_stat.set_value(str(today_requests))
+        # Detail goes in the tooltip. A caption that grows with its data clips
+        # the stat sitting next to it, which is how the rail got ragged.
+        self.request_count_stat.setToolTip(
+            f"{today_requests} today · {self.session_request_count} this session")
 
-        # keep your existing labels
-        self.session_cost_label.setText(f"Session Cost: €{self.session_cost_total:.2f}")
-        self.today_cost_label.setText(f"Cost Today: €{today_total:.2f}")
-        self.request_count_label.setText(
-            f"Requests Today: {today_requests} | Session: {self.session_request_count}"
-        )
+        self.last_request_stat.set_value(f"€{self.last_request_cost:.2f}")
+        self.last_request_stat.setToolTip(f"Last request ran: {tool_name}")
 
-        # budget calculations
-        session_remaining = self.session_budget_eur - self.session_cost_total
-        daily_remaining = self.daily_budget_eur - today_total
-
-        if hasattr(self, "budget_label"):
-            self.budget_label.setText(
-                f"Session remaining: €{session_remaining:.0f} / €{int(self.session_budget_eur)}\n"
-                f"Daily remaining: €{daily_remaining:.0f} / €{int(self.daily_budget_eur)}"
-            )
+        # The bars show spend against the cap. Remaining is the gap, which is
+        # the thing you were subtracting for by hand before.
+        self.session_meter.set(self.session_cost_total, self.session_budget_eur)
+        self.daily_meter.set(today_total, self.daily_budget_eur)
 
     def start_resource_timer(self):
         self.resource_timer = QTimer(self)
