@@ -1,15 +1,23 @@
-# Atelier — what this fork is, and what still has to happen
+# Imprint — what this fork set out to do  *(historical)*
 
-> **Status (as of the "Strip the security verticals" and "Rebrand the fork as
-> Imprint" commits):** steps 3, 5, and 6 below are done — the six
-> non-creative agents and `providers/` are deleted, the app is rebranded
-> (`APP_NAME`, `SINGLE_INSTANCE_KEY`, `DB_PATH` all say Imprint), it
-> has its own `scripts/install_app.sh` / `Imprint.spec`, and `lab_hub`
-> already has a `create_and_publish` launcher entry. `chat` was kept, not
-> dropped. Step 4 (tabbed UI reshape — Write / Audio / Web / Gigs) is **not**
-> done — the left panel is still the collapsible-category sidebar (General /
-> Creative / Gigs) inherited from Sentinel, not tabs; see README.md §3. The
-> rest of this file is the original plan, left as written for the record.
+> **Status (September 2026): this plan is complete, and then some.** All six
+> steps are done. The six non-creative agents and `providers/` were deleted; the
+> app is rebranded throughout (`APP_NAME`, `SINGLE_INSTANCE_KEY`, `DB_PATH`);
+> it has its own `scripts/install_app.sh` and `Imprint.spec`; and step 4 — the
+> tabbed reshape this file said was outstanding — shipped, then was rebuilt
+> again in the September GUI pass into a header bar plus two fixed rails.
+>
+> Two things went further than the plan anticipated:
+>
+> * **`chat` was kept, not dropped** — and is now the one loose end. It is still
+>   built and instantiated but reachable from no mode tab.
+> * **`vidforge` was folded in** as the Video mode, imported from its nested
+>   repository rather than vendored (`services/video_studio.py`), and a
+>   **Social** mode was added that the original plan never scoped. That takes
+>   the app from six agents to eight.
+>
+> Current state lives in `README.md` and `TODO.md`; this file is kept as the
+> record of what the fork set out to do.
 
 Forked from `sentinel_ai` on 2026-08-12, with its full history. At the time
 this plan was written it was **a byte-for-byte copy of Sentinel** — nothing

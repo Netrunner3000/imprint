@@ -98,6 +98,44 @@ Application Support. The project directory is a git repository.
 
 ---
 
+## Posting
+
+Four rules, in order of how much they cost to break.
+
+**One post per platform, not one post.** The same text everywhere reads as
+automation to every audience that sees it twice. The drafter already writes to
+each platform's rules; use it.
+
+**Reddit once a week, maximum.** More than that on a promotional account is how
+the account goes, not the post. The cadence table already enforces this when
+you press `Schedule Drafts` — do not work around it by hand.
+
+**Read the subreddit's rules before posting.** Most communities remove
+self-promotion outright, and that judgement is not something the app can make
+for you. It automates the mechanics, not the question of where a post belongs.
+
+**Nothing posts unattended, on purpose.** There is no background scheduler and
+no "publish all". If you want that, you want a service that accepts the ban
+risk on your behalf — and none of them do, in practice.
+
+---
+
+## Video
+
+**Set `Format` first.** Long-form and Social clip are the same pipeline with
+different numbers, and the difference between them is €1.50.
+
+**Check the estimate before rendering, every time.** It is mostly images, so it
+scales with length: a ten-minute video is thirty-odd images.
+
+**Stop is safe.** It cancels at the next stage boundary, so you never get a
+half-written file, and the build stays resumable in the Library.
+
+**One library, two apps.** Renders from `vidforge.app` and from Imprint's Video
+tab are the same files in the same place. Do not keep two sets of topics.
+
+---
+
 ## What not to expect
 
 - **Not a one-click business.** Every path in [Making money](03-profit.md) needs

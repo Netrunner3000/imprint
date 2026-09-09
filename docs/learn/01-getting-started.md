@@ -10,22 +10,24 @@ publish it → market it.** Everything else is detail.
 | Region | What it is for |
 |---|---|
 | **Left rail** | Your projects. A project is the thing you are making — a book, a release, a client job. |
-| **Mode tabs** (Write · Audio · Web · Gigs) | Which kind of work you are doing. Each mode holds one or two agents. |
+| **Mode tabs** (Write · Audio · Video · Social · Web · Gigs · Creator) | Which kind of work you are doing. Each mode holds one or two agents. |
 | **Centre** | The agent itself: its inputs on the right, its output on the left. |
 | **Right rail** | What this is costing you, and the three dialogs you actually open. |
 
-The right rail keeps `SPEND (€)` open because it is the one thing worth
-watching mid-run. `SYSTEM`, `ROUTING` and `API KEYS` are collapsed: they are
-reference material for when something looks wrong.
+The right rail keeps **Spend** open because it is the one thing worth watching
+mid-run: four numbers and two budget bars that turn red at the cap. `SYSTEM`,
+`ROUTING` and `API KEYS` are collapsed — reference material for when something
+looks wrong.
 
 ## Before your first run
 
-1. **Add an API key.** `⚙ Settings`, or edit `.env` in
+1. **Add an API key.** `Settings`, or edit `.env` in
    `~/Library/Application Support/Imprint/`. The `API KEYS` section in
    the right rail shows which providers are live.
-2. **Check your budget.** `SPEND (€)` → `Session` and `Daily`. Defaults are €1
+2. **Check your budget.** `Limits` → `Session €` and `Daily €`. Defaults are €1
    and €5. A request that would exceed either is refused before it is sent, not
-   after.
+   after — and that now includes work billed per unit rather than per token:
+   images, video renders and audiobook narration all count against the caps.
 3. **Fill in the Project Bar** — Title, Author, Type. Everything downstream
    reuses it, so doing it once saves repeating yourself in every panel.
 4. **Open Book Profile and click Save Profile.** The hook and target reader
@@ -36,6 +38,12 @@ reference material for when something looks wrong.
 Before each run, `Estimated Request Cost` shows what the request will cost at
 the selected provider and model. It is an estimate from token counts; the
 `Last Request Cost` line afterwards is the billed figure.
+
+Work that is not billed per token — an image, a video render, a minute of
+speech — shows its own estimate next to the button that spends it, priced from
+`config/pricing.json`. Where a rate has never been filled in, the label says
+"cost not priced yet" rather than a confident €0.00, and anything about to
+spend asks first.
 
 If both read `€0.00` for a paid provider, that provider has no pricing row —
 see [Best practices](05-best-practices.md#money).
