@@ -191,3 +191,66 @@ def test_no_control_is_unreachable(app, window, agent, size):
         if need > have and area.horizontalScrollBarPolicy() == Qt.ScrollBarAlwaysOff:
             unreachable.append(f"needs {need}px in a {have}px pane with no scrollbar")
     assert not unreachable, f"[{agent}] " + "; ".join(unreachable)
+
+
+# ── Conditional fields ───────────────────────────────────────────────────────
+CREATOR_KINDS = [
+    ("post", 2),        # kind + audience
+    ("ppv", 3),         # kind + price + audience
+    ("promo", 2),       # kind + promo channel
+    ("bio", 1),         # kind only
+    ("campaign", 1),
+    ("hooks", 1),
+    ("welcome", 2),     # kind + audience
+]
+
+
+@pytest.mark.parametrize("kind,expected", CREATOR_KINDS, ids=[k for k, _ in CREATOR_KINDS])
+def test_creator_compose_grid_has_no_empty_cells(app, window, kind, expected):
+    """Fields that do not apply give up their cell instead of leaving a hole.
+
+    Three of the four compose fields only apply to some kinds of post. Hiding
+    a widget inside a QGridLayout leaves its cell reserved and empty, so
+    switching to "post" left a gap where Price had been and pushed Audience
+    into the third column on its own — the same "nothing lines up" complaint,
+    produced by an empty cell rather than a misplaced one.
+
+    Also guards the subtler bug this replaced: the first implementation asked
+    the widgets whether they were hidden, and a widget that has never been
+    shown reports isHidden() as True, so the grid came up empty.
+    """
+    window.select_agent("creator")
+    window._creator_kind_changed(kind)
+    _settle(app, window, (1500, 950), "creator")
+
+    grid = window.creator_compose_grid
+    positions = sorted(grid.getItemPosition(i)[:2] for i in range(grid.count()))
+    assert len(positions) == expected, (
+        f"[{kind}] expected {expected} fields, packed {len(positions)}")
+    # Packed from (0,0) rightwards with no gaps.
+    assert positions == [(i // 3, i % 3) for i in range(expected)], (
+        f"[{kind}] fields are not packed contiguously: {positions}")
+
+
+def test_no_control_label_carries_an_emoji(app, window):
+    """Emoji render at a different size and baseline from the text beside them.
+
+    A column of buttons whose labels start with one has a ragged left edge
+    that no padding fixes, which is most of why the rails read as untidy. The
+    audio player's transport glyphs are exempt — ▶ on a play button is a
+    universal symbol, not decoration.
+    """
+    from PySide6.QtWidgets import QPushButton, QLabel
+
+    transport = set("▶⏸⏹⏪⏩⏵⏴×")
+    offenders = []
+    widgets = list(window.findChildren(QPushButton)) + list(window.findChildren(QLabel))
+    for widget in widgets:
+        text = widget.text()
+        for char in text:
+            if char in transport:
+                continue
+            if 0x1F300 <= ord(char) <= 0x1FAFF or char in "✅❌⚠✨🔌🔍💬📥📅⬇⛔↻↺⬛":
+                offenders.append(f"{widget.objectName() or type(widget).__name__}: {text!r}")
+                break
+    assert not offenders, "emoji in control labels: " + "; ".join(sorted(set(offenders))[:8])
