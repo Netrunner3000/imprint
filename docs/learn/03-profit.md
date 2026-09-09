@@ -96,9 +96,38 @@ Your costs are real. Before committing to a path, check the ratio:
   month early on. Fine, but not free — check the estimate first.
 - A long drafting session on a frontier model is the easiest way to spend
   €5 without noticing. Set the daily cap and let it stop you.
+- A **long-form video** costs €1–2, mostly images. Against YouTube ad revenue
+  that is a slow return; against one client video it is nothing. Know which
+  you are doing before you render twenty of them.
+- A **30-second social clip** is about **€0.25**. Cheap enough to make several
+  and pick one, expensive enough that a daily habit adds up — five a day is
+  roughly €35 a month.
+
+All of these count against the caps now, including the ones billed per image
+or per character rather than per token. If a rate has never been filled in the
+label says so rather than showing €0.00 — an unpriced action is the one that
+quietly empties an account.
 
 `Cost History` in the right rail shows where the money actually went. Look at it
 weekly — most people are surprised by which agent dominates.
+
+---
+
+## Distribution is the half nobody budgets for
+
+Every path above assumes someone finds the thing. That is what Social mode is
+for, and it is worth being blunt about the arithmetic: a book with no audience
+sells the same number of copies whether it took you a week or a year.
+
+The cheap, durable version is one campaign per release, three or four angles,
+posted at each platform's cadence for a fortnight. It costs cents in tokens and
+a few euros in clips. The expensive version is paid ads, which this app does
+not do and which is not where to start.
+
+Three platforms can post from here today — YouTube, Reddit and Pinterest. The
+rest are drafting-only, which means the writing is automated and the posting is
+you. That is a real limit, not a temporary one: the gates are app reviews and
+business accounts, not missing code.
 
 ---
 

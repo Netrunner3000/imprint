@@ -15,51 +15,57 @@ hasn't been done.
 
 1. [Overview](#1-overview)
 2. [Application Layout](#2-application-layout)
-3. [Left Panel — Navigation & Chat History](#3-left-panel--navigation--chat-history)
-4. [Centre Panel — Main Workspace](#4-centre-panel--main-workspace)
-   - 4.1 [Control Bar — Row 1: Tool & Command](#41-control-bar--row-1-tool--command)
-   - 4.2 [Control Bar — Row 2: Provider & Model](#42-control-bar--row-2-provider--model)
-   - 4.3 [Control Bar — Row 3: Execution Mode & API Permissions](#43-control-bar--row-3-execution-mode--api-permissions)
-   - 4.4 [Input Box](#44-input-box)
-   - 4.5 [Action Row (Buttons)](#45-action-row-buttons)
-   - 4.6 [Progress Bar & Status Label](#46-progress-bar--status-label)
-   - 4.7 [Output Box](#47-output-box)
-5. [Agents](#5-agents)
-   - 5.1 [Chat Agent](#51-chat-agent)
-   - 5.2 [Atelier Agent](#52-atelier-agent)
-   - 5.3 [Manuscript Agent](#53-manuscript-agent)
-   - 5.4 [Maestro Agent](#54-maestro-agent)
-   - 5.5 [Site Builder Agent](#55-site-builder-agent)
-   - 5.6 [Narrator Agent](#56-narrator-agent)
-   - 5.7 [Publisher Agent](#57-publisher-agent)
-   - 5.8 [Course Generator (CLI)](#58-course-generator-cli)
-6. [Tools](#6-tools)
-7. [Providers & Models](#7-providers--models)
-   - 7.1 [Ollama (Local)](#71-ollama-local)
-   - 7.2 [Anthropic (Claude)](#72-anthropic-claude)
-   - 7.3 [OpenAI](#73-openai)
-   - 7.4 [DeepSeek](#74-deepseek)
-   - 7.5 [Gemini](#75-gemini)
-8. [Routing & Execution Logic](#8-routing--execution-logic)
-9. [Validation & Permission System](#9-validation--permission-system)
-10. [Cost Tracking & Budgeting](#10-cost-tracking--budgeting)
-11. [Right Panel — System Status](#11-right-panel--system-status)
-12. [Dialogs & Popups](#12-dialogs--popups)
-    - 12.1 [Cost History](#121-cost-history)
-    - 12.2 [Run Log](#122-run-log)
-    - 12.3 [Settings](#123-settings)
-    - 12.4 [Model Guide](#124-model-guide)
-    - 12.5 [Docs](#125-docs)
-13. [Services Layer](#13-services-layer)
-14. [Database Schema](#14-database-schema)
-15. [File & Directory Structure](#15-file--directory-structure)
-16. [First-Run & Migration](#16-first-run--migration)
-17. [Configuration Reference](#17-configuration-reference)
-18. [Earning Income with Imprint](#18-earning-income-with-create--publish)
-    - 18.1 [Service-Based Income (Fiverr, Web Design, Author)](#181-service-based-income-fiverr-web-design-author)
-    - 18.2 [Recurring Revenue (Music, Audiobook, Courses)](#182-recurring-revenue-music-audiobook-courses)
-    - 18.3 [Required External Accounts & Tools](#183-required-external-accounts--tools)
-    - 18.4 [Realistic Earnings Expectations](#184-realistic-earnings-expectations)
+3. [Header Bar — Modes and Chrome](#3-header-bar--modes-and-chrome)
+4. [Left Rail — Projects](#4-left-rail--projects)
+5. [Right Rail — Spend, Budget and Utilities](#5-right-rail--spend-budget-and-utilities)
+6. [Centre Panel — Main Workspace](#6-centre-panel--main-workspace)
+   - [Control Bar — Row 1: Tool & Command](#61-control-bar--row-1-tool--command)
+   - [Control Bar — Row 2: Provider & Model](#62-control-bar--row-2-provider--model)
+   - [Control Bar — Row 3: Execution Mode & API Permissions](#63-control-bar--row-3-execution-mode--api-permissions)
+   - [Input Box](#64-input-box)
+   - [Action Row (Buttons)](#65-action-row-buttons)
+   - [Progress Bar & Status Label](#66-progress-bar--status-label)
+   - [Output Box](#67-output-box)
+7. [Agents](#7-agents)
+   - [Chat Agent](#71-chat-agent)
+   - [Atelier Agent](#72-atelier-agent)
+   - [Manuscript Agent](#73-manuscript-agent)
+   - [Maestro Agent](#74-maestro-agent)
+   - [Site Builder Agent](#75-site-builder-agent)
+   - [Narrator Agent](#76-narrator-agent)
+   - [Publisher Agent](#77-publisher-agent)
+   - [Course Generator (CLI)](#78-course-generator-cli)
+   - [Video Agent](#79-video-agent)
+   - [Social Agent](#710-social-agent)
+   - [Creator Agent](#711-creator-agent)
+8. [Tools](#8-tools)
+9. [Providers & Models](#9-providers--models)
+   - [Ollama (Local)](#91-ollama-local)
+   - [Anthropic (Claude)](#92-anthropic-claude)
+   - [OpenAI](#93-openai)
+   - [DeepSeek](#94-deepseek)
+   - [Gemini](#95-gemini)
+10. [Routing & Execution Logic](#10-routing--execution-logic)
+11. [Validation & Permission System](#11-validation--permission-system)
+12. [Cost Tracking & Budgeting](#12-cost-tracking--budgeting)
+13. [Dialogs & Popups](#13-dialogs--popups)
+   - [Cost History](#131-cost-history)
+   - [Run Log](#132-run-log)
+   - [Settings](#133-settings)
+   - [Model Guide](#134-model-guide)
+   - [Docs](#135-docs)
+14. [Services Layer](#14-services-layer)
+15. [Database Schema](#15-database-schema)
+16. [File & Directory Structure](#16-file--directory-structure)
+   - [Tests](#161-tests)
+17. [First-Run & Migration](#17-first-run--migration)
+18. [Configuration Reference](#18-configuration-reference)
+19. [Learning Centre](#19-learning-centre)
+20. [Earning Income with Imprint](#20-earning-income-with-imprint)
+   - [Service-Based Income (Fiverr, Web Design, Author)](#201-service-based-income-fiverr-web-design-author)
+   - [Recurring Revenue (Music, Audiobook, Courses)](#202-recurring-revenue-music-audiobook-courses)
+   - [Required External Accounts & Tools](#203-required-external-accounts--tools)
+   - [Realistic Earnings Expectations](#204-realistic-earnings-expectations)
 
 ---
 
@@ -134,7 +140,7 @@ one fails.
 
 ---
 
-## 3a. Left Rail — Projects
+## 4. Left Rail — Projects
 
 Agent navigation lives in the header, so the rail is projects only.
 
@@ -156,7 +162,7 @@ nothing.
 
 ---
 
-## 3b. Right Rail — Spend and Utilities
+## 5. Right Rail — Spend, Budget and Utilities
 
 **Spend** — four numbers, each over its own caption: this session, today,
 requests, last request. Hovering a stat gives the detail (session vs. today
@@ -176,12 +182,39 @@ whether it is a paid API, the provider, model and rough token count.
 change nothing, so they read as links rather than buttons.
 
 **SYSTEM · ROUTING · API KEYS** — collapsed by default. Reference material,
-wanted only when something looks wrong: machine load, how the router chose, and
-which provider keys are set.
+wanted only when something looks wrong.
+
+### Resource Monitor
+
+Under **SYSTEM**, collapsed by default. A live HTML label updated every second:
+
+| Metric | Colour coding |
+|--------|--------------|
+| RAM % and GB used/free | Green < 60%, Yellow < 85%, Red ≥ 85% |
+| CPU % | Same thresholds |
+| Swap % and GB used/total | Same thresholds |
+| Battery % and charging state | Green if charging or > 40%, Yellow > 20%, Red ≤ 20% |
+
+**Realtime Monitor** — reserved button, currently disabled.
+
+### Routing
+
+Under **ROUTING**, collapsed by default.
+
+| Label | Content |
+|-------|---------|
+| **Router** | Last routing decision: `agent · provider · model` |
+| **Recommendation** | Current recommendation from the engine, updated as you type |
+
+### API Key Status
+
+Under **API KEYS**, collapsed by default. One line per provider — OpenAI,
+DeepSeek, Kimi, Gemini, Anthropic — reading `available` or `not set` depending
+on whether the key is present in the environment.
 
 ---
 
-## 4. Centre Panel — Main Workspace
+## 6. Centre Panel — Main Workspace
 
 The centre panel contains one sub-panel per agent, mutually exclusive:
 
@@ -197,7 +230,7 @@ Below whichever sub-panel is active, the output area is always visible.
 
 ---
 
-### 4.1 Control Bar — Row 1: Tool & Command
+### 6.1 Control Bar — Row 1: Tool & Command
 
 **Tool** (combo box) — Selects the active tool. A tool defines the system prompt sent to the model before the user's message. Available tools are loaded from the database (`tools` table). Default tools are:
 
@@ -215,7 +248,7 @@ Changing the tool updates the live cost estimate and the recommendation label in
 
 ---
 
-### 4.2 Control Bar — Row 2: Provider & Model
+### 6.2 Control Bar — Row 2: Provider & Model
 
 **Provider** (combo box) — Selects the AI provider: `ollama`, `openai`, `deepseek`, or `gemini`. Changing the provider triggers `load_provider_models()` which repopulates the Model combo.
 
@@ -236,7 +269,7 @@ The last selected model for each provider is saved to `config/settings.json` and
 
 ---
 
-### 4.3 Control Bar — Row 3: Execution Mode & API Permissions
+### 6.3 Control Bar — Row 3: Execution Mode & API Permissions
 
 **Mode** (combo box) — Controls how the backend is resolved when the Send button is pressed:
 
@@ -256,7 +289,7 @@ These checkboxes are a deliberate safety mechanism. Even if the provider is sele
 
 ---
 
-### 4.4 Input Box
+### 6.4 Input Box
 
 A multi-line text field where the user types their message. The minimum height is 190 px.
 
@@ -267,7 +300,7 @@ Every change to the input box triggers two reactive updates:
 
 ---
 
-### 4.5 Action Row (Buttons)
+### 6.5 Action Row (Buttons)
 
 | Button | Function |
 |--------|----------|
@@ -281,7 +314,7 @@ Every change to the input box triggers two reactive updates:
 
 ---
 
-### 4.6 Progress Bar & Status Label
+### 6.6 Progress Bar & Status Label
 
 A progress bar and a status label appear below the action row only while a request is in progress. They are hidden otherwise.
 
@@ -297,7 +330,7 @@ The time estimate is computed from the backend, model size, and prompt length. I
 
 ---
 
-### 4.7 Output Box
+### 6.7 Output Box
 
 A read-only text area that displays the model's response, status messages, and error notices. Content is streamed token-by-token for streaming-capable backends; for non-streaming backends, the response is emitted word-by-word to give the visual impression of streaming.
 
@@ -305,11 +338,11 @@ The output box is also used by the Audiobook agent to display conversion logs an
 
 ---
 
-## 5. Agents
+## 7. Agents
 
 Imprint ships with 7 first-party GUI agents, each defined by its own Python class in `agents/` and a tailored system prompt, plus one CLI-only Course Generator with no left-panel entry at all (§5.8). The left-panel navigator groups the GUI agents into three collapsible categories — General, Creative, Gigs; clicking an agent button either loads the standard Chat panel or swaps the centre area for a fully custom GUI built for that workflow. Most agents support all of Ollama (local), Anthropic, OpenAI, DeepSeek, and Gemini — Narrator is the exception, since it only ever calls OpenAI TTS (§5.6) — and most expose a Help button that opens this documentation at the relevant section. Anthropic Claude (Sonnet or Opus) typically gives the most structured output for the writing/publishing agents; Ollama works offline at no cost; the other cloud providers are interchangeable and chosen by taste, latency, or budget.
 
-### 5.1 Chat Agent
+### 7.1 Chat Agent
 
 **Left-panel button:** Chat  (category: **General**)
 
@@ -382,7 +415,7 @@ Chat uses the **standard `normal_panel`** described in Chapter 4 (no custom GUI)
 
 ---
 
-### 5.2 Atelier Agent
+### 7.2 Atelier Agent
 
 **Left-panel button:** Client Gigs  (category: **Gigs**)
 
@@ -506,7 +539,7 @@ Live status appears as a line under the action row.
 
 ---
 
-### 5.3 Manuscript Agent
+### 7.3 Manuscript Agent
 
 **Left-panel button:** Draft  (category: **Creative**)
 
@@ -771,7 +804,7 @@ Platform format rules enforced by the Market system prompt:
 
 ---
 
-### 5.4 Maestro Agent
+### 7.4 Maestro Agent
 
 **Left-panel button:** Music  (category: **Creative**)
 
@@ -879,7 +912,7 @@ One tab per section: **Artist Profile**, **Release Setup**, **Distribution**, **
 
 ---
 
-### 5.5 Site Builder Agent
+### 7.5 Site Builder Agent
 
 **Left-panel button:** Site Builder  (category: **Creative**)
 
@@ -986,7 +1019,7 @@ The panel splits the output into HTML / CSS / JS tabs and reports responsive, fr
 
 ---
 
-### 5.6 Narrator Agent
+### 7.6 Narrator Agent
 
 **Left-panel button:** Audiobooks  (category: **Creative**)
 
@@ -1125,7 +1158,7 @@ whole feature:
 A book played to ~99% is marked finished rather than parked at the last second,
 so the next play starts over instead of resuming and stopping immediately.
 
-### 5.7 Publisher Agent
+### 7.7 Publisher Agent
 
 **Left-panel button:** Publish  (category: **Creative**)
 
@@ -1286,7 +1319,7 @@ Picks up where the Manuscript (writing studio) agent stops: real sales data, lau
 
 ---
 
-### 5.8 Course Generator (CLI)
+### 7.8 Course Generator (CLI)
 
 **No left-panel button — this one runs from the terminal, not the GUI.**
 
@@ -1323,7 +1356,7 @@ gitignored — open `index.html` in a browser to review the generated course.
 
 ---
 
-### 5.9 Video Agent
+### 7.9 Video Agent
 
 **Mode tab:** Video
 
@@ -1354,7 +1387,7 @@ standalone app appears here and vice versa. Frozen, both share
 
 ---
 
-### 5.10 Social Agent
+### 7.10 Social Agent
 
 **Mode tab:** Social
 
@@ -1400,7 +1433,7 @@ engagement bait, as a rule rather than a hope.
 
 ---
 
-### 5.11 Creator Agent
+### 7.11 Creator Agent
 
 `key: creator` · `agents/creator_agent.py` · panel `build_creator_panel()` ·
 full sheet in `docs/agents/creator.md`
@@ -1478,7 +1511,7 @@ In the US, 18 U.S.C. 2257 puts that obligation on the producer whether or not
 the tooling knows about it; keeping scans of passports in an app database would
 create a second problem rather than solve the first.
 
-## 6. Tools
+## 8. Tools
 
 Tools define the system prompt that frames the conversation. The active tool is selected from the Tool combo box in the centre panel. The system prompt is prepended to every message sent to the model.
 
@@ -1496,9 +1529,9 @@ Tools may also have a `recommended_provider` and `recommended_model` which the r
 
 ---
 
-## 7. Providers & Models
+## 9. Providers & Models
 
-### 7.1 Ollama (Local)
+### 9.1 Ollama (Local)
 
 Ollama runs locally on your machine. No API key is required, no data leaves your computer, and there is no cost.
 
@@ -1512,7 +1545,7 @@ Ollama runs locally on your machine. No API key is required, no data leaves your
 
 ---
 
-### 7.2 Anthropic (Claude)
+### 9.2 Anthropic (Claude)
 
 Requires an `ANTHROPIC_API_KEY` environment variable. Get your key at **console.anthropic.com → API Keys**.
 
@@ -1534,7 +1567,7 @@ Requires an `ANTHROPIC_API_KEY` environment variable. Get your key at **console.
 
 ---
 
-### 7.3 OpenAI
+### 9.3 OpenAI
 
 Requires an `OPENAI_API_KEY` environment variable. Get your key at **platform.openai.com → API Keys**.
 
@@ -1551,7 +1584,7 @@ Requires an `OPENAI_API_KEY` environment variable. Get your key at **platform.op
 
 ---
 
-### 7.4 DeepSeek
+### 9.4 DeepSeek
 
 Requires a `DEEPSEEK_API_KEY` environment variable. Get your key at **platform.deepseek.com**.
 
@@ -1567,7 +1600,7 @@ Requires a `DEEPSEEK_API_KEY` environment variable. Get your key at **platform.d
 
 ---
 
-### 7.5 Gemini
+### 9.5 Gemini
 
 Requires a `GOOGLE_API_KEY` environment variable. Get your key at **console.cloud.google.com**.
 
@@ -1585,7 +1618,7 @@ Requires a `GOOGLE_API_KEY` environment variable. Get your key at **console.clou
 
 ---
 
-## 8. Routing & Execution Logic
+## 10. Routing & Execution Logic
 
 ### Execution Mode
 
@@ -1623,7 +1656,7 @@ API availability is respected: if the recommended cloud API's checkbox is unchec
 
 ---
 
-## 9. Validation & Permission System
+## 11. Validation & Permission System
 
 Every request goes through `Validator.validate()` before the worker thread is started. Ten checks are evaluated in order. The first failure blocks the request and shows a descriptive message:
 
@@ -1646,7 +1679,7 @@ If any check fails, a `ValidationResult(allowed=False, reason=<explanation>)` is
 
 ---
 
-## 10. Cost Tracking & Budgeting
+## 12. Cost Tracking & Budgeting
 
 ### Cost Estimation (Pre-Request)
 
@@ -1715,76 +1748,9 @@ Budget limits are checked by the validator before each request. They are editabl
 
 ---
 
-## 11. Right Panel — System Status
+## 13. Dialogs & Popups
 
-The right panel is a vertically scrolling status board inside a **System Status** group box.
-
-### Resource Monitor
-
-A fixed-height HTML label displaying live system stats, updated every second:
-
-| Metric | Colour coding |
-|--------|--------------|
-| RAM % and GB used/free | Green < 60%, Yellow < 85%, Red ≥ 85% |
-| CPU % | Same thresholds |
-| Swap % and GB used/total | Same thresholds |
-| Battery % and charging state | Green if charging or > 40%, Yellow > 20%, Red ≤ 20% |
-
-**⚡ Realtime Monitor** — Reserved button, currently disabled. Planned for a future full resource monitor dialog.
-
-### Request & Cost Labels
-
-| Label | Content |
-|-------|---------|
-| **Router** | Last used routing decision: `agent · provider · model` |
-| **Recommendation** | Current recommendation from the engine, updates as you type |
-| **Estimated Request Cost** | Live pre-send estimate based on the current input; shows "FREE (local)" for Ollama |
-| **Last Request Cost** | Actual cost of the most recently completed request, including agent and provider |
-
-A visual divider separates the request-level labels above from the session/daily totals below.
-
-### Session & Daily Totals
-
-| Label | Content |
-|-------|---------|
-| **Session Cost** | Total cloud spend since the app was last started |
-| **Cost Today** | Total cloud spend for today, from the database |
-| **Requests Today / Session** | Request counts for the daily and session periods |
-| **Budget** | Remaining session budget and daily budget, shown as used/limit |
-
-### Budget Inputs & Controls
-
-The card heading reads **BUDGET (€)** — the euro sign lives there now, not on the two field labels, which is what let both limits share one row in a panel that's only 260px wide at its narrowest.
-
-**Session** — Editable field for the session spend ceiling, in euros.
-
-**Daily** — Editable field for the daily spend ceiling, in euros.
-
-**Save Budget Limits** — Persists the input values to the database and updates in-memory state immediately.
-
-**Reset Session Spend** — Zeroes the session accumulator without affecting the database.
-
-### Action Buttons
-
-| Button | Opens |
-|--------|-------|
-| **Cost History** | Cost History dialog (filterable, exportable CSV) |
-| **Run Log** | Run Log dialog (filterable by status and agent) |
-| **⚙ Settings** | Settings dialog (General, Agents, Tools, Pricing tabs) |
-
-### API Key Status
-
-Three read-only labels show whether each cloud API key is detected in the environment:
-
-- `OpenAI Key: ✅ available` / `❌ not set`
-- `DeepSeek Key: ✅ available` / `❌ not set`
-- `Gemini Key: ✅ available` / `❌ not set`
-
----
-
-## 12. Dialogs & Popups
-
-### 12.1 Cost History
+### 13.1 Cost History
 
 Opened by the **Cost History** button. Shows the full usage log from the `usage` table.
 
@@ -1798,7 +1764,7 @@ Opened by the **Cost History** button. Shows the full usage log from the `usage`
 
 ---
 
-### 12.2 Run Log
+### 13.2 Run Log
 
 Opened by the **Run Log** button. Shows the 500 most recent run records from the `runs` table.
 
@@ -1814,7 +1780,7 @@ Status values are colour-coded: green (success), red (error), amber (cancelled).
 
 ---
 
-### 12.3 Settings
+### 13.3 Settings
 
 Opened by the **⚙ Settings** button. A tabbed dialog with four sections.
 
@@ -1859,7 +1825,7 @@ If any field contains an invalid number, a warning lists all errors. Valid chang
 
 ---
 
-### 12.4 Model Guide
+### 13.4 Model Guide
 
 Opened by the **Model Guide** button. A four-tab reference dialog.
 
@@ -1875,13 +1841,13 @@ Opened by the **Model Guide** button. A four-tab reference dialog.
 
 ---
 
-### 12.5 Docs
+### 13.5 Docs
 
 Opened by the **Docs** button. Renders this file (`README.md`) inside a scrollable `QTextBrowser` using the `markdown` library. If the file is not found, a placeholder message is shown.
 
 ---
 
-## 13. Services Layer
+## 14. Services Layer
 
 All business logic is separated from the GUI into dedicated service classes in `services/`.
 
@@ -1923,7 +1889,7 @@ Signals:
 
 ---
 
-## 14. Database Schema
+## 15. Database Schema
 
 The SQLite database is stored at `data/imprint.db`. All tables use WAL journal mode and foreign key enforcement.
 
@@ -2022,7 +1988,7 @@ Key-value store for application settings.
 
 ---
 
-## 15. File & Directory Structure
+## 16. File & Directory Structure
 
 ```
 imprint/
@@ -2136,7 +2102,7 @@ imprint/
 
 ---
 
-### 15.1 Tests
+### 16.1 Tests
 
 ```bash
 QT_QPA_PLATFORM=offscreen python3 -m pytest tests/ -q
@@ -2178,7 +2144,7 @@ Run it after any UI move — import success is not enough. Missing imports and
 
 ---
 
-## 16. First-Run & Migration
+## 17. First-Run & Migration
 
 On the first launch, `init_db()` detects that `data/imprint.db` does not exist and runs `_migrate_from_json()`, which reads any existing JSON config files and populates the database tables:
 
@@ -2204,7 +2170,7 @@ this app doesn't build, so it can't touch one a user has since added.
 
 ---
 
-## 17. Configuration Reference
+## 18. Configuration Reference
 
 ### Environment Variables (API Keys)
 
@@ -2264,7 +2230,7 @@ The Audiobook agent reads its paths and defaults from `services/tool_runner.py`,
 
 ---
 
-## 17b. Learning Centre
+## 19. Learning Centre
 
 `ACTIONS → 🎓 Learning Centre` in the right rail opens a five-page guide
 rendered from `docs/learn/`:
@@ -2298,7 +2264,7 @@ perfectly from a source checkout.
 
 ---
 
-## 18. Earning Income with Imprint
+## 20. Earning Income with Imprint
 
 Imprint's agents are designed to produce **deliverables you can sell** — logos, websites, books, music, audiobooks, courses. This chapter is the practical, no-nonsense guide to converting agent output into income, broken down by income type.
 
@@ -2306,7 +2272,7 @@ Imprint's agents are designed to produce **deliverables you can sell** — logos
 
 ---
 
-### 18.1 Service-Based Income (Fiverr, Web Design, Author)
+### 20.1 Service-Based Income (Fiverr, Web Design, Author)
 
 Service income is the **fastest path to revenue**: you sell a deliverable, you get paid. These agents accelerate your output so you can take more orders or charge for premium work without burning hours.
 
@@ -2426,7 +2392,7 @@ Service income is the **fastest path to revenue**: you sell a deliverable, you g
 
 ---
 
-### 18.2 Recurring Revenue (Music, Audiobook, Courses)
+### 20.2 Recurring Revenue (Music, Audiobook, Courses)
 
 Recurring revenue compounds — once published, content keeps earning. These agents produce **assets that generate passive income** over months and years.
 
@@ -2537,7 +2503,7 @@ HeyGen/Synthesia per-minute avatar-video credits (skip both with
 
 ---
 
-### 18.3 Required External Accounts & Tools
+### 20.3 Required External Accounts & Tools
 
 A compact reference of everything you need for each income path.
 
@@ -2569,7 +2535,7 @@ A compact reference of everything you need for each income path.
 
 ---
 
-### 18.4 Realistic Earnings Expectations
+### 20.4 Realistic Earnings Expectations
 
 A summary of what you can realistically expect from each path, based on public data and platform averages.
 

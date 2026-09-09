@@ -26,6 +26,55 @@ sounds like a different book.
 
 ---
 
+## Launching that novel on social
+
+The book is done and on a store page. This is the part that decides whether
+anyone finds it.
+
+1. **Social → New Campaign.** Subject: the title. Subject is a: `book`. Goal:
+   what the fortnight is for — "launch week sales", not "awareness". Link: the
+   store page.
+2. **Write one post per platform, not one post.** Change `Platform` and press
+   **Write Posts** again. The prompt changes with it: what works on Reddit is
+   removed as marketing if you paste the X version into it.
+3. **Vary the angle.** `launch` once, on the day. Then `excerpt`,
+   `behind_the_scenes` and `value` for everything else. Six launch posts in a
+   row is how a feed gets muted.
+4. **Save to Schedule** after editing each batch. Two or three variants per
+   platform gives you something to rotate.
+5. **Make a Clip** for TikTok and Reels. It writes a brief, hands it to the
+   video pipeline vertically at 30 seconds, and files the mp4 against the
+   campaign. About €0.25 each.
+6. **Schedule Drafts.** Everything undated gets a date at its platform's own
+   cadence — seven a week on X, one a week on Reddit.
+7. **Work the Schedule tab.** `Post Now` where it is configured, `Copy Text`
+   and `Mark Posted` everywhere else.
+
+**Where it usually goes wrong:** posting the same text everywhere, and posting
+to Reddit more than once a week. Both are more likely to cost you the account
+than to sell a book.
+
+---
+
+## A YouTube video from a topic
+
+1. **Video → Render.** `Format: Long-form`. Type a topic, or leave it empty to
+   take the next line of `topics.txt`.
+2. Check the estimate beside the button — typically €1–2, most of it images.
+   It is charged against your caps before the run starts.
+3. **Render Video.** Eight stages, roughly ten to twenty minutes. **Stop**
+   cancels at the next stage boundary, and the part-finished build stays in the
+   Library so you can resume it.
+4. **Library tab → Play** to check it before it goes anywhere.
+5. To publish: **Social**, platform `YouTube`, write the description, then
+   `Post Now`. Uploads default to private — make it public from YouTube once
+   you have looked at it.
+
+**Where it usually goes wrong:** rendering long-form when you wanted a clip.
+`Format` is the first thing to set, not the last.
+
+---
+
 ## The same manuscript as an audiobook
 
 1. Export the finished book to a folder of supported files.
