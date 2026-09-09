@@ -2026,10 +2026,7 @@ class GodAI(QWidget):
 
         self.author_next_step_label = QLabel("")
         self.author_next_step_label.setWordWrap(True)
-        self.author_next_step_label.setStyleSheet(
-            f"background: {ACCENT_WASH}; border: 1px solid {ACCENT_LINE}; "
-            f"border-radius: 6px; padding: 8px 10px; color: {ACCENT}; font-size: 12px;"
-        )
+        self.author_next_step_label.setObjectName("NextStepBanner")
         layout.addWidget(self.author_next_step_label)
 
         # ── Book Profile (collapsed by default — persisted, injected into every mode) ──
@@ -5017,36 +5014,37 @@ class GodAI(QWidget):
         self.manuscript_panel.setObjectName("ManuscriptPanel")
         layout = QVBoxLayout(self.manuscript_panel)
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(6)
+        layout.setSpacing(MD)
 
-        # ── Top bar: period selector + refresh button ─────────────────────────
+        # ── Top bar: period selector + data actions ───────────────────────────
+        # The buttons sit on the field's baseline, not the label's, so the row
+        # reads as one line instead of a control stepping up over a caption.
         top_bar = QWidget()
+        top_bar.setObjectName("Transparent")
         tb = QHBoxLayout(top_bar)
-        tb.setContentsMargins(4, 4, 4, 4)
-        tb.setSpacing(8)
+        tb.setContentsMargins(0, 0, 0, 0)
+        tb.setSpacing(SM)
 
-        tb.addWidget(QLabel("Period:"))
-        self.manuscript_period_box = QComboBox()
-        self.manuscript_period_box.addItems(["Last 30 days", "This month", "Last 7 days", "All time"])
-        tb.addWidget(self.manuscript_period_box)
+        self.manuscript_period_box = combo(
+            ["Last 30 days", "This month", "Last 7 days", "All time"])
+        period_field = field("Period", self.manuscript_period_box)
+        period_field.setFixedWidth(180)
+        tb.addWidget(period_field)
 
-        self.manuscript_refresh_btn = QPushButton("⟳  Refresh Data")
+        self.manuscript_refresh_btn = QPushButton("Refresh Data")
         self.manuscript_refresh_btn.clicked.connect(self.manuscript_refresh)
-        tb.addWidget(self.manuscript_refresh_btn)
+        tb.addWidget(self.manuscript_refresh_btn, 0, Qt.AlignBottom)
 
         self.manuscript_ingest_btn = QPushButton("Ingest KDP CSV")
         self.manuscript_ingest_btn.clicked.connect(self.manuscript_ingest_kdp)
-        tb.addWidget(self.manuscript_ingest_btn)
+        tb.addWidget(self.manuscript_ingest_btn, 0, Qt.AlignBottom)
 
         tb.addStretch()
         layout.addWidget(top_bar)
 
         self.manuscript_next_step_label = QLabel("")
         self.manuscript_next_step_label.setWordWrap(True)
-        self.manuscript_next_step_label.setStyleSheet(
-            f"background: {ACCENT_WASH}; border: 1px solid {ACCENT_LINE}; "
-            f"border-radius: 6px; padding: 8px 10px; color: {ACCENT}; font-size: 12px;"
-        )
+        self.manuscript_next_step_label.setObjectName("NextStepBanner")
         layout.addWidget(self.manuscript_next_step_label)
 
         # ── Connections: which 3rd-party services are actually configured ─────
@@ -5080,23 +5078,23 @@ class GodAI(QWidget):
         self.manuscript_metrics_box.setPlaceholderText("Click Refresh Data to load publishing metrics…")
         splitter.addWidget(self.manuscript_metrics_box)
 
-        # Right: Q&A sidebar
+        # Right: Q&A and todos. Section labels and fields rather than a stack
+        # of "Ask about your book:" / "Provider:" / "Model:" colon captions,
+        # each of which set its own left edge.
         sidebar = QWidget()
+        sidebar.setObjectName("Transparent")
         sb = QVBoxLayout(sidebar)
-        sb.setContentsMargins(8, 4, 4, 4)
-        sb.setSpacing(6)
-        sidebar.setMinimumWidth(220)
-        sidebar.setMaximumWidth(280)
+        sb.setContentsMargins(MD, 0, 0, 0)
+        sb.setSpacing(MD)
+        sidebar.setFixedWidth(300)
 
-        sb.addWidget(QLabel("Ask about your book:"))
+        sb.addWidget(section("Ask"))
         self.manuscript_query_input = QTextEdit()
         self.manuscript_query_input.setPlaceholderText(
-            "e.g. What did I earn this month?\nWhich platform is performing best?"
-        )
-        self.manuscript_query_input.setFixedHeight(90)
+            "What did I earn this month? Which platform performs best?")
+        self.manuscript_query_input.setFixedHeight(76)
         sb.addWidget(self.manuscript_query_input)
 
-        sb.addWidget(QLabel("Provider:"))
         # No ollama: the manuscript registry row restricts providers, and a box
         # offering one the validator refuses is a dead option.
         self.manuscript_panel_base = AgentPanel(
@@ -5104,34 +5102,23 @@ class GodAI(QWidget):
             providers=("anthropic", "openai", "deepseek", "kimi", "gemini", "qwen"))
         self.manuscript_provider_box = self.manuscript_panel_base.provider_box
         self.manuscript_model_box = self.manuscript_panel_base.model_box
-        sb.addWidget(self.manuscript_provider_box)
+        sb.addWidget(field("Provider", self.manuscript_provider_box))
+        sb.addWidget(field("Model", self.manuscript_model_box))
 
-        sb.addWidget(QLabel("Model:"))
-        sb.addWidget(self.manuscript_model_box)
-
-        self.manuscript_ask_btn = QPushButton("Ask")
-        self.manuscript_ask_btn.setMinimumHeight(34)
+        self.manuscript_ask_btn = primary("Ask")
         self.manuscript_ask_btn.clicked.connect(self.manuscript_ask)
         sb.addWidget(self.manuscript_ask_btn)
 
-        sb.addStretch()
-
-        # Todos section
-        sep = QFrame()
-        sep.setFrameShape(QFrame.HLine)
-        sep.setObjectName("CardDivider")
-        sb.addWidget(sep)
-
-        sb.addWidget(QLabel("Publishing Todos:"))
+        sb.addWidget(section("Publishing todos"))
         self.manuscript_todo_list = QListWidget()
         self.manuscript_todo_list.setMinimumHeight(120)
-        sb.addWidget(self.manuscript_todo_list)
+        sb.addWidget(self.manuscript_todo_list, 1)
 
-        self.manuscript_todo_input = QLineEdit()
-        self.manuscript_todo_input.setPlaceholderText("Add todo…")
+        self.manuscript_todo_input = line_edit("Add todo…")
         sb.addWidget(self.manuscript_todo_input)
 
         todo_btn_row = QHBoxLayout()
+        todo_btn_row.setSpacing(SM)
         self.manuscript_add_todo_btn = QPushButton("Add")
         self.manuscript_add_todo_btn.clicked.connect(self.manuscript_add_todo)
         self.manuscript_done_todo_btn = QPushButton("Done")
@@ -5140,7 +5127,7 @@ class GodAI(QWidget):
         todo_btn_row.addWidget(self.manuscript_done_todo_btn)
         sb.addLayout(todo_btn_row)
 
-        splitter.addWidget(scrollable(sidebar))
+        splitter.addWidget(scrollable(sidebar, min_width=300, max_width=320))
         overview_layout.addWidget(splitter)
         self.manuscript_tabs.addTab(overview_tab, "Overview")
 
@@ -5158,7 +5145,7 @@ class GodAI(QWidget):
 
         # Status bar
         self.manuscript_status_label = QLabel("")
-        self.manuscript_status_label.setStyleSheet(f"font-size: 12px; color: {TEXT_MUTE}; padding: 2px 4px;")
+        self.manuscript_status_label.setObjectName("EstimateLine")
         layout.addWidget(self.manuscript_status_label)
 
         self.manuscript_panel.hide()
@@ -5441,7 +5428,7 @@ class GodAI(QWidget):
         process's environment — restart the app after editing .env for changes to appear).
         Services with no API at all (KDP, Draft2Digital, IngramSpark, BookBub, TikTok/IG/Pinterest)
         aren't listed here since there's nothing to check — their account-creation steps are on
-        the Publishing Todos list below (hover the ℹ️ items)."""
+        the Publishing Todos list below (hover an item for its notes)."""
         import os
 
         while self.manuscript_connections_layout.count():
@@ -5585,10 +5572,13 @@ class GodAI(QWidget):
         conn.close()
         self.manuscript_todo_list.clear()
         for row_id, title, status, platform, notes in rows:
-            check = "✅" if status == "done" else "○"
+            # A checkbox glyph pair, not emoji: ✓ and ○ share a baseline and an
+            # optical weight, so the list has one left edge. The ℹ️ that used
+            # to mark a note sat at the end of the line, at a different size,
+            # and only repeated what the tooltip already says.
+            check = "✓" if status == "done" else "○"
             tag = f"[{platform}] " if platform else ""
-            info = " ℹ️" if notes else ""
-            item = QListWidgetItem(f"{check} {tag}{title}{info}")
+            item = QListWidgetItem(f"{check}  {tag}{title}")
             item.setData(Qt.UserRole, row_id)
             if notes:
                 item.setToolTip(notes)
