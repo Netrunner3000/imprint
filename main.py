@@ -109,16 +109,23 @@ ALL_AGENTS_FILTER = "All agents"
 WORKSPACES = {
     "Write": ("author", "manuscript"),
     "Audio": ("audiobook", "music"),
+    "Video": ("video",),
     "Web": ("webdesign",),
     "Gigs": ("fiverr",),
     "Creator": ("creator",),
 }
+
+# Agents that own a dedicated `<name>_panel` rather than sharing `normal_panel`.
+# update_agent_ui walks this instead of a chain of `is_x` booleans.
+CUSTOM_PANELS = ("audiobook", "author", "manuscript", "music", "video",
+                 "fiverr", "webdesign", "creator")
 WORKSPACE_LABELS = {
     "author": "Draft",
     "manuscript": "Publish",
     "audiobook": "Audiobooks",
     "music": "Music",
     "webdesign": "Site Builder",
+    "video": "Video",
     "fiverr": "Client Gigs",
     "creator": "Creator",
 }
@@ -226,6 +233,7 @@ from services.audiobook_library import (
 )
 from ui.audio_player import AudiobookPlayer
 from ui.workers import (
+    VideoWorker,
     ChatWorker, SubprocessWorker, ModelPullWorker, FiverrImageWorker, ShortsWorker,
     HiggsfieldWorker,
 )
@@ -1653,32 +1661,13 @@ class GodAI(QWidget):
 
         center_layout.addWidget(self.normal_panel)
 
-        self.build_audiobook_panel()
-        center_layout.addWidget(self.audiobook_panel)
+        # Built from the same list update_agent_ui switches on, so an agent
+        # cannot be constructed but unreachable, or reachable but never built.
+        for _panel_name in CUSTOM_PANELS:
+            getattr(self, f"build_{_panel_name}_panel")()
+            center_layout.addWidget(getattr(self, f"{_panel_name}_panel"))
 
-        self.build_author_panel()
-        center_layout.addWidget(self.author_panel)
-
-        self.build_manuscript_panel()
-        center_layout.addWidget(self.manuscript_panel)
-
-        self.build_music_panel()
-        center_layout.addWidget(self.music_panel)
-
-        self.build_webdesign_panel()
-        center_layout.addWidget(self.webdesign_panel)
-
-        self.build_fiverr_panel()
-        center_layout.addWidget(self.fiverr_panel)
-
-        self.build_creator_panel()
-        center_layout.addWidget(self.creator_panel)
-
-        self.output_label = QLabel("OUTPUT")
-        self.output_label.setStyleSheet(
-            "font-size: 10px; font-weight: bold; color: #707070; "
-            "letter-spacing: 1.5px; padding: 6px 0 2px 0; background: transparent;"
-        )
+        self.output_label = micro("Output")
         self.output_label.hide()
         center_layout.addWidget(self.output_label)
 
@@ -3123,6 +3112,335 @@ class GodAI(QWidget):
         unit = f"{count} image{'s' if count != 1 else ''}"
         self.fiverr_cost_label.setText(
             describe(image_cost_eur(model, count), unit))
+
+    # ── Video (vidforge) ─────────────────────────────────────────────────────
+    def build_video_panel(self):
+        """Topic in, finished video out — vidforge driven in-process.
+
+        The pipeline is not vendored. `vidforge` is its own git repository
+        nested at `imprint/vidforge/`, and `services/video_studio.py` imports
+        it: one checkout, one pipeline, two front doors. See that module for
+        why a second copy would have been the worse trade.
+
+        Long-form and social clips are the same `produce()` call with different
+        numbers — the pipeline already sizes every stage from `video.width` /
+        `video.height` and the script from a target length — so Format is a
+        set of config overrides rather than a second rendering path. That is
+        what lets the Social mode ask this panel for a clip instead of growing
+        a video pipeline of its own.
+        """
+        from services import video_studio
+
+        self.video_panel = QWidget()
+        self.video_panel.setObjectName("VideoPanel")
+        outer = QVBoxLayout(self.video_panel)
+        outer.setContentsMargins(0, 0, 0, 0)
+
+        # A checkout of imprint alone has no vidforge. Explain that in place of
+        # a form that cannot work, rather than failing on the first click.
+        if not video_studio.available():
+            notice = QLabel(video_studio.unavailable_reason())
+            notice.setObjectName("EstimateLine")
+            notice.setWordWrap(True)
+            notice.setAlignment(Qt.AlignTop)
+            outer.addWidget(notice)
+            outer.addStretch()
+            self.video_panel.hide()
+            return
+
+        content = QWidget()
+        content.setObjectName("Transparent")
+        outer.addWidget(scrollable(content))
+        layout = QVBoxLayout(content)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(LG)
+
+        self.video_tabs = QTabWidget()
+
+        # ── Render tab ──────────────────────────────────────────────────
+        render_page = QWidget()
+        render_page.setObjectName("Transparent")
+        render = QVBoxLayout(render_page)
+        render.setContentsMargins(MD, MD, MD, MD)
+        render.setSpacing(LG)
+
+        render.addWidget(section("Brief"))
+
+        self.video_topic_input = line_edit(
+            "Leave empty to take the next topic from topics.txt")
+        self.video_format_box = combo(["Long-form", "Social clip"])
+        self.video_format_box.currentTextChanged.connect(self._video_format_changed)
+        self.video_aspect_box = combo(list(video_studio.ASPECTS),
+                                      video_studio.DEFAULT_ASPECT)
+        self.video_aspect_box.currentTextChanged.connect(self._video_update_estimate)
+        self.video_length_box = combo([f"{n}s" for n in video_studio.CLIP_SECONDS],
+                                      "30s")
+        self.video_length_box.currentTextChanged.connect(self._video_update_estimate)
+
+        self.video_aspect_field = field("Aspect", self.video_aspect_box)
+        self.video_length_field = field("Clip length", self.video_length_box)
+
+        brief = QGridLayout()
+        brief.setHorizontalSpacing(MD)
+        brief.setVerticalSpacing(MD)
+        brief.addWidget(field("Topic", self.video_topic_input), 0, 0, 1, 2, Qt.AlignTop)
+        brief.addWidget(field("Format", self.video_format_box), 0, 2, Qt.AlignTop)
+        brief.addWidget(self.video_aspect_field, 1, 0, Qt.AlignTop)
+        brief.addWidget(self.video_length_field, 1, 1, Qt.AlignTop)
+        for column in range(3):
+            brief.setColumnStretch(column, 1)
+        render.addLayout(brief)
+
+        # ── Actions ─────────────────────────────────────────────────────
+        actions = QHBoxLayout()
+        actions.setSpacing(SM)
+        self.video_render_btn = primary("Render Video")
+        self.video_render_btn.setMinimumWidth(160)
+        self.video_render_btn.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+        self.video_render_btn.clicked.connect(self.video_render)
+        actions.addWidget(self.video_render_btn)
+
+        self.video_folder_btn = QPushButton("Open Output Folder")
+        self.video_folder_btn.clicked.connect(
+            lambda: QDesktopServices.openUrl(
+                QUrl.fromLocalFile(str(video_studio.output_root()))))
+        actions.addWidget(self.video_folder_btn)
+
+        self.video_stop_btn = QPushButton("Stop")
+        self.video_stop_btn.setObjectName("DangerAction")
+        self.video_stop_btn.clicked.connect(self.video_stop)
+        self.video_stop_btn.hide()
+        actions.addWidget(self.video_stop_btn)
+
+        actions.addStretch()
+        self.video_cost_label = QLabel("")
+        self.video_cost_label.setObjectName("EstimateLine")
+        actions.addWidget(self.video_cost_label)
+        render.addLayout(actions)
+
+        # ── Progress ────────────────────────────────────────────────────
+        self.video_progress = QProgressBar()
+        self.video_progress.setRange(0, 100)
+        self.video_progress.setValue(0)
+        self.video_progress.setTextVisible(True)
+        render.addWidget(self.video_progress)
+
+        self.video_status_label = QLabel("Idle")
+        self.video_status_label.setObjectName("EstimateLine")
+        self.video_status_label.setWordWrap(True)
+        render.addWidget(self.video_status_label)
+
+        self.video_log = QTextEdit()
+        self.video_log.setReadOnly(True)
+        self.video_log.setPlaceholderText(
+            "The pipeline reports each stage here: script, narration, "
+            "captions, visuals, clips, audio, assembly, thumbnail.")
+        render.addWidget(self.video_log, 1)
+        self.video_tabs.addTab(render_page, "Render")
+
+        # ── Library tab ─────────────────────────────────────────────────
+        # Reads vidforge's own history, so a render started in the standalone
+        # app appears here and vice versa. One library, not two.
+        library_page = QWidget()
+        library_page.setObjectName("Transparent")
+        lib = QVBoxLayout(library_page)
+        lib.setContentsMargins(MD, MD, MD, MD)
+        lib.setSpacing(MD)
+
+        self.video_library_table = QTableWidget(0, 4)
+        self.video_library_table.setHorizontalHeaderLabels(
+            ["Title", "Created", "Length", "Status"])
+        header = self.video_library_table.horizontalHeader()
+        header.setSectionResizeMode(0, QHeaderView.Stretch)
+        for column in (1, 2, 3):
+            header.setSectionResizeMode(column, QHeaderView.ResizeToContents)
+        self.video_library_table.setEditTriggers(QTableWidget.NoEditTriggers)
+        self.video_library_table.setSelectionBehavior(QTableWidget.SelectRows)
+        self.video_library_table.verticalHeader().setVisible(False)
+        lib.addWidget(self.video_library_table, 1)
+
+        lib_actions = QHBoxLayout()
+        lib_actions.setSpacing(SM)
+        lib_actions.addStretch()
+        self.video_play_btn = QPushButton("Play")
+        self.video_play_btn.clicked.connect(self.video_play_selected)
+        lib_actions.addWidget(self.video_play_btn)
+        self.video_reveal_btn = QPushButton("Show in Finder")
+        self.video_reveal_btn.clicked.connect(self.video_reveal_selected)
+        lib_actions.addWidget(self.video_reveal_btn)
+        self.video_refresh_btn = quiet("Rescan")
+        self.video_refresh_btn.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+        self.video_refresh_btn.clicked.connect(self.refresh_video_library)
+        lib_actions.addWidget(self.video_refresh_btn)
+        lib.addLayout(lib_actions)
+        self.video_tabs.addTab(library_page, "Library")
+
+        layout.addWidget(self.video_tabs, 1)
+
+        self.video_worker = None
+        self._video_format_changed(self.video_format_box.currentText())
+        self.video_panel.hide()
+
+    # ── Video handlers ───────────────────────────────────────────────────────
+    def _video_format_changed(self, fmt: str):
+        """Clip controls only apply to a clip."""
+        is_clip = fmt == "Social clip"
+        self.video_aspect_field.setVisible(is_clip)
+        self.video_length_field.setVisible(is_clip)
+        if is_clip and self.video_aspect_box.currentText() == "Landscape 16:9":
+            self.video_aspect_box.setCurrentText("Vertical 9:16")
+        self._video_update_estimate()
+
+    def _video_overrides(self) -> dict:
+        from services import video_studio
+        if self.video_format_box.currentText() != "Social clip":
+            return {}
+        seconds = int(self.video_length_box.currentText().rstrip("s") or 30)
+        return video_studio.clip_overrides(
+            self.video_aspect_box.currentText(), seconds)
+
+    def _video_estimate(self) -> dict:
+        from services import video_studio
+        try:
+            cfg = video_studio.load_config(self._video_overrides())
+        except Exception:
+            return {}
+        return video_studio.pre_estimate(cfg)
+
+    def _video_update_estimate(self, *_args):
+        """What the run will cost, beside the button that starts it.
+
+        A render is billed per image, per character of narration and per audio
+        minute — none of which the token cost model can express. The number
+        comes from vidforge's own per-stage arithmetic and is handed to the
+        budget guard as a flat cost, so it counts against the caps rather than
+        landing as €0.00.
+        """
+        from services.per_unit_pricing import eur_per_usd
+        estimate = self._video_estimate()
+        if not estimate:
+            self.video_cost_label.setText("")
+            return
+        eur = estimate["total"] * eur_per_usd()
+        self.video_cost_label.setText(
+            f"{estimate['scenes']} scenes · ~{estimate['words']} words · "
+            f"≈ €{eur:.2f}")
+
+    def video_render(self):
+        from services import video_studio
+        from services.per_unit_pricing import eur_per_usd
+
+        if self.video_worker is not None and self.video_worker.isRunning():
+            return
+        estimate = self._video_estimate()
+        if not estimate:
+            QMessageBox.warning(self, "Video Unavailable",
+                                video_studio.unavailable_reason())
+            return
+
+        topic = self.video_topic_input.text().strip()
+        cost_eur = round(estimate["total"] * eur_per_usd(), 4)
+        if not self.authorize_request(
+                "video", "openai", "vidforge-pipeline",
+                topic or "next topic from topics.txt",
+                label=self.video_format_box.currentText().lower(),
+                flat_cost_eur=cost_eur):
+            return
+
+        self.video_log.clear()
+        self.video_progress.setValue(0)
+        self.video_status_label.setText("Starting…")
+        self.video_render_btn.setEnabled(False)
+        self.video_stop_btn.show()
+        self.video_stop_btn.setEnabled(True)
+
+        self.video_worker = VideoWorker(topic=topic,
+                                        overrides=self._video_overrides())
+        self.video_worker.stage_signal.connect(
+            lambda _key, label: self.video_status_label.setText(f"{label}…"))
+        self.video_worker.progress_signal.connect(self._video_on_progress)
+        self.video_worker.log_signal.connect(self.video_log.append)
+        self.video_worker.done_signal.connect(self._video_on_done)
+        self.video_worker.error_signal.connect(self._video_on_error)
+        self.video_worker.start()
+
+    def _video_on_progress(self, percent: int, detail: str):
+        self.video_progress.setValue(percent)
+        if detail:
+            self.video_status_label.setText(detail)
+
+    def _video_on_done(self, slug: str, path: str):
+        self.record_request("video", f"rendered {slug}")
+        self.video_status_label.setText(f"Done — {Path(path).name}")
+        self.video_render_btn.setEnabled(True)
+        self.video_stop_btn.hide()
+        self.refresh_video_library()
+
+    def _video_on_error(self, error: str):
+        # A cancelled or failed render still spent whatever it got through, but
+        # the authorised amount was for a whole video. Release it rather than
+        # bill for a video that does not exist.
+        self.abandon_request("video")
+        self.video_status_label.setText(f"[Error] {error}")
+        self.video_log.append(error)
+        self.video_render_btn.setEnabled(True)
+        self.video_stop_btn.hide()
+
+    def video_stop(self):
+        if self.video_worker is not None:
+            self.video_worker.cancel()
+            self.video_status_label.setText("Cancelling after this stage…")
+
+    def refresh_video_library(self):
+        from services import video_studio
+        if not hasattr(self, "video_library_table"):
+            return
+        entries = video_studio.library()
+        self.video_library_table.setRowCount(0)
+        from PySide6.QtWidgets import QTableWidgetItem
+        for entry in entries:
+            row = self.video_library_table.rowCount()
+            self.video_library_table.insertRow(row)
+            seconds = float(entry.get("duration_seconds") or 0)
+            length = f"{int(seconds // 60)}:{int(seconds % 60):02d}" if seconds else "—"
+            if not entry.get("complete"):
+                status = "Incomplete"
+            elif entry.get("published"):
+                status = "Published"
+            else:
+                status = "Ready"
+            values = [entry.get("title", entry.get("slug", "")),
+                      (entry.get("created") or "")[:16].replace("T", " "),
+                      length, status]
+            for column, value in enumerate(values):
+                item = QTableWidgetItem(str(value))
+                if column == 0:
+                    item.setData(Qt.UserRole, entry.get("path", ""))
+                self.video_library_table.setItem(row, column, item)
+
+    def _selected_video_path(self) -> Path | None:
+        row = self.video_library_table.currentRow()
+        if row < 0:
+            return None
+        item = self.video_library_table.item(row, 0)
+        raw = item.data(Qt.UserRole) if item else ""
+        return Path(raw) if raw else None
+
+    def video_play_selected(self):
+        path = self._selected_video_path()
+        if path and path.exists():
+            QDesktopServices.openUrl(QUrl.fromLocalFile(str(path)))
+        else:
+            QMessageBox.information(
+                self, "Not on disk",
+                "That render is in the library but its file is missing — it "
+                "was probably cancelled before the assembly stage.")
+
+    def video_reveal_selected(self):
+        path = self._selected_video_path()
+        target = path.parent if path else None
+        if target and target.exists():
+            QDesktopServices.openUrl(QUrl.fromLocalFile(str(target)))
 
     # ── Creator (subscription accounts) ──────────────────────────────────────
     def build_creator_panel(self):
@@ -6511,7 +6829,7 @@ class GodAI(QWidget):
             "chat": "Studio Assistant", "fiverr": "Client Gigs",
             "author": "Draft", "manuscript": "Publish", "music": "Music",
             "webdesign": "Site Builder", "audiobook": "Audiobooks",
-            "creator": "Creator", }
+            "creator": "Creator", "video": "Video", }
         agent_subtitles = {
             "chat":        "General-purpose conversation. Pick a tool, pick a model, talk.",
             "fiverr":      "Create client-ready logo concepts, gig listings, and polished delivery messages.",
@@ -6521,6 +6839,7 @@ class GodAI(QWidget):
             "webdesign":   "Modern HTML, CSS, and JavaScript generation with responsive layout and design advice.",
             "audiobook":   "Turn PDF, EPUB, TXT, and MOBI books into production-ready MP3 audiobooks.",
             "creator":     "Plan, draft, and schedule subscription content across accounts you hold consent for.",
+            "video":       "Script, narrate, illustrate and cut a video — long-form for YouTube or a vertical clip for social.",
             }
         if hasattr(self, "agent_title_label"):
             self.agent_title_label.setText(
@@ -6531,24 +6850,16 @@ class GodAI(QWidget):
             self.agent_status_pill.setText("●  Ready")
             self.agent_status_pill.setStyleSheet("")
 
-        is_audiobook = agent_name == "audiobook"
-        is_author = agent_name == "author"
-        is_manuscript = agent_name == "manuscript"
-        is_music = agent_name == "music"
-        is_fiverr = agent_name == "fiverr"
-        is_webdesign = agent_name == "webdesign"
-        is_creator = agent_name == "creator"
-        is_custom = (is_audiobook or is_author or is_manuscript
-                     or is_music or is_fiverr or is_webdesign or is_creator)
-
+        # One list, not a chain of `is_x` booleans repeated in two blocks.
+        # Adding an agent used to mean editing both, and forgetting one is
+        # exactly the dangling-name failure that left sentinel_ai raising
+        # NameError on every agent click.
+        is_custom = agent_name in CUSTOM_PANELS
         self.normal_panel.setVisible(not is_custom)
-        self.audiobook_panel.setVisible(is_audiobook)
-        self.author_panel.setVisible(is_author)
-        self.manuscript_panel.setVisible(is_manuscript)
-        self.music_panel.setVisible(is_music)
-        self.fiverr_panel.setVisible(is_fiverr)
-        self.creator_panel.setVisible(is_creator)
-        self.webdesign_panel.setVisible(is_webdesign)
+        for name in CUSTOM_PANELS:
+            panel = getattr(self, f"{name}_panel", None)
+            if panel is not None:
+                panel.setVisible(name == agent_name)
         # Output area only relevant for standard (non-custom) agents like Chat.
         # Within those, auto-hide if there is no content yet — keeps the UI clean.
         standard_agent_with_output = not is_custom
@@ -6557,21 +6868,21 @@ class GodAI(QWidget):
         self.output_label.setVisible(show_output)
         self.output_box.setVisible(show_output)
 
-        if is_audiobook:
+        if agent_name == "audiobook":
             self.output_label.setText("Output Log")
             self.output_box.setPlainText("[Ready] Click Start to begin.")
             self.refresh_audiobook_books()
             self.refresh_audiobook_library()
-        elif is_manuscript:
+        elif agent_name == "manuscript":
             from services.kdp_csv_parser import manuscript_seed_todos
             manuscript_seed_todos()
             self._load_manuscript_todos()
             self._refresh_next_step_tip()
-        elif is_author:
+        elif agent_name == "author":
             self._refresh_next_step_tip()
-        elif is_music or is_fiverr or is_webdesign:
-            pass
-        else:
+        elif agent_name == "video":
+            self.refresh_video_library()
+        elif not is_custom:
             self.output_label.setText("Output")
 
     def get_audiobook_defaults(self):
@@ -6640,19 +6951,70 @@ class GodAI(QWidget):
         if folder:
             self.audiobook_output_path.setText(folder)
 
+    def _audiobook_estimate(self, path: Path) -> dict | None:
+        """Real cost for converting `path`, from its actual text.
+
+        The converter has carried `load_text`, `count_text_tokens` and
+        `estimate_costs_usd` all along; the panel ignored all three and guessed
+        from the file size instead — `min(25, max(0.5, megabytes * 0.80))`,
+        a number with no relationship to what OpenAI charges. A PDF of scanned
+        images and a PDF of dense text are the same size and nothing like the
+        same price.
+        """
+        from services.narrator.converter import (
+            count_text_tokens, estimate_audio_seconds_from_text,
+            estimate_audio_tokens_from_seconds, estimate_costs_usd,
+        )
+        from services.per_unit_pricing import eur_per_usd
+
+        try:
+            text = self._audiobook_text(path)
+        except Exception:
+            return None
+        if not text.strip():
+            return None
+
+        text_tokens = count_text_tokens(text)
+        seconds = estimate_audio_seconds_from_text(text)
+        audio_tokens = estimate_audio_tokens_from_seconds(seconds)
+        usd = estimate_costs_usd(text_tokens, audio_tokens)["total_usd"]
+        return {
+            "characters": len(text),
+            "seconds": seconds,
+            "eur": round(usd * eur_per_usd(), 4),
+        }
+
+    def _audiobook_text(self, path: Path) -> str:
+        """Extracted text for `path`, cached by (path, mtime).
+
+        Extraction is the expensive part and the selection handler runs on
+        every arrow-key press, so the same book is not re-parsed each time.
+        """
+        from services.narrator.converter import load_text
+
+        key = (str(path), path.stat().st_mtime_ns)
+        cache = getattr(self, "_audiobook_text_cache", None)
+        if cache is None:
+            cache = self._audiobook_text_cache = {}
+        if key not in cache:
+            cache.clear()          # one book at a time; books are large
+            cache[key] = load_text(path)
+        return cache[key]
+
     def estimate_audiobook_cost_from_selection(self):
         item = self.audiobook_book_list.currentItem()
         if not item:
-            self.audiobook_cost_label.setText("Estimated cost: select a book first")
+            self.audiobook_cost_label.setText("Select a book")
             return
 
         path = Path(item.data(Qt.UserRole))
-        try:
-            mb = max(0.1, path.stat().st_size / (1024 * 1024))
-            rough = min(25.0, max(0.50, mb * 0.80))
-            self.audiobook_cost_label.setText(f"Estimated cost: rough €{rough:.2f}–€{rough * 1.8:.2f} (file-size estimate)")
-        except Exception:
-            self.audiobook_cost_label.setText("Estimated cost: unavailable")
+        estimate = self._audiobook_estimate(path)
+        if estimate is None:
+            self.audiobook_cost_label.setText("Cost: could not read this file")
+            return
+        minutes = estimate["seconds"] / 60
+        self.audiobook_cost_label.setText(
+            f"~{minutes:.0f} min audio · ≈ €{estimate['eur']:.2f}")
 
     def start_selected_audiobook_book(self):
         item = self.audiobook_book_list.currentItem()
@@ -6687,17 +7049,22 @@ class GodAI(QWidget):
             QMessageBox.warning(self, "Invalid Value", "Chunk tokens must be a number.")
             return
 
-        msg = QMessageBox(self)
-        msg.setWindowTitle("Confirm Audiobook Conversion")
-        msg.setText(
-            f"Start audiobook conversion?\n\n"
-            f"Book: {Path(book_path).name}\n"
-            f"Voice: {voice}\n"
-            f"Chunk tokens: {chunk_tokens}\n\n"
-            f"This uses OpenAI TTS API and may cost real money."
-        )
-        msg.setStandardButtons(QMessageBox.Yes | QMessageBox.No)
-        if msg.exec() != QMessageBox.Yes:
+        # Converting a book is a paid OpenAI call — often the most expensive
+        # single action in the app — and it went out with a hand-rolled Yes/No
+        # box instead of the guard: no budget check, no entry in the spend
+        # counters, nothing against the daily cap. Same class as the 19
+        # unguarded ChatWorker sites, and the last one left.
+        estimate = self._audiobook_estimate(Path(book_path))
+        if estimate is None:
+            QMessageBox.warning(
+                self, "Unreadable Book",
+                f"No text could be extracted from {Path(book_path).name}, so "
+                "the conversion cost cannot be estimated.")
+            return
+        if not self.authorize_request(
+                "audiobook", "openai", "gpt-4o-mini-tts",
+                f"{Path(book_path).name} · {estimate['characters']} characters",
+                label="audiobook", flat_cost_eur=estimate["eur"]):
             return
 
         config = {"input": book_path, "output": output_path, "voice": voice, "chunk_tokens": chunk_tokens}
@@ -6795,6 +7162,15 @@ class GodAI(QWidget):
         quota_hit = any(k in output_text for k in (
             "insufficient_quota", "exceeded your current quota", "Billing hard limit"))
         paused = "Conversion paused" in output_text or "⏸️" in output_text
+
+        # Close out the request authorised in start_selected_audiobook_book.
+        # A conversion that was stopped, crashed or hit the quota billed some
+        # of the book but not the amount authorised for the whole of it, so it
+        # is released rather than charged in full.
+        if success:
+            self.record_request("audiobook", "conversion complete")
+        else:
+            self.abandon_request("audiobook")
 
         if quota_hit:
             self.tool_progress.setValue(0)
