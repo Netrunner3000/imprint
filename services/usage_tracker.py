@@ -80,11 +80,26 @@ class UsageTracker:
         return round((input_usd + output_usd) * eur_per_usd, 6)
 
     def log_request(self, agent: str, backend: str, model: str,
-                    prompt_text: str, response_text: str, usage: dict | None = None) -> dict:
+                    prompt_text: str, response_text: str, usage: dict | None = None,
+                    flat_cost_eur: float | None = None) -> dict:
+        """Record one request and what it cost.
+
+        `flat_cost_eur` is for work that is **not billed per token**: an image,
+        a video render, a thousand characters of speech. The cost model here is
+        token-denominated and cannot express any of those, which is why image
+        generation, Higgsfield renders and TTS were all counting as €0.00
+        against the session and daily caps no matter how much they cost. A
+        caller that knows the real price passes it, and the token arithmetic is
+        skipped rather than fudged.
+        """
         input_tokens, output_tokens, cost_type = self.normalize_usage(usage, prompt_text, response_text)
         cached_input_tokens = int((usage or {}).get("cached_input_tokens") or 0)
-        cost_eur = self.calculate_cost_eur(
-            backend, model, input_tokens, output_tokens, cached_input_tokens)
+        if flat_cost_eur is not None:
+            cost_eur = round(float(flat_cost_eur), 6)
+            cost_type = "per_unit"
+        else:
+            cost_eur = self.calculate_cost_eur(
+                backend, model, input_tokens, output_tokens, cached_input_tokens)
         timestamp = datetime.now().isoformat(timespec="seconds")
 
         with get_connection() as conn:

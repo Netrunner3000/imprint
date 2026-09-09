@@ -3114,19 +3114,15 @@ class GodAI(QWidget):
     def _fiverr_update_estimate(self, *_args):
         """Keep the per-image estimate next to the button that spends it.
 
-        This is a display estimate only. The budget guard is denominated in
-        tokens and cannot express "one image", so image spend does not count
-        against the session or daily cap — see SUGGESTIONS.md.
+        Priced from `config/pricing.json`, the same table the budget guard now
+        reads, so what the label promises and what gets billed are one number.
         """
-        from services.openai_client import IMAGE_COST_USD
+        from services.per_unit_pricing import describe, image_cost_eur
         model = self.fiverr_image_model_box.currentText()
         count = self.fiverr_count_spin.value()
-        rate = IMAGE_COST_USD.get(model)
-        if rate is None:
-            self.fiverr_cost_label.setText(f"{count} images · cost unknown")
-            return
+        unit = f"{count} image{'s' if count != 1 else ''}"
         self.fiverr_cost_label.setText(
-            f"{count} image{'s' if count != 1 else ''} · ≈ ${rate * count:.2f}")
+            describe(image_cost_eur(model, count), unit))
 
     # ── Creator (subscription accounts) ──────────────────────────────────────
     def build_creator_panel(self):
@@ -3684,6 +3680,29 @@ class GodAI(QWidget):
             QMessageBox.warning(self, "Higgsfield Content Policy", str(exc))
             return
 
+        # A Higgsfield render is real money and, until the guard learned
+        # per-unit costs, went out with no budget check, no confirmation and no
+        # entry in the spend counters — the same class of bug as the 19
+        # unguarded ChatWorker sites, reintroduced by adding a second paid
+        # provider. It is priced per render, which the token model cannot say.
+        from services.per_unit_pricing import render_cost_eur
+        render_cost = render_cost_eur()
+        if render_cost is None:
+            proceed = QMessageBox.question(
+                self, "Render cost is not priced",
+                "Higgsfield bills per render and no rate is set, so this "
+                "render cannot be counted against your budget caps.\n\n"
+                'Set "higgsfield_render" under "per_unit_usd" in '
+                "config/pricing.json to have it billed.\n\nRender anyway?",
+                QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
+            if proceed != QMessageBox.Yes:
+                return
+        if not self.authorize_request(
+                "creator", "higgsfield", "higgsfield-video", prompt,
+                label="promo teaser",
+                flat_cost_eur=render_cost if render_cost is not None else 0.0):
+            return
+
         # Personas reuse their locked seed and reference image so successive
         # renders are the same character rather than a new one each time.
         seed = persona_seed(account["id"])
@@ -3709,6 +3728,7 @@ class GodAI(QWidget):
 
     def _creator_video_done(self, account_id: int, path: str):
         """Store the render in the media library rather than leaving it on disk."""
+        self.record_request("creator", f"teaser: {Path(path).name}")
         self._creator_store_media(account_id, path, source="higgsfield",
                                   caption="Higgsfield teaser")
         self.creator_video_btn.setEnabled(True)
@@ -3716,6 +3736,7 @@ class GodAI(QWidget):
         self.creator_refresh_media()
 
     def _creator_video_error(self, error: str):
+        self.abandon_request("creator")
         self.creator_video_btn.setEnabled(True)
         self.creator_video_status.setText(f"[Error] {error}")
 
@@ -4143,6 +4164,7 @@ class GodAI(QWidget):
         self._fiverr_pending_brief = brief
 
     def _fiverr_on_prompt_ready(self, image_prompt: str):
+        from services.per_unit_pricing import image_cost_eur
         self.record_request("fiverr", image_prompt)
         image_prompt = image_prompt.strip()
         count = self._fiverr_pending_count
@@ -4150,9 +4172,23 @@ class GodAI(QWidget):
         save_dir = DATA_DIR / "fiverr_output" / datetime.now().strftime("%Y%m%d_%H%M%S")
         self.fiverr_status_label.setText(f"Generating {count} concept(s)...")
 
+        # The images are a second paid request, billed per image rather than
+        # per token. Until the guard learned per-unit costs this ran entirely
+        # outside the budget caps.
+        image_model = self.fiverr_image_model_box.currentText()
+        image_cost = image_cost_eur(image_model, count)
+        if not self.authorize_request(
+                "fiverr", "openai", image_model,
+                f"{count} logo concepts: {image_prompt[:200]}",
+                label="logo images",
+                flat_cost_eur=image_cost if image_cost is not None else 0.0):
+            self._fiverr_reset_buttons()
+            return
+        self._fiverr_image_token = True
+
         self.fiverr_image_worker = FiverrImageWorker(
             self.openai, image_prompt, count, save_dir,
-            image_model=self.fiverr_image_model_box.currentText())
+            image_model=image_model)
         self.fiverr_image_worker.image_ready_signal.connect(self._fiverr_on_image_ready)
         self.fiverr_image_worker.all_done_signal.connect(self._fiverr_on_all_done)
         self.fiverr_image_worker.error_signal.connect(self._fiverr_on_image_error)
@@ -4183,27 +4219,34 @@ class GodAI(QWidget):
         self.fiverr_preview_status.setText(f"Concept {index + 1} ready — {Path(path).name}")
         self.fiverr_tabs.setCurrentIndex(0)
 
-    def _fiverr_on_all_done(self, paths: list):
-        self._fiverr_image_paths = paths
-        self.fiverr_status_label.setText(f"Done — {len(paths)} logo(s) generated.")
+    def _fiverr_reset_buttons(self):
+        """Back to idle. Every exit path from a run goes through here."""
         self.fiverr_generate_btn.setEnabled(True)
         self.fiverr_delivery_btn.setEnabled(True)
         self.fiverr_gig_btn.setEnabled(True)
         self.fiverr_stop_btn.setEnabled(False)
         self.fiverr_stop_btn.hide()
+
+    def _fiverr_on_all_done(self, paths: list):
+        self._fiverr_image_paths = paths
+        self.fiverr_status_label.setText(f"Done — {len(paths)} logo(s) generated.")
+        # Closes out the image request authorised in _fiverr_on_prompt_ready,
+        # billing the per-image cost it was authorised against.
+        self.record_request("fiverr", f"{len(paths)} logo images")
+        self._fiverr_reset_buttons()
         self.fiverr_save_images_btn.setEnabled(True)
         if hasattr(self, "_fiverr_order_row"):
             from PySide6.QtWidgets import QTableWidgetItem
             self.fiverr_order_table.setItem(self._fiverr_order_row, 2, QTableWidgetItem("Done"))
 
     def _fiverr_on_image_error(self, error: str):
+        # A failed render still consumed whatever it managed before failing,
+        # but the authorised amount was for the full set — release it rather
+        # than bill for images that were never produced.
+        self.abandon_request("fiverr")
         self.fiverr_status_label.setText(f"Error: {error}")
         self.fiverr_preview_status.setText(f"[Error] {error}")
-        self.fiverr_generate_btn.setEnabled(True)
-        self.fiverr_delivery_btn.setEnabled(True)
-        self.fiverr_gig_btn.setEnabled(True)
-        self.fiverr_stop_btn.setEnabled(False)
-        self.fiverr_stop_btn.hide()
+        self._fiverr_reset_buttons()
         if hasattr(self, "_fiverr_order_row"):
             from PySide6.QtWidgets import QTableWidgetItem
             self.fiverr_order_table.setItem(self._fiverr_order_row, 2, QTableWidgetItem("Error"))
@@ -4211,11 +4254,7 @@ class GodAI(QWidget):
     def _fiverr_on_text_error(self, error: str):
         self.abandon_request("fiverr")
         self.fiverr_status_label.setText(f"Error: {error}")
-        self.fiverr_generate_btn.setEnabled(True)
-        self.fiverr_delivery_btn.setEnabled(True)
-        self.fiverr_gig_btn.setEnabled(True)
-        self.fiverr_stop_btn.setEnabled(False)
-        self.fiverr_stop_btn.hide()
+        self._fiverr_reset_buttons()
 
     def fiverr_write_delivery(self):
         brief = self._fiverr_get_brief()
@@ -7072,7 +7111,8 @@ class GodAI(QWidget):
             "allow_qwen": self.allow_qwen_checkbox.isChecked(),
         }
 
-    def authorize_request(self, agent, provider, model, prompt, tool=None, label=None) -> bool:
+    def authorize_request(self, agent, provider, model, prompt, tool=None,
+                          label=None, flat_cost_eur=None) -> bool:
         """Budget-check and confirm one request. False means: do not send it.
 
         `tool` is a registry tool name and is validated as one — pass it only
@@ -7086,7 +7126,13 @@ class GodAI(QWidget):
         record_request()/abandon_request(); passing the agent name still works
         and resolves to that agent's oldest outstanding request.
         """
-        estimated_cost, approx_tokens = self.estimate_chat_cost(provider, model, prompt)
+        # `flat_cost_eur` is for work billed per unit rather than per token —
+        # an image, a video render, a minute of speech. Without it the guard
+        # prices those at zero and they slip past the caps entirely.
+        if flat_cost_eur is not None:
+            estimated_cost, approx_tokens = float(flat_cost_eur), 0
+        else:
+            estimated_cost, approx_tokens = self.estimate_chat_cost(provider, model, prompt)
 
         validation = self.validator.validate(
             agent_name=agent,
@@ -7117,6 +7163,7 @@ class GodAI(QWidget):
             "model": model,
             "prompt": prompt,
             "usage": None,
+            "flat_cost_eur": flat_cost_eur,
             "run_id": self.run_logger.start(
                 agent=agent,
                 tool=descriptor,
@@ -7171,6 +7218,7 @@ class GodAI(QWidget):
             prompt_text=context["prompt"],
             response_text=response,
             usage=context["usage"],
+            flat_cost_eur=context.get("flat_cost_eur"),
         )
 
         self.last_request_cost = entry.get("cost_eur", entry.get("estimated_cost", 0.0))

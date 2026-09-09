@@ -272,3 +272,84 @@ class HiggsfieldWorker(QThread):
             self.done_signal.emit(str(self.output_path))
         except Exception as exc:
             self.error_signal.emit(str(exc))
+
+
+class VideoWorker(QThread):
+    """Runs one vidforge render on a thread, reporting progress to Qt.
+
+    vidforge's pipeline talks to a `Reporter` rather than printing, which is
+    the seam that lets the same code drive the CLI and a progress bar. The
+    reporter is created inside `run()` because it is the thread's own object:
+    building it on the GUI thread and emitting from the worker is the usual way
+    this goes wrong.
+
+    Cancellation is cooperative and goes through the reporter — the pipeline
+    calls `raise_if_cancelled()` between stages and inside the per-scene loops,
+    so a cancelled render stops at the next checkpoint rather than being
+    killed mid-ffmpeg with a half-written file.
+    """
+
+    stage_signal = Signal(str, str)        # stage key, human label
+    progress_signal = Signal(int, str)     # 0-100 overall, detail
+    log_signal = Signal(str)
+    done_signal = Signal(str, str)         # slug, video path
+    error_signal = Signal(str)
+
+    def __init__(self, topic: str = "", overrides: dict | None = None,
+                 resume_slug: str = ""):
+        super().__init__()
+        self.topic = topic.strip()
+        self.overrides = overrides or {}
+        self.resume_slug = resume_slug.strip()
+        self._reporter = None
+        self._cancel_requested = False
+
+    def cancel(self):
+        self._cancel_requested = True
+        if self._reporter is not None:
+            self._reporter.cancel()
+
+    def run(self):
+        from services import video_studio
+
+        try:
+            base = video_studio.reporter_base()
+
+            worker = self
+
+            class QtReporter(base):
+                def on_stage(self, stage_key, detail):
+                    from services.video_studio import overall_fraction
+                    label = dict((k, l) for k, l, _ in video_studio.stages()).get(
+                        stage_key, stage_key)
+                    worker.stage_signal.emit(stage_key, label)
+                    worker.progress_signal.emit(
+                        int(overall_fraction(stage_key) * 100), detail)
+
+                def on_progress(self, stage_key, fraction, detail):
+                    from services.video_studio import overall_fraction
+                    worker.progress_signal.emit(
+                        int(overall_fraction(stage_key, fraction) * 100), detail)
+
+                def on_log(self, message):
+                    worker.log_signal.emit(message)
+
+            self._reporter = QtReporter()
+            if self._cancel_requested:      # cancelled before the thread started
+                self._reporter.cancel()
+
+            cfg = video_studio.load_config(self.overrides)
+            build = video_studio.produce(
+                cfg,
+                topic=self.topic or None,
+                resume_slug=self.resume_slug or None,
+                reporter=self._reporter,
+            )
+            self.progress_signal.emit(100, "")
+            self.done_signal.emit(build.slug, str(build.video_path))
+
+        except Exception as exc:
+            if type(exc).__name__ == "Cancelled":
+                self.error_signal.emit("Cancelled.")
+            else:
+                self.error_signal.emit(f"{type(exc).__name__}: {exc}")
