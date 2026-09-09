@@ -1472,13 +1472,11 @@ class GodAI(QWidget):
         self.provider_box = QComboBox()
         self.provider_box.addItems(["ollama", "openai", "deepseek", "kimi", "gemini", "anthropic", "qwen"])
         self.provider_box.setMinimumWidth(120)
-        top_row_2.addWidget(QLabel("Provider:"))
-        top_row_2.addWidget(self.provider_box)
+        top_row_2.addWidget(field("Provider", self.provider_box))
 
         self.model_box = QComboBox()
         self.model_box.setMinimumWidth(180)
-        top_row_2.addWidget(QLabel("Model:"))
-        top_row_2.addWidget(self.model_box)
+        top_row_2.addWidget(field("Model", self.model_box))
 
         self.refresh_models_btn = QPushButton("Refresh Models")
 
@@ -1519,8 +1517,7 @@ class GodAI(QWidget):
         self.execution_mode_box = QComboBox()
         self.execution_mode_box.addItems(["Local only", "Hybrid allowed", "Cloud only"])
         self.execution_mode_box.setMinimumWidth(120)
-        top_row_3.addWidget(QLabel("Mode:"))
-        top_row_3.addWidget(self.execution_mode_box)
+        top_row_3.addWidget(field("Mode", self.execution_mode_box))
 
         self.allow_openai_checkbox = QCheckBox("OpenAI")
         self.allow_openai_checkbox.setChecked(False)
@@ -1703,114 +1700,114 @@ class GodAI(QWidget):
             self.output_box.setVisible(False)
     
     def build_audiobook_panel(self):
+        """Convert a book to MP3, and listen to what came out.
+
+        Was three group boxes side by side. The settings box held six rows in a
+        space sized by the book list next to it, so it stretched them apart
+        with 60px of nothing between each — the emptiest screen in the app,
+        and boxed on all four sides to draw attention to it.
+        """
         self.audiobook_panel = QWidget()
-        _ab_outer = QVBoxLayout(self.audiobook_panel)
-        _ab_outer.setContentsMargins(0, 4, 0, 0)
-        _ab_outer.setSpacing(6)
+        outer = QVBoxLayout(self.audiobook_panel)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(MD)
 
         # Convert and Listen are two different jobs. The app could produce an
-        # audiobook and then had no way to play it; the Library tab is that.
+        # audiobook and then had no way to play it; the Listen tab is that.
         self.audiobook_tabs = QTabWidget()
-        _ab_outer.addWidget(self.audiobook_tabs, 1)
+        outer.addWidget(self.audiobook_tabs, 1)
 
-        _convert_page = QWidget()
-        panel_layout = QVBoxLayout(_convert_page)
-        panel_layout.setContentsMargins(0, 4, 0, 0)
-        panel_layout.setSpacing(6)
+        convert_page = QWidget()
+        convert_page.setObjectName("Transparent")
+        page = QVBoxLayout(convert_page)
+        page.setContentsMargins(MD, MD, MD, MD)
+        page.setSpacing(LG)
 
-        top_row = QHBoxLayout()
-        top_row.setSpacing(8)
-
-        books_group = QGroupBox("Select a Book to Convert")
-        books_layout = QVBoxLayout(books_group)
-        books_layout.setSpacing(4)
+        # ── Source ──────────────────────────────────────────────────────
+        page.addWidget(section("Book"))
 
         self.audiobook_book_list = QListWidget()
         self.audiobook_book_list.setMinimumHeight(150)
-        self.audiobook_book_list.currentItemChanged.connect(lambda *_: self.estimate_audiobook_cost_from_selection())
-        books_layout.addWidget(self.audiobook_book_list)
+        self.audiobook_book_list.currentItemChanged.connect(
+            lambda *_: self.estimate_audiobook_cost_from_selection())
+        page.addWidget(self.audiobook_book_list, 1)
 
-        books_btn_row = QHBoxLayout()
-        books_btn_row.setSpacing(6)
+        # ── Settings ────────────────────────────────────────────────────
+        page.addWidget(section("Conversion settings"))
+
+        self.audiobook_input_path = QLineEdit()
+        self.audiobook_input_path.setReadOnly(True)
+        self.audiobook_open_input_btn = QPushButton("Open")
+        self.audiobook_open_input_btn.setFixedWidth(96)
+        self.audiobook_open_input_btn.clicked.connect(self.open_audiobook_input_folder)
+
+        self.audiobook_output_path = QLineEdit()
+        self.audiobook_output_path.setReadOnly(True)
+        self.audiobook_change_output_btn = QPushButton("Change")
+        self.audiobook_change_output_btn.setFixedWidth(96)
+        self.audiobook_change_output_btn.clicked.connect(self.change_audiobook_output_folder)
+
+        folders = QGridLayout()
+        folders.setHorizontalSpacing(SM)
+        folders.setVerticalSpacing(MD)
+        folders.addWidget(field("Input folder", self.audiobook_input_path), 0, 0, Qt.AlignTop)
+        folders.addWidget(self.audiobook_open_input_btn, 0, 1, Qt.AlignBottom)
+        folders.addWidget(field("Output folder", self.audiobook_output_path), 1, 0, Qt.AlignTop)
+        folders.addWidget(self.audiobook_change_output_btn, 1, 1, Qt.AlignBottom)
+        folders.setColumnStretch(0, 1)
+        page.addLayout(folders)
+
+        self.audiobook_voice_box = combo(
+            ["alloy", "verse", "aria", "coral", "sage"])
+        self.audiobook_chunk_input = line_edit("1400", "1400")
+
+        options = QGridLayout()
+        options.setHorizontalSpacing(MD)
+        options.setVerticalSpacing(MD)
+        options.addWidget(field("Voice", self.audiobook_voice_box), 0, 0, Qt.AlignTop)
+        options.addWidget(field("Chunk tokens", self.audiobook_chunk_input), 0, 1, Qt.AlignTop)
+        for column in range(3):
+            options.setColumnStretch(column, 1)
+        page.addLayout(options)
+
+        # ── Actions ─────────────────────────────────────────────────────
+        actions = QHBoxLayout()
+        actions.setSpacing(SM)
+        self.audiobook_start_btn = primary("Start")
+        self.audiobook_start_btn.setMinimumWidth(160)
+        self.audiobook_start_btn.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+        self.audiobook_start_btn.clicked.connect(self.start_selected_audiobook_book)
+        actions.addWidget(self.audiobook_start_btn)
 
         self.audiobook_refresh_btn = QPushButton("Refresh List")
         self.audiobook_refresh_btn.clicked.connect(self.refresh_audiobook_books)
-        books_btn_row.addWidget(self.audiobook_refresh_btn)
-
-        books_btn_row.addStretch()
+        actions.addWidget(self.audiobook_refresh_btn)
 
         self.stop_btn = QPushButton("Stop")
-        self.stop_btn.clicked.connect(self.stop_current_task)
-        self.stop_btn.setEnabled(False)
         self.stop_btn.setObjectName("DangerAction")
-        books_btn_row.addWidget(self.stop_btn)
+        self.stop_btn.clicked.connect(self.stop_current_task)
+        self.stop_btn.hide()
+        actions.addWidget(self.stop_btn)
 
-        self.audiobook_start_btn = QPushButton("Start")
-        self.audiobook_start_btn.clicked.connect(self.start_selected_audiobook_book)
-        self.audiobook_start_btn.setMinimumWidth(130)
-        self.audiobook_start_btn.setObjectName("PrimaryAction")
-        books_btn_row.addWidget(self.audiobook_start_btn)
-        books_layout.addLayout(books_btn_row)
-
-        settings_group = QGroupBox("Conversion Settings")
-        settings_layout = QGridLayout(settings_group)
-        settings_layout.setVerticalSpacing(4)
-        settings_layout.setHorizontalSpacing(6)
-
-        settings_layout.addWidget(QLabel("Input Folder:"), 0, 0, 1, 2)
-        self.audiobook_input_path = QLineEdit()
-        self.audiobook_input_path.setReadOnly(True)
-        settings_layout.addWidget(self.audiobook_input_path, 1, 0)
-
-        self.audiobook_open_input_btn = QPushButton("Open")
-        self.audiobook_open_input_btn.clicked.connect(self.open_audiobook_input_folder)
-        settings_layout.addWidget(self.audiobook_open_input_btn, 1, 1)
-
-        settings_layout.addWidget(QLabel("Output Folder:"), 2, 0, 1, 2)
-        self.audiobook_output_path = QLineEdit()
-        self.audiobook_output_path.setReadOnly(True)
-        settings_layout.addWidget(self.audiobook_output_path, 3, 0)
-
-        self.audiobook_change_output_btn = QPushButton("Change")
-        self.audiobook_change_output_btn.clicked.connect(self.change_audiobook_output_folder)
-        settings_layout.addWidget(self.audiobook_change_output_btn, 3, 1)
-
-        voice_chunk_row = QHBoxLayout()
-        voice_chunk_row.setSpacing(8)
-        voice_chunk_row.addWidget(QLabel("Voice:"))
-        self.audiobook_voice_box = QComboBox()
-        self.audiobook_voice_box.addItems(["alloy", "verse", "aria", "coral", "sage"])
-        voice_chunk_row.addWidget(self.audiobook_voice_box)
-        voice_chunk_row.addWidget(QLabel("Chunk Tokens:"))
-        self.audiobook_chunk_input = QLineEdit("1400")
-        self.audiobook_chunk_input.setMaximumWidth(80)
-        voice_chunk_row.addWidget(self.audiobook_chunk_input)
-        settings_layout.addLayout(voice_chunk_row, 4, 0, 1, 2)
-
+        actions.addStretch()
         self.audiobook_cost_label = QLabel("Estimated cost: not calculated")
-        self.audiobook_cost_label.setWordWrap(True)
-        settings_layout.addWidget(self.audiobook_cost_label, 5, 0, 1, 2)
+        self.audiobook_cost_label.setObjectName("EstimateLine")
+        actions.addWidget(self.audiobook_cost_label)
+        page.addLayout(actions)
 
-        top_row.addWidget(books_group, 1)
-        top_row.addWidget(settings_group, 1)
-        panel_layout.addLayout(top_row)
-
-        progress_group = QGroupBox("Progress")
-        progress_layout = QVBoxLayout(progress_group)
-        progress_layout.setSpacing(4)
-
+        # ── Progress ────────────────────────────────────────────────────
         self.tool_progress = QProgressBar()
-        self.tool_progress.setMinimum(0)
-        self.tool_progress.setMaximum(100)
+        self.tool_progress.setRange(0, 100)
         self.tool_progress.setValue(0)
         self.tool_progress.setTextVisible(True)
-        progress_layout.addWidget(self.tool_progress)
+        page.addWidget(self.tool_progress)
 
         self.audiobook_status_label = QLabel("[Ready] Select a book and click Start.")
-        progress_layout.addWidget(self.audiobook_status_label)
+        self.audiobook_status_label.setObjectName("EstimateLine")
+        self.audiobook_status_label.setWordWrap(True)
+        page.addWidget(self.audiobook_status_label)
 
-        panel_layout.addWidget(progress_group)
-        self.audiobook_tabs.addTab(_convert_page, "Convert")
+        self.audiobook_tabs.addTab(convert_page, "Convert")
         self.audiobook_tabs.addTab(self._build_audiobook_library_tab(), "Listen")
         self.audiobook_panel.hide()
 
@@ -1822,7 +1819,7 @@ class GodAI(QWidget):
         layout.setSpacing(8)
 
         header = QHBoxLayout()
-        header.addWidget(QLabel("Audiobooks in your output folder:"))
+        header.addWidget(section("Audiobooks in your output folder"))
         header.addStretch()
         self.audiobook_refresh_btn = QPushButton("Rescan")
         self.audiobook_refresh_btn.setObjectName("ChipBtn")
@@ -2036,40 +2033,36 @@ class GodAI(QWidget):
         pr1 = QHBoxLayout(profile_row1)
         pr1.setContentsMargins(4, 0, 4, 0)
         pr1.setSpacing(8)
-        pr1.addWidget(QLabel("Hook:"))
         self.author_profile_hook_input = QLineEdit()
         self.author_profile_hook_input.setPlaceholderText("One-sentence pitch — the core promise of the book…")
-        pr1.addWidget(self.author_profile_hook_input)
+        pr1.addWidget(field("Hook", self.author_profile_hook_input))
         profile_section.addWidget(profile_row1)
 
         profile_row2 = QWidget()
         pr2 = QHBoxLayout(profile_row2)
         pr2.setContentsMargins(4, 0, 4, 0)
         pr2.setSpacing(8)
-        pr2.addWidget(QLabel("Target reader:"))
         self.author_profile_reader_input = QLineEdit()
         self.author_profile_reader_input.setPlaceholderText("e.g. Women 25-40 navigating modern dating apps")
-        pr2.addWidget(self.author_profile_reader_input)
+        pr2.addWidget(field("Target reader", self.author_profile_reader_input))
         profile_section.addWidget(profile_row2)
 
         profile_row3 = QWidget()
         pr3 = QHBoxLayout(profile_row3)
         pr3.setContentsMargins(4, 0, 4, 0)
         pr3.setSpacing(8)
-        pr3.addWidget(QLabel("Comp titles:"))
         self.author_profile_comps_input = QLineEdit()
         self.author_profile_comps_input.setPlaceholderText("e.g. For readers of [Title A] and [Title B]")
-        pr3.addWidget(self.author_profile_comps_input)
+        pr3.addWidget(field("Comp titles", self.author_profile_comps_input))
         profile_section.addWidget(profile_row3)
 
         profile_row4 = QWidget()
         pr4 = QHBoxLayout(profile_row4)
         pr4.setContentsMargins(4, 0, 4, 0)
         pr4.setSpacing(8)
-        pr4.addWidget(QLabel("Publishing path:"))
         self.author_profile_path_box = QComboBox()
         self.author_profile_path_box.addItems(["Undecided", "Self-Publishing (KDP)", "Traditional"])
-        pr4.addWidget(self.author_profile_path_box)
+        pr4.addWidget(field("Publishing path", self.author_profile_path_box))
         pr4.addStretch()
         self.author_profile_save_btn = QPushButton("Save Profile")
         self.author_profile_save_btn.clicked.connect(self.author_save_profile)
@@ -2222,10 +2215,9 @@ class GodAI(QWidget):
         self.author_save_btn.clicked.connect(self.author_save)
         sb.addWidget(self.author_save_btn)
 
-        sb.addWidget(QLabel("Author name (for export):"))
         self.author_export_author_input = QLineEdit()
         self.author_export_author_input.setPlaceholderText("e.g. Celeste Morgan")
-        sb.addWidget(self.author_export_author_input)
+        sb.addWidget(field("Author name (for export)", self.author_export_author_input))
 
         # FlowLayout: a QHBoxLayout here reports combo + button as its minimum
         # width (276px) and pinned the whole sidebar wider than its pane, which
@@ -2326,34 +2318,29 @@ class GodAI(QWidget):
         pc.setContentsMargins(6, 0, 0, 0)
         pc.setSpacing(5)
 
-        pc.addWidget(QLabel("Output Type:"))
         self.author_pub_type_box = QComboBox()
         self.author_pub_type_box.addItems([
             "Synopsis — 1 Page", "Synopsis — 3 Page", "Query Letter",
             "Book Proposal", "Back-Cover Blurb", "Author Bio", "Chapter Breakdown",
         ])
-        pc.addWidget(self.author_pub_type_box)
+        pc.addWidget(field("Output Type", self.author_pub_type_box))
 
-        pc.addWidget(QLabel("Word Count Target:"))
         self.author_pub_wordcount_input = QLineEdit()
         self.author_pub_wordcount_input.setPlaceholderText("e.g. 80,000")
-        pc.addWidget(self.author_pub_wordcount_input)
+        pc.addWidget(field("Word Count Target", self.author_pub_wordcount_input))
 
-        pc.addWidget(QLabel("Comp Titles:"))
         self.author_pub_comps_input = QLineEdit()
         self.author_pub_comps_input.setPlaceholderText("e.g. Gone Girl meets Dark Places")
-        pc.addWidget(self.author_pub_comps_input)
+        pc.addWidget(field("Comp Titles", self.author_pub_comps_input))
 
-        pc.addWidget(QLabel("Pitch Tone:"))
         self.author_pub_pitch_tone_box = QComboBox()
         self.author_pub_pitch_tone_box.addItems(["Professional", "Conversational", "High-Concept"])
-        pc.addWidget(self.author_pub_pitch_tone_box)
+        pc.addWidget(field("Pitch Tone", self.author_pub_pitch_tone_box))
 
-        pc.addWidget(QLabel("Extra Notes:"))
         self.author_pub_notes_input = QTextEdit()
         self.author_pub_notes_input.setPlaceholderText("Target audience, themes, hook, extra context…")
         self.author_pub_notes_input.setFixedHeight(65)
-        pc.addWidget(self.author_pub_notes_input)
+        pc.addWidget(field("Extra Notes", self.author_pub_notes_input))
 
         pc.addStretch()
 
@@ -2401,7 +2388,6 @@ class GodAI(QWidget):
         mc.setContentsMargins(6, 0, 0, 0)
         mc.setSpacing(5)
 
-        mc.addWidget(QLabel("Platform:"))
         self.author_mkt_platform_box = QComboBox()
         self.author_mkt_platform_box.addItems([
             "Amazon Description", "KDP Listing", "Goodreads Blurb", "Instagram Post",
@@ -2409,28 +2395,24 @@ class GodAI(QWidget):
             "YouTube Description", "Newsletter", "Press Release", "Book Club Questions",
             "ARC Outreach Email", "Launch Team Email", "Podcast Pitch", "Author Website Bio",
         ])
-        mc.addWidget(self.author_mkt_platform_box)
+        mc.addWidget(field("Platform", self.author_mkt_platform_box))
 
-        mc.addWidget(QLabel("Hook / Logline:"))
         self.author_mkt_hook_input = QLineEdit()
         self.author_mkt_hook_input.setPlaceholderText("One sentence that sells the book")
-        mc.addWidget(self.author_mkt_hook_input)
+        mc.addWidget(field("Hook / Logline", self.author_mkt_hook_input))
 
-        mc.addWidget(QLabel("Comp Titles:"))
         self.author_mkt_comps_input = QLineEdit()
         self.author_mkt_comps_input.setPlaceholderText("e.g. Reaper's Creek meets Harlan Coben")
-        mc.addWidget(self.author_mkt_comps_input)
+        mc.addWidget(field("Comp Titles", self.author_mkt_comps_input))
 
-        mc.addWidget(QLabel("Tone:"))
         self.author_mkt_tone_box = QComboBox()
         self.author_mkt_tone_box.addItems(["Punchy", "Literary", "Warm", "Hype", "Mysterious"])
-        mc.addWidget(self.author_mkt_tone_box)
+        mc.addWidget(field("Tone", self.author_mkt_tone_box))
 
-        mc.addWidget(QLabel("Extra Notes:"))
         self.author_mkt_notes_input = QTextEdit()
         self.author_mkt_notes_input.setPlaceholderText("Target audience, mood, key themes…")
         self.author_mkt_notes_input.setFixedHeight(65)
-        mc.addWidget(self.author_mkt_notes_input)
+        mc.addWidget(field("Extra Notes", self.author_mkt_notes_input))
 
         mc.addStretch()
 
@@ -5156,13 +5138,12 @@ class GodAI(QWidget):
         layout.setContentsMargins(8, 8, 8, 8)
         layout.setSpacing(8)
 
-        layout.addWidget(QLabel("Manuscript text:"))
         self.quote_finder_text = QTextEdit()
         self.quote_finder_text.setPlaceholderText(
             "Paste a chapter or excerpt here, or load a file below…"
         )
         self.quote_finder_text.setFixedHeight(140)
-        layout.addWidget(self.quote_finder_text)
+        layout.addWidget(field("Manuscript text", self.quote_finder_text))
 
         load_row = QHBoxLayout()
         self.quote_finder_load_btn = QPushButton("Load File…")
@@ -5174,28 +5155,24 @@ class GodAI(QWidget):
 
         settings_row_container = QWidget()
         settings_row = FlowLayout(settings_row_container, spacing=6)
-        settings_row.addWidget(QLabel("Quotes:"))
         self.quote_finder_count_box = QComboBox()
         self.quote_finder_count_box.addItems(["5", "10", "15", "20"])
         self.quote_finder_count_box.setCurrentText("10")
-        settings_row.addWidget(self.quote_finder_count_box)
+        settings_row.addWidget(field("Quotes", self.quote_finder_count_box))
 
-        settings_row.addWidget(QLabel("Theme:"))
         self.quote_finder_theme_box = make_theme_box()
-        settings_row.addWidget(self.quote_finder_theme_box)
+        settings_row.addWidget(field("Theme", self.quote_finder_theme_box))
 
-        settings_row.addWidget(QLabel("Voice:"))
         self.quote_finder_voice_source_box = make_voice_source_box()
         self.quote_finder_voice_source_box.currentTextChanged.connect(self.quote_finder_load_voices)
-        settings_row.addWidget(self.quote_finder_voice_source_box)
+        settings_row.addWidget(field("Voice", self.quote_finder_voice_source_box))
 
         self.quote_finder_voice_box = QComboBox()
         settings_row.addWidget(self.quote_finder_voice_box)
 
-        settings_row.addWidget(QLabel("Attribution:"))
         self.quote_finder_attribution = QLineEdit()
         self.quote_finder_attribution.setPlaceholderText("You Don't Chase")
-        settings_row.addWidget(self.quote_finder_attribution)
+        settings_row.addWidget(field("Attribution", self.quote_finder_attribution))
 
         layout.addWidget(settings_row_container)
 
@@ -5225,24 +5202,20 @@ class GodAI(QWidget):
         cl.setSpacing(6)
         controls.setMaximumWidth(280)
 
-        cl.addWidget(QLabel("Quote:"))
         self.quote_graphic_text = QTextEdit()
         self.quote_graphic_text.setPlaceholderText("You over-text. You explain yourself. You wait.")
         self.quote_graphic_text.setFixedHeight(90)
-        cl.addWidget(self.quote_graphic_text)
+        cl.addWidget(field("Quote", self.quote_graphic_text))
 
-        cl.addWidget(QLabel("Attribution (optional):"))
         self.quote_graphic_attribution = QLineEdit()
         self.quote_graphic_attribution.setPlaceholderText("You Don't Chase")
-        cl.addWidget(self.quote_graphic_attribution)
+        cl.addWidget(field("Attribution (optional)", self.quote_graphic_attribution))
 
-        cl.addWidget(QLabel("Theme:"))
         self.quote_graphic_theme_box = make_theme_box()
-        cl.addWidget(self.quote_graphic_theme_box)
+        cl.addWidget(field("Theme", self.quote_graphic_theme_box))
 
-        cl.addWidget(QLabel("Size:"))
         self.quote_graphic_size_box = make_size_box()
-        cl.addWidget(self.quote_graphic_size_box)
+        cl.addWidget(field("Size", self.quote_graphic_size_box))
 
         self.quote_graphic_generate_btn = QPushButton("Generate Graphic")
         self.quote_graphic_generate_btn.setMinimumHeight(34)
@@ -5278,25 +5251,21 @@ class GodAI(QWidget):
         cl.setSpacing(6)
         controls.setMaximumWidth(280)
 
-        cl.addWidget(QLabel("Quote (also narrated):"))
         self.shorts_quote_text = QTextEdit()
         self.shorts_quote_text.setPlaceholderText("You over-text. You explain yourself. You wait.")
         self.shorts_quote_text.setFixedHeight(90)
-        cl.addWidget(self.shorts_quote_text)
+        cl.addWidget(field("Quote (also narrated)", self.shorts_quote_text))
 
-        cl.addWidget(QLabel("Attribution (optional):"))
         self.shorts_attribution = QLineEdit()
         self.shorts_attribution.setPlaceholderText("You Don't Chase")
-        cl.addWidget(self.shorts_attribution)
+        cl.addWidget(field("Attribution (optional)", self.shorts_attribution))
 
-        cl.addWidget(QLabel("Theme:"))
         self.shorts_theme_box = make_theme_box()
-        cl.addWidget(self.shorts_theme_box)
+        cl.addWidget(field("Theme", self.shorts_theme_box))
 
-        cl.addWidget(QLabel("Voice source:"))
         self.shorts_voice_source_box = make_voice_source_box()
         self.shorts_voice_source_box.currentTextChanged.connect(self.shorts_load_voices)
-        cl.addWidget(self.shorts_voice_source_box)
+        cl.addWidget(field("Voice source", self.shorts_voice_source_box))
 
         self.shorts_voice_box = QComboBox()
         cl.addWidget(self.shorts_voice_box)
@@ -5345,49 +5314,52 @@ class GodAI(QWidget):
         ))
 
         settings_row = QHBoxLayout()
-        settings_row.addWidget(QLabel("Weeks:"))
         self.calendar_weeks_box = QComboBox()
         self.calendar_weeks_box.addItems(["1", "2", "4"])
-        settings_row.addWidget(self.calendar_weeks_box)
+        settings_row.addWidget(field("Weeks", self.calendar_weeks_box))
 
-        settings_row.addWidget(QLabel("Start:"))
         self.calendar_start_date = QDateEdit()
         self.calendar_start_date.setDate(QDate.currentDate())
         self.calendar_start_date.setCalendarPopup(True)
-        settings_row.addWidget(self.calendar_start_date)
+        settings_row.addWidget(field("Start", self.calendar_start_date))
 
+        # Grouped under one caption and pinned to the controls' baseline: bare
+        # checkboxes in a row of label-above-input fields otherwise float a
+        # label's height above everything beside them.
+        platforms = QHBoxLayout()
+        platforms.setContentsMargins(0, 0, 0, 0)
+        platforms.setSpacing(MD)
         self.calendar_tiktok_check = QCheckBox("TikTok")
         self.calendar_tiktok_check.setChecked(True)
-        settings_row.addWidget(self.calendar_tiktok_check)
-
         self.calendar_instagram_check = QCheckBox("Instagram")
         self.calendar_instagram_check.setChecked(True)
-        settings_row.addWidget(self.calendar_instagram_check)
-
         self.calendar_pinterest_check = QCheckBox("Pinterest")
         self.calendar_pinterest_check.setChecked(True)
-        settings_row.addWidget(self.calendar_pinterest_check)
+        for check in (self.calendar_tiktok_check, self.calendar_instagram_check,
+                      self.calendar_pinterest_check):
+            platforms.addWidget(check)
+        platform_box = QWidget()
+        platform_box.setObjectName("Transparent")
+        platform_box.setLayout(platforms)
+        settings_row.addWidget(field("Platforms", platform_box))
 
         settings_row.addStretch()
         layout.addLayout(settings_row)
 
         settings_row2 = QHBoxLayout()
-        settings_row2.addWidget(QLabel("Theme:"))
         self.calendar_theme_box = make_theme_box()
-        settings_row2.addWidget(self.calendar_theme_box)
+        settings_row2.addWidget(field("Theme", self.calendar_theme_box))
 
-        settings_row2.addWidget(QLabel("Voice:"))
         self.calendar_voice_source_box = make_voice_source_box()
         self.calendar_voice_source_box.currentTextChanged.connect(self.calendar_load_voices)
-        settings_row2.addWidget(self.calendar_voice_source_box)
+        settings_row2.addWidget(field("Voice", self.calendar_voice_source_box))
 
         self.calendar_voice_box = QComboBox()
-        settings_row2.addWidget(self.calendar_voice_box)
+        settings_row2.addWidget(field("Narrator", self.calendar_voice_box))
 
-        settings_row2.addWidget(QLabel("Attribution:"))
         self.calendar_attribution = QLineEdit()
         self.calendar_attribution.setPlaceholderText("You Don't Chase")
-        settings_row2.addWidget(self.calendar_attribution)
+        settings_row2.addWidget(field("Attribution", self.calendar_attribution))
 
         settings_row2.addStretch()
         layout.addLayout(settings_row2)
@@ -6686,6 +6658,7 @@ class GodAI(QWidget):
     def run_audiobook_live(self, config):
         self.tool_progress.setValue(0)
         self.stop_btn.setEnabled(True)
+        self.stop_btn.show()
         self.audiobook_start_btn.setEnabled(False)
         self.audiobook_refresh_btn.setEnabled(False)
 
@@ -6729,6 +6702,7 @@ class GodAI(QWidget):
         }.get(error, "The converter process encountered an unknown error.")
 
         self.stop_btn.setEnabled(False)
+        self.stop_btn.hide()
         self.audiobook_start_btn.setEnabled(True)
         self.audiobook_refresh_btn.setEnabled(True)
         self.tool_progress.setValue(0)
@@ -6755,6 +6729,7 @@ class GodAI(QWidget):
 
     def handle_audiobook_finished(self):
         self.stop_btn.setEnabled(False)
+        self.stop_btn.hide()
         self.audiobook_start_btn.setEnabled(True)
         self.audiobook_refresh_btn.setEnabled(True)
 
@@ -7437,6 +7412,7 @@ class GodAI(QWidget):
                 stopped = True
 
         self.stop_btn.setEnabled(False)
+        self.stop_btn.hide()
         self.audiobook_start_btn.setEnabled(True)
         self.audiobook_refresh_btn.setEnabled(True)
 
