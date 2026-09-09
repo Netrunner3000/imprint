@@ -24,6 +24,8 @@ previous widget ended.
 
 from __future__ import annotations
 
+from PySide6.QtCore import Qt
+
 from PySide6.QtWidgets import (
     QComboBox, QFrame, QGridLayout, QHBoxLayout, QLabel, QLineEdit,
     QProgressBar, QPushButton, QSizePolicy, QVBoxLayout, QWidget,
@@ -88,7 +90,8 @@ def form_grid(pairs: list[tuple[str, QWidget]], *, columns: int = 3) -> QGridLay
     grid.setHorizontalSpacing(MD)
     grid.setVerticalSpacing(MD)
     for index, (label, widget) in enumerate(pairs):
-        grid.addWidget(field(label, widget), index // columns, index % columns)
+        grid.addWidget(field(label, widget), index // columns, index % columns,
+                       Qt.AlignTop)
     for column in range(columns):
         grid.setColumnStretch(column, 1)
     return grid

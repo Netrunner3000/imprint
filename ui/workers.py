@@ -11,6 +11,8 @@ from pathlib import Path
 
 from PySide6.QtCore import QThread, Signal
 
+from services.openai_client import DEFAULT_IMAGE_MODEL
+
 
 class ChatWorker(QThread):
     token_signal = Signal(str)
@@ -146,25 +148,26 @@ class ModelPullWorker(QThread):
 
 
 class FiverrImageWorker(QThread):
-    """Downloads and saves DALL-E 3 generated logo images."""
+    """Generates and saves logo images, one concept at a time."""
     image_ready_signal = Signal(str, int)   # local_path, index
     all_done_signal = Signal(list)           # all local paths
     error_signal = Signal(str)
     status_signal = Signal(str)
 
-    def __init__(self, openai_client, image_prompt: str, count: int, save_dir: Path):
+    def __init__(self, openai_client, image_prompt: str, count: int,
+                 save_dir: Path, image_model: str = DEFAULT_IMAGE_MODEL):
         super().__init__()
         self.openai_client = openai_client
         self.image_prompt = image_prompt
         self.count = count
         self.save_dir = save_dir
+        self.image_model = image_model
         self._cancel_requested = False
 
     def cancel(self):
         self._cancel_requested = True
 
     def run(self):
-        import urllib.request
         self.save_dir.mkdir(parents=True, exist_ok=True)
         paths = []
         for i in range(self.count):
@@ -173,9 +176,12 @@ class FiverrImageWorker(QThread):
                 return
             try:
                 self.status_signal.emit(f"Generating concept {i + 1} of {self.count}...")
-                url = self.openai_client.generate_image(self.image_prompt)
+                # The client returns bytes for both image models; only dall-e-3
+                # has a URL to download from, and it expires.
+                data = self.openai_client.generate_image(
+                    self.image_prompt, model=self.image_model)
                 local_path = self.save_dir / f"logo_{i + 1}.png"
-                urllib.request.urlretrieve(url, str(local_path))
+                local_path.write_bytes(data)
                 paths.append(str(local_path))
                 self.image_ready_signal.emit(str(local_path), i)
             except Exception as e:

@@ -89,6 +89,15 @@ GLOBAL_STYLESHEET = f"""
             border: 1px solid {ACCENT_LINE};
         }}
 
+        QSpinBox, QDoubleSpinBox {{
+            background-color: {SUNKEN};
+            color: {TEXT};
+            border: 1px solid {BORDER};
+            border-radius: {RADIUS_SM};
+            padding: 7px 10px;
+        }}
+        QSpinBox:focus, QDoubleSpinBox:focus {{ border: 1px solid {ACCENT_LINE}; }}
+
         QLineEdit {{
             background-color: {SUNKEN};
             color: {TEXT};
@@ -552,7 +561,14 @@ GLOBAL_STYLESHEET = f"""
         }}
         /* One height for every single-line control, so a row of mixed inputs
            and buttons sits on a line instead of stepping. */
-        QLineEdit, QComboBox, QPushButton {{ min-height: 32px; }}
+        /* One control height, enforced. Qt stylesheet min/max-height apply to
+           the *content* box, so each rule subtracts its own padding and border
+           to land on the same 44px total. Left to their natural size hints
+           these came out at 48 / 46 / 53 — and a QSpinBox three pixels taller
+           than the QLineEdit beside it drops its whole field below the row. */
+        QLineEdit, QPushButton {{ min-height: 28px; max-height: 28px; }}
+        QComboBox {{ min-height: 30px; max-height: 30px; }}
+        QSpinBox, QDoubleSpinBox {{ min-height: 28px; max-height: 28px; }}
 
         /* ── Shell chrome ──────────────────────────────────────────── */
         /* Header and rails are one surface lifted off the page, separated by a
