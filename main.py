@@ -230,8 +230,9 @@ from ui.workers import (
     HiggsfieldWorker,
 )
 from ui.forms import (
-    LG, MD, SM, XS, combo, field, form_grid, line_edit, micro, primary,
-    rule, section, stat,
+    CONTENT_MAX_WIDTH, HEADER_HEIGHT, LG, MD, RAIL_LEFT_WIDTH,
+    RAIL_RIGHT_WIDTH, SM, XS, Meter, StatBlock, combo, field, form_grid,
+    line_edit, micro, nav_tab, primary, quiet, rail, rule, section, stat,
 )
 from ui.widgets import (
     FlowLayout, CollapsibleSection, scrollable, let_combos_shrink,
@@ -385,7 +386,7 @@ class GodAI(QWidget):
         """Enable or disable hover tooltips application-wide."""
         self.tooltips_enabled = self.tooltips_toggle_btn.isChecked()
         self.tooltips_toggle_btn.setText(
-            "💡 Tooltips: On" if self.tooltips_enabled else "💡 Tooltips: Off"
+            "Tooltips: On" if self.tooltips_enabled else "Tooltips: Off"
         )
 
     def eventFilter(self, obj, event):
@@ -415,7 +416,7 @@ class GodAI(QWidget):
 
     def safe_key_status(self, cls):
         try:
-            return "✅ available" if cls.key_available() else "❌ not set"
+            return "available" if cls.key_available() else "not set"
         except Exception:
             return "unknown"
 
@@ -489,23 +490,23 @@ class GodAI(QWidget):
             return
 
         estimated_cost, approx_tokens, backend, model = self.get_current_cost_estimate()
+        if not backend or not model:
+            self.live_estimate_label.setText("Next request: nothing selected yet")
+            return
 
+        # One line, beside the bars it will move. The cost comes first because
+        # it is the only part that decides anything.
         if backend == "ollama":
             self.live_estimate_label.setText(
-                f"Estimated Request Cost: FREE (local execution)\n"
-                f"{model} · ~{approx_tokens} tokens"
-            )
-        elif backend in {"openai", "deepseek", "kimi", "gemini"}:
+                f"Next request: free · {model} · ~{approx_tokens} tokens")
+        elif backend in {"openai", "deepseek", "kimi", "gemini", "anthropic"}:
             self.live_estimate_label.setText(
-                f"Estimated Request Cost: ~€{estimated_cost:.2f}\n"
-                f"{backend} · {model} · ~{approx_tokens} tokens\n"
-                f"⚠ Paid API"
-            )
+                f"Next request: ~€{estimated_cost:.2f} · paid · "
+                f"{backend} {model} · ~{approx_tokens} tokens")
         else:
             self.live_estimate_label.setText(
-                f"Estimated Request Cost: ~€{estimated_cost:.2f}\n"
-                f"{backend} · {model} · ~{approx_tokens} tokens"
-            )
+                f"Next request: ~€{estimated_cost:.2f} · "
+                f"{backend} {model} · ~{approx_tokens} tokens")
 
     def show_cost_estimate_popup(self):
         estimated_cost, approx_tokens, backend, model = self.get_current_cost_estimate()
@@ -1237,21 +1238,33 @@ class GodAI(QWidget):
                 )
 
     def build_ui(self):
-        outer_layout = QVBoxLayout(self)
-        splitter = QSplitter(Qt.Horizontal)
-        splitter.setChildrenCollapsible(False)
+        """Header bar over three columns; the outer two are fixed.
 
+        This replaced a QSplitter. A splitter lets the user drag a pane below
+        the minimum width its own children need, and Qt resolves that by
+        letting widgets overlap rather than by refusing — which is where every
+        overlapping-control bug in this app came from. Two widths you cannot
+        drag are worth more than three you can.
+        """
+        outer_layout = QVBoxLayout(self)
+        outer_layout.setContentsMargins(0, 0, 0, 0)
+        outer_layout.setSpacing(0)
+
+        header = self.build_header_bar()
         left_widget = self.build_left_panel()
         center_widget = self.build_center_panel()
         right_widget = self.build_right_panel()
         self.update_recommendation_label()
 
-        splitter.addWidget(left_widget)
-        splitter.addWidget(center_widget)
-        splitter.addWidget(right_widget)
-        splitter.setSizes([230, 870, 300])
+        body = QHBoxLayout()
+        body.setContentsMargins(0, 0, 0, 0)
+        body.setSpacing(0)
+        body.addWidget(left_widget)
+        body.addWidget(center_widget, 1)
+        body.addWidget(right_widget)
 
-        outer_layout.addWidget(splitter)
+        outer_layout.addWidget(header)
+        outer_layout.addLayout(body, 1)
 
         # After every panel exists: a combo sized to its longest item pins the
         # control columns wider than the panes they live in, which is what cut
@@ -1260,43 +1273,91 @@ class GodAI(QWidget):
 
         self.apply_global_style()
 
-    def build_left_panel(self) -> QWidget:
-        left_widget = QWidget()
-        left_widget.setObjectName("LeftPanel")
-        left_layout = QVBoxLayout(left_widget)
-        left_layout.setContentsMargins(6, 6, 6, 6)
-        left_layout.setSpacing(4)
+    def build_header_bar(self) -> QWidget:
+        """Brand, mode tabs, status and utilities on one line.
 
+        These three were previously on three different alignment axes — the
+        wordmark pinned to the far left of the rail, the mode tabs centred over
+        the canvas, and the page title starting a third of the way across. One
+        row, one left edge, and the eye has a single place to start.
+        """
+        header = QFrame()
+        header.setObjectName("AppHeader")
+        header.setFixedHeight(HEADER_HEIGHT)
+        row = QHBoxLayout(header)
+        row.setContentsMargins(LG, 0, LG, 0)
+        row.setSpacing(0)
+
+        dot = QLabel("●")
+        dot.setObjectName("WordmarkDot")
+        row.addWidget(dot)
+        row.addSpacing(SM)
         brand = QLabel("IMPRINT")
-        brand.setObjectName("StudioBrand")
-        left_layout.addWidget(brand)
+        brand.setObjectName("Wordmark")
+        row.addWidget(brand)
 
-        brand_note = QLabel(
-            "One studio for drafting, publishing, audio, websites, and client work."
-        )
-        brand_note.setObjectName("StudioBrandNote")
-        brand_note.setWordWrap(True)
-        left_layout.addWidget(brand_note)
-
-        # Agent navigation lives in the workspace tabs above the canvas. The
-        # slim rail is now reserved for projects, where persistent context is
-        # genuinely useful.
-        self.agent_buttons = {}
-        left_layout.addStretch(1)
-
-        # ── Divider ──────────────────────────────────────────────
+        row.addSpacing(LG)
         divider = QFrame()
-        divider.setFrameShape(QFrame.HLine)
-        divider.setObjectName("CardDivider")
-        left_layout.addWidget(divider)
+        divider.setObjectName("HeaderDivider")
+        divider.setFixedSize(1, 22)
+        row.addWidget(divider)
+        row.addSpacing(MD)
 
-        saved_header = QLabel("  RECENT PROJECTS")
-        saved_header.setStyleSheet(
-            "color: #707070; font-weight: bold; font-size: 10px; "
-            "letter-spacing: 1.5px; padding: 8px 0 4px 8px; "
-            "background: transparent;"
-        )
-        left_layout.addWidget(saved_header)
+        # Five outcome-oriented workspaces replace Sentinel's long agent menu.
+        self.workspace_tabs = QTabBar()
+        self.workspace_tabs.setObjectName("WorkspaceTabs")
+        self.workspace_tabs.setExpanding(False)
+        self.workspace_tabs.setDrawBase(False)
+        for workspace_name in WORKSPACES:
+            self.workspace_tabs.addTab(workspace_name)
+        # Connected only after every tab exists: addTab on an empty bar sets the
+        # current index and would fire the handler before the panels are built.
+        self.workspace_tabs.currentChanged.connect(self._workspace_changed)
+        row.addWidget(self.workspace_tabs, 0, Qt.AlignVCenter)
+
+        row.addStretch()
+
+        self.agent_status_pill = QLabel("●  Ready")
+        self.agent_status_pill.setObjectName("StatusPill")
+        row.addWidget(self.agent_status_pill)
+        row.addSpacing(LG)
+
+        self.agent_docs_btn = quiet("Docs")
+        self.agent_docs_btn.setFixedWidth(56)
+        self.agent_docs_btn.clicked.connect(self.show_agent_docs)
+        row.addWidget(self.agent_docs_btn)
+
+        self.tooltips_toggle_btn = quiet("Tooltips: On")
+        self.tooltips_toggle_btn.setFixedWidth(110)
+        self.tooltips_toggle_btn.setCheckable(True)
+        self.tooltips_toggle_btn.setChecked(True)
+        self.tooltips_toggle_btn.clicked.connect(self._toggle_tooltips)
+        row.addWidget(self.tooltips_toggle_btn)
+
+        self.settings_btn = quiet("Settings")
+        self.settings_btn.setFixedWidth(78)
+        self.settings_btn.clicked.connect(self.show_settings)
+        row.addWidget(self.settings_btn)
+
+        return header
+
+    def build_left_panel(self) -> QWidget:
+        """The project rail. Projects only — navigation lives in the header."""
+        left_widget = rail("RailLeft", RAIL_LEFT_WIDTH)
+        left_outer = QVBoxLayout(left_widget)
+        left_outer.setContentsMargins(0, 0, 0, 0)
+        left_body = QWidget()
+        left_body.setObjectName("Transparent")
+        left_outer.addWidget(scrollable(left_body))
+        left_layout = QVBoxLayout(left_body)
+        left_layout.setContentsMargins(MD, LG, MD, LG)
+        left_layout.setSpacing(MD)
+
+        # Agent navigation lives in the workspace tabs. The rail is reserved
+        # for projects, where persistent context is genuinely useful.
+        self.agent_buttons = {}
+
+        left_layout.addWidget(section("Projects"))
 
         # Narrow the list to one agent. Populated from the chats that exist, so
         # it only ever offers agents you have actually used.
@@ -1306,7 +1367,7 @@ class GodAI(QWidget):
         left_layout.addWidget(self.history_agent_filter)
 
         self.history_search = QLineEdit()
-        self.history_search.setPlaceholderText("Search projects...")
+        self.history_search.setPlaceholderText("Search projects")
         self.history_search.textChanged.connect(self.load_history_list)
         left_layout.addWidget(self.history_search)
 
@@ -1315,45 +1376,34 @@ class GodAI(QWidget):
         # Double-click renames: chat_title_from_data already prefers a stored
         # "title" over the truncated first prompt, it was just never written.
         self.history_list.itemDoubleClicked.connect(self.rename_selected_chat)
-        # Keep the saved-chats list bounded so the agents area always has room
-        self.history_list.setMinimumHeight(120)
-        self.history_list.setMaximumHeight(200)
-        left_layout.addWidget(self.history_list)
+        # The list takes the rail's spare height rather than being capped at
+        # 200px with the buttons stranded at the bottom of the window.
+        self.history_list.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Expanding)
+        left_layout.addWidget(self.history_list, 1)
 
-        self.delete_chat_btn = QPushButton("🗑 Remove Project")
-        self.delete_chat_btn.clicked.connect(self.delete_selected_chat)
-        left_layout.addWidget(self.delete_chat_btn)
+        left_layout.addWidget(rule())
 
-        self.new_chat_btn = QPushButton("✳️ New Project")
+        self.new_chat_btn = QPushButton("New Project")
         self.new_chat_btn.clicked.connect(self.new_chat)
         left_layout.addWidget(self.new_chat_btn)
 
-        left_widget.setMinimumWidth(230)
-        left_widget.setMaximumWidth(300)
-
-        # Rail styling lives in ui/style.py (QWidget#LeftPanel rules) so the
-        # palette has one definition.
+        # Destructive and rarely wanted: quiet, and below the thing it acts on.
+        self.delete_chat_btn = quiet("Remove")
+        self.delete_chat_btn.clicked.connect(self.delete_selected_chat)
+        left_layout.addWidget(self.delete_chat_btn)
 
         return left_widget
 
     def build_center_panel(self) -> QWidget:
         center_widget = QWidget()
+        center_widget.setObjectName("Transparent")
         center_layout = QVBoxLayout(center_widget)
-        center_layout.setContentsMargins(20, 16, 20, 16)
-        center_layout.setSpacing(12)
+        center_layout.setContentsMargins(LG + SM, LG + SM, LG + SM, LG + SM)
+        center_layout.setSpacing(MD)
 
-        # Four outcome-oriented workspaces replace Sentinel's long agent menu.
-        # A smaller stage switcher appears only when the workspace contains two
+        # The workspace tabs moved to the header bar. What stays here is the
+        # stage switcher, which appears only when a workspace contains two
         # related tools (Draft/Publish or Audiobooks/Music).
-        self.workspace_tabs = QTabBar()
-        self.workspace_tabs.setObjectName("WorkspaceTabs")
-        self.workspace_tabs.setExpanding(False)
-        self.workspace_tabs.setDrawBase(False)
-        for workspace_name in WORKSPACES:
-            self.workspace_tabs.addTab(workspace_name)
-        self.workspace_tabs.currentChanged.connect(self._workspace_changed)
-        center_layout.addWidget(self.workspace_tabs)
-
         self.workspace_tool_row = QWidget()
         tool_row = QHBoxLayout(self.workspace_tool_row)
         tool_row.setContentsMargins(0, 0, 0, 0)
@@ -1371,39 +1421,14 @@ class GodAI(QWidget):
         tool_row.addStretch()
         center_layout.addWidget(self.workspace_tool_row)
 
-        # ── Agent header bar: big accent title + status pill ─────────────
-        header_row = QHBoxLayout()
-        header_row.setSpacing(12)
-
-        self.agent_title_label = QLabel("CHAT")
+        # ── Page title ──────────────────────────────────────────────────
+        # Docs, tooltips and the status pill moved to the header bar: they are
+        # application chrome, not part of this page, and having them here put a
+        # row of controls between the title and the form it belongs to.
+        self.agent_title_label = QLabel("Chat")
         self.agent_title_label.setObjectName("AgentTitle")
-        header_row.addWidget(self.agent_title_label)
+        center_layout.addWidget(self.agent_title_label)
 
-        header_row.addStretch()
-
-        self.agent_docs_btn = QPushButton("📖  Docs")
-        self.agent_docs_btn.setObjectName("ChipBtn")
-        self.agent_docs_btn.setToolTip("Open the documentation for the current agent.")
-        self.agent_docs_btn.clicked.connect(self.show_agent_docs)
-        header_row.addWidget(self.agent_docs_btn)
-
-        self.tooltips_toggle_btn = QPushButton("💡 Tooltips: On")
-        self.tooltips_toggle_btn.setObjectName("ChipBtn")
-        self.tooltips_toggle_btn.setCheckable(True)
-        self.tooltips_toggle_btn.setChecked(True)
-        self.tooltips_toggle_btn.setToolTip(
-            "Toggle hover tooltips across the entire app. Tooltips explain what each control does."
-        )
-        self.tooltips_toggle_btn.clicked.connect(self._toggle_tooltips)
-        header_row.addWidget(self.tooltips_toggle_btn)
-
-        self.agent_status_pill = QLabel("●  READY")
-        self.agent_status_pill.setObjectName("StatusPill")
-        header_row.addWidget(self.agent_status_pill)
-
-        center_layout.addLayout(header_row)
-
-        # ── Subtitle: short function description under the title ────────
         self.agent_subtitle_label = QLabel("")
         self.agent_subtitle_label.setObjectName("AgentSubtitle")
         self.agent_subtitle_label.setWordWrap(True)
@@ -1452,13 +1477,11 @@ class GodAI(QWidget):
         self.provider_box = QComboBox()
         self.provider_box.addItems(["ollama", "openai", "deepseek", "kimi", "gemini", "anthropic", "qwen"])
         self.provider_box.setMinimumWidth(120)
-        top_row_2.addWidget(QLabel("Provider:"))
-        top_row_2.addWidget(self.provider_box)
+        top_row_2.addWidget(field("Provider", self.provider_box))
 
         self.model_box = QComboBox()
         self.model_box.setMinimumWidth(180)
-        top_row_2.addWidget(QLabel("Model:"))
-        top_row_2.addWidget(self.model_box)
+        top_row_2.addWidget(field("Model", self.model_box))
 
         self.refresh_models_btn = QPushButton("Refresh Models")
 
@@ -1469,7 +1492,7 @@ class GodAI(QWidget):
 
         # Offers a one-click pull of Meta's Muse Glimmer. Hidden once the model
         # is installed, since it is then just another entry in the model box.
-        self.get_muse_btn = QPushButton("⬇ Get Muse Glimmer")
+        self.get_muse_btn = QPushButton("Get Muse Glimmer")
         self.get_muse_btn.setObjectName("ChipBtn")
         self.get_muse_btn.clicked.connect(self.pull_muse_glimmer)
         top_row_2.addWidget(self.get_muse_btn)
@@ -1499,8 +1522,7 @@ class GodAI(QWidget):
         self.execution_mode_box = QComboBox()
         self.execution_mode_box.addItems(["Local only", "Hybrid allowed", "Cloud only"])
         self.execution_mode_box.setMinimumWidth(120)
-        top_row_3.addWidget(QLabel("Mode:"))
-        top_row_3.addWidget(self.execution_mode_box)
+        top_row_3.addWidget(field("Mode", self.execution_mode_box))
 
         self.allow_openai_checkbox = QCheckBox("OpenAI")
         self.allow_openai_checkbox.setChecked(False)
@@ -1683,115 +1705,115 @@ class GodAI(QWidget):
             self.output_box.setVisible(False)
     
     def build_audiobook_panel(self):
+        """Convert a book to MP3, and listen to what came out.
+
+        Was three group boxes side by side. The settings box held six rows in a
+        space sized by the book list next to it, so it stretched them apart
+        with 60px of nothing between each — the emptiest screen in the app,
+        and boxed on all four sides to draw attention to it.
+        """
         self.audiobook_panel = QWidget()
-        _ab_outer = QVBoxLayout(self.audiobook_panel)
-        _ab_outer.setContentsMargins(0, 4, 0, 0)
-        _ab_outer.setSpacing(6)
+        outer = QVBoxLayout(self.audiobook_panel)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(MD)
 
         # Convert and Listen are two different jobs. The app could produce an
-        # audiobook and then had no way to play it; the Library tab is that.
+        # audiobook and then had no way to play it; the Listen tab is that.
         self.audiobook_tabs = QTabWidget()
-        _ab_outer.addWidget(self.audiobook_tabs, 1)
+        outer.addWidget(self.audiobook_tabs, 1)
 
-        _convert_page = QWidget()
-        panel_layout = QVBoxLayout(_convert_page)
-        panel_layout.setContentsMargins(0, 4, 0, 0)
-        panel_layout.setSpacing(6)
+        convert_page = QWidget()
+        convert_page.setObjectName("Transparent")
+        page = QVBoxLayout(convert_page)
+        page.setContentsMargins(MD, MD, MD, MD)
+        page.setSpacing(LG)
 
-        top_row = QHBoxLayout()
-        top_row.setSpacing(8)
-
-        books_group = QGroupBox("Select a Book to Convert")
-        books_layout = QVBoxLayout(books_group)
-        books_layout.setSpacing(4)
+        # ── Source ──────────────────────────────────────────────────────
+        page.addWidget(section("Book"))
 
         self.audiobook_book_list = QListWidget()
         self.audiobook_book_list.setMinimumHeight(150)
-        self.audiobook_book_list.currentItemChanged.connect(lambda *_: self.estimate_audiobook_cost_from_selection())
-        books_layout.addWidget(self.audiobook_book_list)
+        self.audiobook_book_list.currentItemChanged.connect(
+            lambda *_: self.estimate_audiobook_cost_from_selection())
+        page.addWidget(self.audiobook_book_list, 1)
 
-        books_btn_row = QHBoxLayout()
-        books_btn_row.setSpacing(6)
+        # ── Settings ────────────────────────────────────────────────────
+        page.addWidget(section("Conversion settings"))
 
-        self.audiobook_refresh_btn = QPushButton("🔄 Refresh List")
-        self.audiobook_refresh_btn.clicked.connect(self.refresh_audiobook_books)
-        books_btn_row.addWidget(self.audiobook_refresh_btn)
-
-        books_btn_row.addStretch()
-
-        self.stop_btn = QPushButton("⛔ Stop")
-        self.stop_btn.clicked.connect(self.stop_current_task)
-        self.stop_btn.setEnabled(False)
-        self.stop_btn.setObjectName("DangerAction")
-        books_btn_row.addWidget(self.stop_btn)
-
-        self.audiobook_start_btn = QPushButton("▶ Start")
-        self.audiobook_start_btn.clicked.connect(self.start_selected_audiobook_book)
-        self.audiobook_start_btn.setMinimumWidth(130)
-        self.audiobook_start_btn.setObjectName("PrimaryAction")
-        books_btn_row.addWidget(self.audiobook_start_btn)
-        books_layout.addLayout(books_btn_row)
-
-        settings_group = QGroupBox("Conversion Settings")
-        settings_layout = QGridLayout(settings_group)
-        settings_layout.setVerticalSpacing(4)
-        settings_layout.setHorizontalSpacing(6)
-
-        settings_layout.addWidget(QLabel("Input Folder:"), 0, 0, 1, 2)
         self.audiobook_input_path = QLineEdit()
         self.audiobook_input_path.setReadOnly(True)
-        settings_layout.addWidget(self.audiobook_input_path, 1, 0)
-
         self.audiobook_open_input_btn = QPushButton("Open")
+        self.audiobook_open_input_btn.setFixedWidth(96)
         self.audiobook_open_input_btn.clicked.connect(self.open_audiobook_input_folder)
-        settings_layout.addWidget(self.audiobook_open_input_btn, 1, 1)
 
-        settings_layout.addWidget(QLabel("Output Folder:"), 2, 0, 1, 2)
         self.audiobook_output_path = QLineEdit()
         self.audiobook_output_path.setReadOnly(True)
-        settings_layout.addWidget(self.audiobook_output_path, 3, 0)
-
         self.audiobook_change_output_btn = QPushButton("Change")
+        self.audiobook_change_output_btn.setFixedWidth(96)
         self.audiobook_change_output_btn.clicked.connect(self.change_audiobook_output_folder)
-        settings_layout.addWidget(self.audiobook_change_output_btn, 3, 1)
 
-        voice_chunk_row = QHBoxLayout()
-        voice_chunk_row.setSpacing(8)
-        voice_chunk_row.addWidget(QLabel("Voice:"))
-        self.audiobook_voice_box = QComboBox()
-        self.audiobook_voice_box.addItems(["alloy", "verse", "aria", "coral", "sage"])
-        voice_chunk_row.addWidget(self.audiobook_voice_box)
-        voice_chunk_row.addWidget(QLabel("Chunk Tokens:"))
-        self.audiobook_chunk_input = QLineEdit("1400")
-        self.audiobook_chunk_input.setMaximumWidth(80)
-        voice_chunk_row.addWidget(self.audiobook_chunk_input)
-        settings_layout.addLayout(voice_chunk_row, 4, 0, 1, 2)
+        folders = QGridLayout()
+        folders.setHorizontalSpacing(SM)
+        folders.setVerticalSpacing(MD)
+        folders.addWidget(field("Input folder", self.audiobook_input_path), 0, 0, Qt.AlignTop)
+        folders.addWidget(self.audiobook_open_input_btn, 0, 1, Qt.AlignBottom)
+        folders.addWidget(field("Output folder", self.audiobook_output_path), 1, 0, Qt.AlignTop)
+        folders.addWidget(self.audiobook_change_output_btn, 1, 1, Qt.AlignBottom)
+        folders.setColumnStretch(0, 1)
+        page.addLayout(folders)
 
+        self.audiobook_voice_box = combo(
+            ["alloy", "verse", "aria", "coral", "sage"])
+        self.audiobook_chunk_input = line_edit("1400", "1400")
+
+        options = QGridLayout()
+        options.setHorizontalSpacing(MD)
+        options.setVerticalSpacing(MD)
+        options.addWidget(field("Voice", self.audiobook_voice_box), 0, 0, Qt.AlignTop)
+        options.addWidget(field("Chunk tokens", self.audiobook_chunk_input), 0, 1, Qt.AlignTop)
+        for column in range(3):
+            options.setColumnStretch(column, 1)
+        page.addLayout(options)
+
+        # ── Actions ─────────────────────────────────────────────────────
+        actions = QHBoxLayout()
+        actions.setSpacing(SM)
+        self.audiobook_start_btn = primary("Start")
+        self.audiobook_start_btn.setMinimumWidth(160)
+        self.audiobook_start_btn.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+        self.audiobook_start_btn.clicked.connect(self.start_selected_audiobook_book)
+        actions.addWidget(self.audiobook_start_btn)
+
+        self.audiobook_refresh_btn = QPushButton("Refresh List")
+        self.audiobook_refresh_btn.clicked.connect(self.refresh_audiobook_books)
+        actions.addWidget(self.audiobook_refresh_btn)
+
+        self.stop_btn = QPushButton("Stop")
+        self.stop_btn.setObjectName("DangerAction")
+        self.stop_btn.clicked.connect(self.stop_current_task)
+        self.stop_btn.hide()
+        actions.addWidget(self.stop_btn)
+
+        actions.addStretch()
         self.audiobook_cost_label = QLabel("Estimated cost: not calculated")
-        self.audiobook_cost_label.setWordWrap(True)
-        settings_layout.addWidget(self.audiobook_cost_label, 5, 0, 1, 2)
+        self.audiobook_cost_label.setObjectName("EstimateLine")
+        actions.addWidget(self.audiobook_cost_label)
+        page.addLayout(actions)
 
-        top_row.addWidget(books_group, 1)
-        top_row.addWidget(settings_group, 1)
-        panel_layout.addLayout(top_row)
-
-        progress_group = QGroupBox("Progress")
-        progress_layout = QVBoxLayout(progress_group)
-        progress_layout.setSpacing(4)
-
+        # ── Progress ────────────────────────────────────────────────────
         self.tool_progress = QProgressBar()
-        self.tool_progress.setMinimum(0)
-        self.tool_progress.setMaximum(100)
+        self.tool_progress.setRange(0, 100)
         self.tool_progress.setValue(0)
         self.tool_progress.setTextVisible(True)
-        progress_layout.addWidget(self.tool_progress)
+        page.addWidget(self.tool_progress)
 
         self.audiobook_status_label = QLabel("[Ready] Select a book and click Start.")
-        progress_layout.addWidget(self.audiobook_status_label)
+        self.audiobook_status_label.setObjectName("EstimateLine")
+        self.audiobook_status_label.setWordWrap(True)
+        page.addWidget(self.audiobook_status_label)
 
-        panel_layout.addWidget(progress_group)
-        self.audiobook_tabs.addTab(_convert_page, "🎙  Convert")
-        self.audiobook_tabs.addTab(self._build_audiobook_library_tab(), "🎧  Listen")
+        self.audiobook_tabs.addTab(convert_page, "Convert")
+        self.audiobook_tabs.addTab(self._build_audiobook_library_tab(), "Listen")
         self.audiobook_panel.hide()
 
     def _build_audiobook_library_tab(self) -> QWidget:
@@ -1802,9 +1824,9 @@ class GodAI(QWidget):
         layout.setSpacing(8)
 
         header = QHBoxLayout()
-        header.addWidget(QLabel("Audiobooks in your output folder:"))
+        header.addWidget(section("Audiobooks in your output folder"))
         header.addStretch()
-        self.audiobook_refresh_btn = QPushButton("↻  Rescan")
+        self.audiobook_refresh_btn = QPushButton("Rescan")
         self.audiobook_refresh_btn.setObjectName("ChipBtn")
         self.audiobook_refresh_btn.clicked.connect(self.refresh_audiobook_library)
         header.addWidget(self.audiobook_refresh_btn)
@@ -1824,18 +1846,18 @@ class GodAI(QWidget):
         layout.addWidget(self.audiobook_library_table, 1)
 
         row = QHBoxLayout()
-        self.audiobook_play_btn = QPushButton("▶  Listen")
+        self.audiobook_play_btn = QPushButton("Listen")
         self.audiobook_play_btn.setObjectName("PrimaryAction")
         self.audiobook_play_btn.setEnabled(False)
         self.audiobook_play_btn.clicked.connect(self.play_selected_audiobook)
         row.addWidget(self.audiobook_play_btn)
 
-        self.audiobook_restart_btn = QPushButton("↺  Start Over")
+        self.audiobook_restart_btn = QPushButton("Start Over")
         self.audiobook_restart_btn.setEnabled(False)
         self.audiobook_restart_btn.clicked.connect(self.restart_selected_audiobook)
         row.addWidget(self.audiobook_restart_btn)
 
-        self.audiobook_reveal_btn = QPushButton("📂  Show in Finder")
+        self.audiobook_reveal_btn = QPushButton("Show in Finder")
         self.audiobook_reveal_btn.setEnabled(False)
         self.audiobook_reveal_btn.clicked.connect(self.reveal_selected_audiobook)
         row.addWidget(self.audiobook_reveal_btn)
@@ -1902,9 +1924,9 @@ class GodAI(QWidget):
             button.setEnabled(book is not None)
         if book and book.started:
             self.audiobook_play_btn.setText(
-                f"▶  Resume at {format_audiobook_time(book.position_ms)}")
+                f"Resume at {format_audiobook_time(book.position_ms)}")
         else:
-            self.audiobook_play_btn.setText("▶  Listen")
+            self.audiobook_play_btn.setText("Listen")
 
     def _audiobook_refresh_row(self):
         """Update the selected row in place while playing.
@@ -2006,55 +2028,48 @@ class GodAI(QWidget):
 
         self.author_next_step_label = QLabel("")
         self.author_next_step_label.setWordWrap(True)
-        self.author_next_step_label.setStyleSheet(
-            f"background: {ACCENT_WASH}; border: 1px solid {ACCENT_LINE}; "
-            f"border-radius: 6px; padding: 8px 10px; color: {ACCENT}; font-size: 12px;"
-        )
+        self.author_next_step_label.setObjectName("NextStepBanner")
         layout.addWidget(self.author_next_step_label)
 
         # ── Book Profile (collapsed by default — persisted, injected into every mode) ──
-        profile_section = CollapsibleSection("📖  Book Profile", expanded=False)
+        profile_section = CollapsibleSection("Book Profile", expanded=False)
 
         profile_row1 = QWidget()
         pr1 = QHBoxLayout(profile_row1)
         pr1.setContentsMargins(4, 0, 4, 0)
         pr1.setSpacing(8)
-        pr1.addWidget(QLabel("Hook:"))
         self.author_profile_hook_input = QLineEdit()
         self.author_profile_hook_input.setPlaceholderText("One-sentence pitch — the core promise of the book…")
-        pr1.addWidget(self.author_profile_hook_input)
+        pr1.addWidget(field("Hook", self.author_profile_hook_input))
         profile_section.addWidget(profile_row1)
 
         profile_row2 = QWidget()
         pr2 = QHBoxLayout(profile_row2)
         pr2.setContentsMargins(4, 0, 4, 0)
         pr2.setSpacing(8)
-        pr2.addWidget(QLabel("Target reader:"))
         self.author_profile_reader_input = QLineEdit()
         self.author_profile_reader_input.setPlaceholderText("e.g. Women 25-40 navigating modern dating apps")
-        pr2.addWidget(self.author_profile_reader_input)
+        pr2.addWidget(field("Target reader", self.author_profile_reader_input))
         profile_section.addWidget(profile_row2)
 
         profile_row3 = QWidget()
         pr3 = QHBoxLayout(profile_row3)
         pr3.setContentsMargins(4, 0, 4, 0)
         pr3.setSpacing(8)
-        pr3.addWidget(QLabel("Comp titles:"))
         self.author_profile_comps_input = QLineEdit()
         self.author_profile_comps_input.setPlaceholderText("e.g. For readers of [Title A] and [Title B]")
-        pr3.addWidget(self.author_profile_comps_input)
+        pr3.addWidget(field("Comp titles", self.author_profile_comps_input))
         profile_section.addWidget(profile_row3)
 
         profile_row4 = QWidget()
         pr4 = QHBoxLayout(profile_row4)
         pr4.setContentsMargins(4, 0, 4, 0)
         pr4.setSpacing(8)
-        pr4.addWidget(QLabel("Publishing path:"))
         self.author_profile_path_box = QComboBox()
         self.author_profile_path_box.addItems(["Undecided", "Self-Publishing (KDP)", "Traditional"])
-        pr4.addWidget(self.author_profile_path_box)
+        pr4.addWidget(field("Publishing path", self.author_profile_path_box))
         pr4.addStretch()
-        self.author_profile_save_btn = QPushButton("💾  Save Profile")
+        self.author_profile_save_btn = QPushButton("Save Profile")
         self.author_profile_save_btn.clicked.connect(self.author_save_profile)
         pr4.addWidget(self.author_profile_save_btn)
         profile_section.addWidget(profile_row4)
@@ -2071,19 +2086,19 @@ class GodAI(QWidget):
         self.author_draft_box.setPlaceholderText(
             "Your draft appears here. You can type and edit directly alongside the AI."
         )
-        self.author_tabs.addTab(self.author_draft_box, "✍️  Draft")
+        self.author_tabs.addTab(self.author_draft_box, "Draft")
 
         self.author_outline_box = QTextEdit()
         self.author_outline_box.setPlaceholderText("Chapter and scene outline…")
-        self.author_tabs.addTab(self.author_outline_box, "📋  Outline")
+        self.author_tabs.addTab(self.author_outline_box, "Outline")
 
         self.author_characters_box = QTextEdit()
         self.author_characters_box.setPlaceholderText("Character profiles, arcs, relationships…")
-        self.author_tabs.addTab(self.author_characters_box, "👤  Characters")
+        self.author_tabs.addTab(self.author_characters_box, "Characters")
 
         self.author_world_box = QTextEdit()
         self.author_world_box.setPlaceholderText("World-building notes, lore, setting, rules…")
-        self.author_tabs.addTab(self.author_world_box, "🌍  World Notes")
+        self.author_tabs.addTab(self.author_world_box, "World Notes")
 
         self.author_chapters_tab = QWidget()
         ct_layout = QVBoxLayout(self.author_chapters_tab)
@@ -2098,12 +2113,12 @@ class GodAI(QWidget):
         self.author_chapters_list.itemDoubleClicked.connect(self._author_jump_to_chapter)
         ct_layout.addWidget(self.author_chapters_list, 1)
 
-        author_chapters_refresh_btn = QPushButton("🔄  Refresh Chapters")
+        author_chapters_refresh_btn = QPushButton("Refresh Chapters")
         author_chapters_refresh_btn.clicked.connect(self._author_refresh_chapters)
         ct_layout.addWidget(author_chapters_refresh_btn)
 
         self._author_chapter_offsets: list = []
-        self.author_tabs.addTab(self.author_chapters_tab, "📑  Chapters")
+        self.author_tabs.addTab(self.author_chapters_tab, "Chapters")
         self.author_tabs.currentChanged.connect(self._author_on_tab_changed)
 
         workspace_splitter.addWidget(self.author_tabs)
@@ -2145,19 +2160,19 @@ class GodAI(QWidget):
         sb.addWidget(field("Provider", self.author_provider_box))
         sb.addWidget(field("Model", self.author_model_box))
 
-        self.author_write_btn = QPushButton("✍️  Write")
+        self.author_write_btn = QPushButton("Write")
         self.author_write_btn.setMinimumHeight(34)
         self.author_write_btn.setObjectName("PrimaryAction")
         self.author_write_btn.clicked.connect(self.author_write)
         sb.addWidget(self.author_write_btn)
 
-        self.author_continue_btn = QPushButton("▶  Continue")
+        self.author_continue_btn = QPushButton("Continue")
         self.author_continue_btn.setMinimumHeight(34)
         self.author_continue_btn.setObjectName("SecondaryAction")
         self.author_continue_btn.clicked.connect(self.author_continue)
         sb.addWidget(self.author_continue_btn)
 
-        self.author_stop_btn = QPushButton("⬛  Stop")
+        self.author_stop_btn = QPushButton("Stop")
         self.author_stop_btn.setEnabled(False)
         self.author_stop_btn.setMinimumHeight(34)
         self.author_stop_btn.setObjectName("DangerAction")
@@ -2200,15 +2215,14 @@ class GodAI(QWidget):
         sep2.setObjectName("CardDivider")
         sb.addWidget(sep2)
 
-        self.author_save_btn = QPushButton("💾  Save Draft")
+        self.author_save_btn = QPushButton("Save Draft")
         self.author_save_btn.setEnabled(False)
         self.author_save_btn.clicked.connect(self.author_save)
         sb.addWidget(self.author_save_btn)
 
-        sb.addWidget(QLabel("Author name (for export):"))
         self.author_export_author_input = QLineEdit()
         self.author_export_author_input.setPlaceholderText("e.g. Celeste Morgan")
-        sb.addWidget(self.author_export_author_input)
+        sb.addWidget(field("Author name (for export)", self.author_export_author_input))
 
         # FlowLayout: a QHBoxLayout here reports combo + button as its minimum
         # width (276px) and pinned the whole sidebar wider than its pane, which
@@ -2218,7 +2232,7 @@ class GodAI(QWidget):
         self.author_export_format_box = QComboBox()
         self.author_export_format_box.addItems(["EPUB", "DOCX", "PDF"])
         export_row.addWidget(self.author_export_format_box)
-        self.author_export_btn = QPushButton("📤  Export Book")
+        self.author_export_btn = QPushButton("Export Book")
         self.author_export_btn.clicked.connect(self.author_export_book)
         export_row.addWidget(self.author_export_btn)
         sb.addWidget(export_row_container)
@@ -2234,7 +2248,7 @@ class GodAI(QWidget):
         mode_row = QHBoxLayout()
         mode_row.setSpacing(0)
 
-        self.author_mode_write_btn = QPushButton("✍️  Write")
+        self.author_mode_write_btn = QPushButton("Write")
         self.author_mode_write_btn.setCheckable(True)
         self.author_mode_write_btn.setChecked(True)
         self.author_mode_write_btn.setMinimumHeight(32)
@@ -2245,12 +2259,13 @@ class GodAI(QWidget):
         # "&&", not "&": Qt reads a single ampersand in button text as a mnemonic
         # marker and swallows it, so this rendered as "Publish_Market" with the
         # M underlined. Same trap CollapsibleSection documents for its titles.
-        self.author_mode_pubmkt_btn = QPushButton("📣  Publish && Market")
+        self.author_mode_pubmkt_btn = QPushButton("Publish && Market")
         self.author_mode_pubmkt_btn.setCheckable(True)
         self.author_mode_pubmkt_btn.setMinimumHeight(32)
         self.author_mode_pubmkt_btn.setObjectName("WorkspaceTool")
         self.author_mode_pubmkt_btn.clicked.connect(lambda: self._author_set_mode("pubmkt"))
         mode_row.addWidget(self.author_mode_pubmkt_btn)
+        mode_row.addStretch()
 
         layout.addLayout(mode_row)
 
@@ -2268,7 +2283,7 @@ class GodAI(QWidget):
         sub_row = QHBoxLayout()
         sub_row.setSpacing(0)
 
-        self.author_sub_publish_btn = QPushButton("📄  Publish")
+        self.author_sub_publish_btn = QPushButton("Publish")
         self.author_sub_publish_btn.setCheckable(True)
         self.author_sub_publish_btn.setChecked(True)
         self.author_sub_publish_btn.setMinimumHeight(28)
@@ -2276,12 +2291,13 @@ class GodAI(QWidget):
         self.author_sub_publish_btn.clicked.connect(lambda: self._author_set_sub_mode("publish"))
         sub_row.addWidget(self.author_sub_publish_btn)
 
-        self.author_sub_market_btn = QPushButton("📢  Market")
+        self.author_sub_market_btn = QPushButton("Market")
         self.author_sub_market_btn.setCheckable(True)
         self.author_sub_market_btn.setMinimumHeight(28)
         self.author_sub_market_btn.setObjectName("WorkspaceTool")
         self.author_sub_market_btn.clicked.connect(lambda: self._author_set_sub_mode("market"))
         sub_row.addWidget(self.author_sub_market_btn)
+        sub_row.addStretch()
 
         pm_layout.addLayout(sub_row)
 
@@ -2307,34 +2323,29 @@ class GodAI(QWidget):
         pc.setContentsMargins(6, 0, 0, 0)
         pc.setSpacing(5)
 
-        pc.addWidget(QLabel("Output Type:"))
         self.author_pub_type_box = QComboBox()
         self.author_pub_type_box.addItems([
             "Synopsis — 1 Page", "Synopsis — 3 Page", "Query Letter",
             "Book Proposal", "Back-Cover Blurb", "Author Bio", "Chapter Breakdown",
         ])
-        pc.addWidget(self.author_pub_type_box)
+        pc.addWidget(field("Output Type", self.author_pub_type_box))
 
-        pc.addWidget(QLabel("Word Count Target:"))
         self.author_pub_wordcount_input = QLineEdit()
         self.author_pub_wordcount_input.setPlaceholderText("e.g. 80,000")
-        pc.addWidget(self.author_pub_wordcount_input)
+        pc.addWidget(field("Word Count Target", self.author_pub_wordcount_input))
 
-        pc.addWidget(QLabel("Comp Titles:"))
         self.author_pub_comps_input = QLineEdit()
         self.author_pub_comps_input.setPlaceholderText("e.g. Gone Girl meets Dark Places")
-        pc.addWidget(self.author_pub_comps_input)
+        pc.addWidget(field("Comp Titles", self.author_pub_comps_input))
 
-        pc.addWidget(QLabel("Pitch Tone:"))
         self.author_pub_pitch_tone_box = QComboBox()
         self.author_pub_pitch_tone_box.addItems(["Professional", "Conversational", "High-Concept"])
-        pc.addWidget(self.author_pub_pitch_tone_box)
+        pc.addWidget(field("Pitch Tone", self.author_pub_pitch_tone_box))
 
-        pc.addWidget(QLabel("Extra Notes:"))
         self.author_pub_notes_input = QTextEdit()
         self.author_pub_notes_input.setPlaceholderText("Target audience, themes, hook, extra context…")
         self.author_pub_notes_input.setFixedHeight(65)
-        pc.addWidget(self.author_pub_notes_input)
+        pc.addWidget(field("Extra Notes", self.author_pub_notes_input))
 
         pc.addStretch()
 
@@ -2382,7 +2393,6 @@ class GodAI(QWidget):
         mc.setContentsMargins(6, 0, 0, 0)
         mc.setSpacing(5)
 
-        mc.addWidget(QLabel("Platform:"))
         self.author_mkt_platform_box = QComboBox()
         self.author_mkt_platform_box.addItems([
             "Amazon Description", "KDP Listing", "Goodreads Blurb", "Instagram Post",
@@ -2390,28 +2400,24 @@ class GodAI(QWidget):
             "YouTube Description", "Newsletter", "Press Release", "Book Club Questions",
             "ARC Outreach Email", "Launch Team Email", "Podcast Pitch", "Author Website Bio",
         ])
-        mc.addWidget(self.author_mkt_platform_box)
+        mc.addWidget(field("Platform", self.author_mkt_platform_box))
 
-        mc.addWidget(QLabel("Hook / Logline:"))
         self.author_mkt_hook_input = QLineEdit()
         self.author_mkt_hook_input.setPlaceholderText("One sentence that sells the book")
-        mc.addWidget(self.author_mkt_hook_input)
+        mc.addWidget(field("Hook / Logline", self.author_mkt_hook_input))
 
-        mc.addWidget(QLabel("Comp Titles:"))
         self.author_mkt_comps_input = QLineEdit()
         self.author_mkt_comps_input.setPlaceholderText("e.g. Reaper's Creek meets Harlan Coben")
-        mc.addWidget(self.author_mkt_comps_input)
+        mc.addWidget(field("Comp Titles", self.author_mkt_comps_input))
 
-        mc.addWidget(QLabel("Tone:"))
         self.author_mkt_tone_box = QComboBox()
         self.author_mkt_tone_box.addItems(["Punchy", "Literary", "Warm", "Hype", "Mysterious"])
-        mc.addWidget(self.author_mkt_tone_box)
+        mc.addWidget(field("Tone", self.author_mkt_tone_box))
 
-        mc.addWidget(QLabel("Extra Notes:"))
         self.author_mkt_notes_input = QTextEdit()
         self.author_mkt_notes_input.setPlaceholderText("Target audience, mood, key themes…")
         self.author_mkt_notes_input.setFixedHeight(65)
-        mc.addWidget(self.author_mkt_notes_input)
+        mc.addWidget(field("Extra Notes", self.author_mkt_notes_input))
 
         mc.addStretch()
 
@@ -2459,202 +2465,133 @@ class GodAI(QWidget):
 
     # ── Music Agent Panel ─────────────────────────────────────────────────────
     def build_music_panel(self):
+        """Release planning: profile, distribution, Spotify, income.
+
+        The sidebar of indicator cards is gone. "Release Type", "Genre" and
+        "Distributor" were three bordered boxes echoing three combo boxes six
+        inches above them, in three different colours, and "Procedure" listed
+        the names of the tabs sitting next to it. Four boxes, no new
+        information — and they were what squeezed the results pane.
+        """
         self.music_panel = QWidget()
         self.music_panel.setObjectName("MusicPanel")
-        # The whole panel scrolls: unlike the other agents its controls sit in
-        # the main column rather than a sidebar, so wrapping the sidebar alone
-        # left the setup grid free to compress past its minimum on a short
-        # window. self.music_panel stays the outer widget so the visibility
-        # switching in update_agent_ui is untouched.
-        _music_outer = QVBoxLayout(self.music_panel)
-        _music_outer.setContentsMargins(0, 0, 0, 0)
-        _music_content = QWidget()
-        _music_outer.addWidget(scrollable(_music_content))
-        layout = QVBoxLayout(_music_content)
-        layout.setContentsMargins(8, 8, 8, 8)
-        layout.setSpacing(8)
+        outer = QVBoxLayout(self.music_panel)
+        outer.setContentsMargins(0, 0, 0, 0)
+        content = QWidget()
+        content.setObjectName("Transparent")
+        outer.addWidget(scrollable(content))
+        layout = QVBoxLayout(content)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(LG)
 
-        # ── Setup form ──────────────────────────────────────────────────────
-        setup_group = QGroupBox("Artist Setup")
-        setup_group.setObjectName("MusicSetupGroup")
-        # Fixed vertically: this is a form of fixed-height rows, and leaving it
-        # shrinkable let a short window compress the grid past its minimum until
-        # the fields were drawn over each other. The results splitter below has
-        # somewhere to give; the form does not.
-        setup_group.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
-        setup_layout = QGridLayout(setup_group)
-        setup_layout.setSpacing(6)
+        # ── Setup ───────────────────────────────────────────────────────
+        layout.addWidget(section("Artist setup"))
 
-        setup_layout.addWidget(QLabel("Artist / Project Name:"), 0, 0)
-        self.music_artist_input = QLineEdit()
-        self.music_artist_input.setPlaceholderText("e.g. Nova Drift, DJ Phantom, The Hollow Road")
-        setup_layout.addWidget(self.music_artist_input, 0, 1)
-
-        setup_layout.addWidget(QLabel("Genre:"), 0, 2)
-        self.music_genre_box = QComboBox()
-        self.music_genre_box.addItems([
+        self.music_artist_input = line_edit("Nova Drift, DJ Phantom, The Hollow Road")
+        self.music_genre_box = combo([
             "Pop", "Rock", "Hip-Hop", "Electronic", "Jazz", "Classical",
             "R&B", "Metal", "Indie", "Folk", "Country", "Latin", "Reggae",
             "Ambient", "World", "Other",
         ])
-        setup_layout.addWidget(self.music_genre_box, 0, 3)
-
-        setup_layout.addWidget(QLabel("Release Type:"), 1, 0)
-        self.music_release_type_box = QComboBox()
-        self.music_release_type_box.addItems(["Single", "EP (3–6 tracks)", "Album (7+ tracks)", "Mixtape"])
-        setup_layout.addWidget(self.music_release_type_box, 1, 1)
-
-        setup_layout.addWidget(QLabel("Distributor:"), 1, 2)
-        self.music_distributor_box = QComboBox()
-        self.music_distributor_box.addItems([
-            "Not signed up yet", "DistroKid", "TuneCore", "CD Baby", "Amuse", "AWAL", "Other",
+        self.music_release_type_box = combo(
+            ["Single", "EP (3–6 tracks)", "Album (7+ tracks)", "Mixtape"])
+        self.music_distributor_box = combo([
+            "Not signed up yet", "DistroKid", "TuneCore", "CD Baby", "Amuse",
+            "AWAL", "Other",
         ])
-        setup_layout.addWidget(self.music_distributor_box, 1, 3)
+        self.music_audience_input = line_edit("18–25 lo-fi hip-hop fans, gym-goers")
 
-        setup_layout.addWidget(QLabel("Target Audience (optional):"), 2, 0)
-        self.music_audience_input = QLineEdit()
-        self.music_audience_input.setPlaceholderText(
-            "e.g. 18–25 fans of lo-fi hip-hop, gym-goers, indie bedroom pop listeners"
-        )
-        setup_layout.addWidget(self.music_audience_input, 2, 1, 1, 3)
+        setup = QGridLayout()
+        setup.setHorizontalSpacing(MD)
+        setup.setVerticalSpacing(MD)
+        setup.addWidget(field("Artist / project name", self.music_artist_input),
+                        0, 0, 1, 2, Qt.AlignTop)
+        setup.addWidget(field("Genre", self.music_genre_box), 0, 2, Qt.AlignTop)
+        setup.addWidget(field("Release type", self.music_release_type_box),
+                        1, 0, Qt.AlignTop)
+        setup.addWidget(field("Distributor", self.music_distributor_box),
+                        1, 1, Qt.AlignTop)
+        setup.addWidget(field("Target audience", self.music_audience_input),
+                        1, 2, Qt.AlignTop)
+        for column in range(3):
+            setup.setColumnStretch(column, 1)
+        layout.addLayout(setup)
 
-        setup_layout.addWidget(QLabel("Describe Your Music:"), 3, 0)
         self.music_query_input = QTextEdit()
         self.music_query_input.setPlaceholderText(
-            "Describe your sound, influences, vibe, and anything specific about this release "
-            "(e.g. dark trap beats with melodic hooks, influenced by Travis Scott and Frank Ocean, "
-            "releasing a 4-track EP about late-night city life)…"
-        )
+            "Your sound, influences, vibe, and anything specific about this "
+            "release — e.g. dark trap beats with melodic hooks, a 4-track EP "
+            "about late-night city life.")
         self.music_query_input.setFixedHeight(70)
-        setup_layout.addWidget(self.music_query_input, 3, 1, 1, 3)
+        layout.addWidget(field("Describe your music", self.music_query_input))
 
-        layout.addWidget(setup_group)
-
-        # ── Provider row ────────────────────────────────────────────────────
-        provider_row_container = QWidget()
-        provider_row = FlowLayout(provider_row_container, spacing=6)
-
+        # ── Model ───────────────────────────────────────────────────────
+        layout.addWidget(section("Model"))
         self.music_panel_base = AgentPanel(
-            self, "music", providers=tuple(["ollama", "openai", "deepseek", "kimi", "gemini", "anthropic", "qwen"]),
+            self, "music",
+            providers=("ollama", "openai", "deepseek", "kimi", "gemini",
+                       "anthropic", "qwen"),
             default_provider="anthropic")
         self.music_provider_box = self.music_panel_base.provider_box
         self.music_model_box = self.music_panel_base.model_box
-        provider_row.addWidget(self.music_provider_box)
 
-        self.music_model_box.setMinimumWidth(200)
-        provider_row.addWidget(self.music_model_box)
+        models = QGridLayout()
+        models.setHorizontalSpacing(MD)
+        models.setVerticalSpacing(MD)
+        models.addWidget(field("Provider", self.music_provider_box), 0, 0, Qt.AlignTop)
+        models.addWidget(field("Model", self.music_model_box), 0, 1, Qt.AlignTop)
+        for column in range(3):
+            models.setColumnStretch(column, 1)
+        layout.addLayout(models)
 
-        self.music_analyse_btn = QPushButton("Generate Plan")
-        self.music_analyse_btn.setMinimumWidth(140)
-        self.music_analyse_btn.setObjectName("PrimaryAction")
+        # ── Actions ─────────────────────────────────────────────────────
+        actions = QHBoxLayout()
+        actions.setSpacing(SM)
+        self.music_analyse_btn = primary("Generate Plan")
+        self.music_analyse_btn.setMinimumWidth(160)
+        self.music_analyse_btn.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
         self.music_analyse_btn.clicked.connect(self.music_analyse)
-        provider_row.addWidget(self.music_analyse_btn)
-
-        self.music_stop_btn = QPushButton("Stop")
-        self.music_stop_btn.setEnabled(False)
-        self.music_stop_btn.setObjectName("DangerAction")
-        self.music_stop_btn.clicked.connect(self.music_stop)
-        provider_row.addWidget(self.music_stop_btn)
-
-        self.music_help_btn = QPushButton("Help")
-
-
-        self.music_help_btn.setObjectName("ChipBtn")
-        self.music_help_btn.setToolTip("Open Music Agent documentation")
-        self.music_help_btn.clicked.connect(self.show_agent_docs)
-        provider_row.addWidget(self.music_help_btn)
-
-        layout.addWidget(provider_row_container)
-
-        # ── Results area (tabs + sidebar) ───────────────────────────────────
-        results_splitter = QSplitter(Qt.Horizontal)
-
-        self.music_tabs = QTabWidget()
-
-        self.music_profile_box = QTextBrowser()
-        self.music_profile_box.setOpenExternalLinks(False)
-        self.music_tabs.addTab(self.music_profile_box, "Artist Profile")
-
-        self.music_release_box = QTextBrowser()
-        self.music_tabs.addTab(self.music_release_box, "Release Setup")
-
-        self.music_distribution_box = QTextBrowser()
-        self.music_tabs.addTab(self.music_distribution_box, "Distribution")
-
-        self.music_strategy_box = QTextBrowser()
-        self.music_tabs.addTab(self.music_strategy_box, "Spotify Strategy")
-
-        self.music_income_box = QTextBrowser()
-        self.music_tabs.addTab(self.music_income_box, "Income Roadmap")
-
-        results_splitter.addWidget(self.music_tabs)
-
-        # ── Sidebar indicators ──────────────────────────────────────────────
-        indicators_widget = QWidget()
-        indicators_layout = QVBoxLayout(indicators_widget)
-        indicators_layout.setContentsMargins(6, 6, 6, 6)
-        indicators_layout.setSpacing(8)
-
-        release_group = QGroupBox("Release Type")
-        release_group.setObjectName("MusicReleaseGroup")
-        release_layout = QVBoxLayout(release_group)
-        self.music_release_label = QLabel("—")
-        self.music_release_label.setAlignment(Qt.AlignCenter)
-        self.music_release_label.setStyleSheet(f"font-size: 14px; font-weight: 600; color: {ACCENT};")
-        release_layout.addWidget(self.music_release_label)
-        indicators_layout.addWidget(release_group)
-
-        genre_group = QGroupBox("Genre")
-        genre_group.setObjectName("MusicGenreGroup")
-        genre_layout = QVBoxLayout(genre_group)
-        self.music_genre_label = QLabel("—")
-        self.music_genre_label.setAlignment(Qt.AlignCenter)
-        self.music_genre_label.setStyleSheet(f"font-size: 14px; font-weight: 600; color: {INFO};")
-        genre_layout.addWidget(self.music_genre_label)
-        indicators_layout.addWidget(genre_group)
-
-        dist_group = QGroupBox("Distributor")
-        dist_group.setObjectName("MusicDistGroup")
-        dist_layout = QVBoxLayout(dist_group)
-        self.music_dist_label = QLabel("—")
-        self.music_dist_label.setAlignment(Qt.AlignCenter)
-        self.music_dist_label.setWordWrap(True)
-        self.music_dist_label.setStyleSheet(f"font-size: 13px; font-weight: 600; color: {WARNING};")
-        dist_layout.addWidget(self.music_dist_label)
-        indicators_layout.addWidget(dist_group)
-
-        steps_group = QGroupBox("Procedure")
-        steps_group.setObjectName("MusicStepsGroup")
-        steps_layout = QVBoxLayout(steps_group)
-        self.music_steps_label = QLabel(
-            "1. Artist Profile\n2. Release Setup\n3. Distribution\n4. Spotify Strategy\n5. Income Roadmap"
-        )
-        self.music_steps_label.setStyleSheet(f"font-size: 11px; color: {TEXT_DIM};")
-        steps_layout.addWidget(self.music_steps_label)
-        indicators_layout.addWidget(steps_group)
-
-        indicators_layout.addStretch()
+        actions.addWidget(self.music_analyse_btn)
 
         self.music_save_btn = QPushButton("Save Full Plan")
         self.music_save_btn.setEnabled(False)
         self.music_save_btn.clicked.connect(self.music_save)
-        indicators_layout.addWidget(self.music_save_btn)
+        actions.addWidget(self.music_save_btn)
 
         self.music_clear_btn = QPushButton("Clear")
         self.music_clear_btn.clicked.connect(self.music_clear)
-        indicators_layout.addWidget(self.music_clear_btn)
+        actions.addWidget(self.music_clear_btn)
 
-        results_splitter.addWidget(indicators_widget)
-        results_splitter.setSizes([700, 200])
+        self.music_stop_btn = QPushButton("Stop")
+        self.music_stop_btn.setObjectName("DangerAction")
+        self.music_stop_btn.clicked.connect(self.music_stop)
+        self.music_stop_btn.hide()
+        actions.addWidget(self.music_stop_btn)
 
-        layout.addWidget(results_splitter, 1)
-
+        actions.addStretch()
         self.music_status_label = QLabel("")
-        self.music_status_label.setStyleSheet(f"font-size: 12px; color: {TEXT_MUTE};")
-        layout.addWidget(self.music_status_label)
+        self.music_status_label.setObjectName("EstimateLine")
+        actions.addWidget(self.music_status_label)
+        layout.addLayout(actions)
+
+        # ── Results ─────────────────────────────────────────────────────
+        # The five tabs are the procedure, in order, so the "Procedure" card
+        # that listed them was the tab bar written out as prose.
+        self.music_tabs = QTabWidget()
+        self.music_profile_box = QTextBrowser()
+        self.music_profile_box.setOpenExternalLinks(False)
+        self.music_tabs.addTab(self.music_profile_box, "Artist Profile")
+        self.music_release_box = QTextBrowser()
+        self.music_tabs.addTab(self.music_release_box, "Release Setup")
+        self.music_distribution_box = QTextBrowser()
+        self.music_tabs.addTab(self.music_distribution_box, "Distribution")
+        self.music_strategy_box = QTextBrowser()
+        self.music_tabs.addTab(self.music_strategy_box, "Spotify Strategy")
+        self.music_income_box = QTextBrowser()
+        self.music_tabs.addTab(self.music_income_box, "Income Roadmap")
+        layout.addWidget(self.music_tabs, 1)
 
         self.music_panel.hide()
-
         self.music_load_models()
 
     # ── NFL Prop Bet Panel ───────────────────────────────────────────────────
@@ -2665,174 +2602,139 @@ class GodAI(QWidget):
     # ── OSINT Pro image helpers ──────────────────────────────────────────────
     # ── Web Design panel ────────────────────────────────────────────────────
     def build_webdesign_panel(self):
+        """Generate a page: HTML, CSS, JS, plus what came out of it.
+
+        The three indicator cards (Responsive / Framework Used / Lines of Code)
+        are real output facts rather than echoes of the form, so they stay —
+        but as a row of stats above the code, not three bordered boxes in a
+        200px column squeezing the pane you actually read.
+        """
         self.webdesign_panel = QWidget()
         self.webdesign_panel.setObjectName("WebdesignPanel")
-        # The whole panel scrolls, as the music panel does and for the same
-        # reason: its form lives in the main column rather than a sidebar, so
-        # at the window's own minimum there is genuinely less height than the
-        # content needs. Scrolling keeps every control reachable; without it
-        # the grid compresses past its minimum and the fields overlap.
-        _webdesign_outer = QVBoxLayout(self.webdesign_panel)
-        _webdesign_outer.setContentsMargins(0, 0, 0, 0)
-        _webdesign_content = QWidget()
-        _webdesign_outer.addWidget(scrollable(_webdesign_content))
-        layout = QVBoxLayout(_webdesign_content)
-        layout.setContentsMargins(MD, MD, MD, MD)
-        layout.setSpacing(MD)
+        outer = QVBoxLayout(self.webdesign_panel)
+        outer.setContentsMargins(0, 0, 0, 0)
+        content = QWidget()
+        content.setObjectName("Transparent")
+        outer.addWidget(scrollable(content))
+        layout = QVBoxLayout(content)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(LG)
 
-        # ── Quick Setup ──────────────────────────────────────────────
-        setup_group = QGroupBox("Quick Setup")
-        setup_group.setObjectName("WebdesignSetupBox")
-        # Fixed vertically: a form of fixed-height rows should not be the
-        # thing that shrinks. Left flexible, a short window compresses this
-        # grid past its minimum and the fields draw over each other.
-        setup_group.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
-        setup_layout = QGridLayout(setup_group)
-        setup_layout.setSpacing(6)
+        # ── Brief ───────────────────────────────────────────────────────
+        layout.addWidget(section("Page"))
 
-        setup_layout.addWidget(QLabel("Page Type:"), 0, 0)
-        self.webdesign_type_box = QComboBox()
-        self.webdesign_type_box.addItems([
-            "Landing Page", "Portfolio", "Dashboard", "Form", "Blog", "Component / Widget", "Other"
+        self.webdesign_type_box = combo([
+            "Landing Page", "Portfolio", "Dashboard", "Form", "Blog",
+            "Component / Widget", "Other",
         ])
-        setup_layout.addWidget(self.webdesign_type_box, 0, 1)
+        self.webdesign_style_box = combo(
+            ["Minimal", "Dark", "Corporate", "Playful", "Brutalist"])
+        self.webdesign_palette_input = line_edit("#1a1a2e, #e94560  ·  ocean blues")
+        self.webdesign_framework_box = combo(["Vanilla", "Tailwind", "Bootstrap"])
 
-        setup_layout.addWidget(QLabel("Style:"), 0, 2)
-        self.webdesign_style_box = QComboBox()
-        self.webdesign_style_box.addItems(["Minimal", "Dark", "Corporate", "Playful", "Brutalist"])
-        setup_layout.addWidget(self.webdesign_style_box, 0, 3)
+        setup = QGridLayout()
+        setup.setHorizontalSpacing(MD)
+        setup.setVerticalSpacing(MD)
+        setup.addWidget(field("Page type", self.webdesign_type_box), 0, 0, Qt.AlignTop)
+        setup.addWidget(field("Style", self.webdesign_style_box), 0, 1, Qt.AlignTop)
+        setup.addWidget(field("Framework", self.webdesign_framework_box), 0, 2, Qt.AlignTop)
+        setup.addWidget(field("Colour palette", self.webdesign_palette_input),
+                        1, 0, 1, 3, Qt.AlignTop)
+        for column in range(3):
+            setup.setColumnStretch(column, 1)
+        layout.addLayout(setup)
 
-        setup_layout.addWidget(QLabel("Colour Palette:"), 1, 0)
-        self.webdesign_palette_input = QLineEdit()
-        self.webdesign_palette_input.setPlaceholderText("e.g. #1a1a2e, #e94560  or  'ocean blues'")
-        setup_layout.addWidget(self.webdesign_palette_input, 1, 1)
-
-        setup_layout.addWidget(QLabel("Framework:"), 1, 2)
-        self.webdesign_framework_box = QComboBox()
-        self.webdesign_framework_box.addItems(["Vanilla", "Tailwind", "Bootstrap"])
-        setup_layout.addWidget(self.webdesign_framework_box, 1, 3)
-
-        setup_layout.addWidget(QLabel("Brief:"), 2, 0)
         self.webdesign_brief_input = QTextEdit()
         self.webdesign_brief_input.setPlaceholderText(
-            "Describe what you want built — sections, features, content, interactions, etc."
-        )
+            "What to build — sections, features, content, interactions.")
         self.webdesign_brief_input.setFixedHeight(70)
-        setup_layout.addWidget(self.webdesign_brief_input, 2, 1, 1, 3)
+        layout.addWidget(field("Brief", self.webdesign_brief_input))
 
-        provider_row_container = QWidget()
-        provider_row = FlowLayout(provider_row_container, spacing=6)
-        provider_row.addWidget(QLabel("Provider:"))
+        # ── Model ───────────────────────────────────────────────────────
+        layout.addWidget(section("Model"))
         self.webdesign_panel_base = AgentPanel(
-            self, "webdesign", providers=tuple(["ollama", "openai", "deepseek", "kimi", "gemini", "anthropic", "qwen"]),
+            self, "webdesign",
+            providers=("ollama", "openai", "deepseek", "kimi", "gemini",
+                       "anthropic", "qwen"),
             default_provider="anthropic")
         self.webdesign_provider_box = self.webdesign_panel_base.provider_box
         self.webdesign_model_box = self.webdesign_panel_base.model_box
-        provider_row.addWidget(self.webdesign_provider_box)
 
-        provider_row.addWidget(QLabel("Model:"))
-        self.webdesign_model_box.setMinimumWidth(200)
-        provider_row.addWidget(self.webdesign_model_box)
+        models = QGridLayout()
+        models.setHorizontalSpacing(MD)
+        models.setVerticalSpacing(MD)
+        models.addWidget(field("Provider", self.webdesign_provider_box), 0, 0, Qt.AlignTop)
+        models.addWidget(field("Model", self.webdesign_model_box), 0, 1, Qt.AlignTop)
+        for column in range(3):
+            models.setColumnStretch(column, 1)
+        layout.addLayout(models)
 
-
-        self.webdesign_generate_btn = QPushButton("Generate")
-        self.webdesign_generate_btn.setMinimumWidth(140)
-        self.webdesign_generate_btn.setObjectName("PrimaryAction")
+        # ── Actions ─────────────────────────────────────────────────────
+        actions = QHBoxLayout()
+        actions.setSpacing(SM)
+        self.webdesign_generate_btn = primary("Generate")
+        self.webdesign_generate_btn.setMinimumWidth(160)
+        self.webdesign_generate_btn.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
         self.webdesign_generate_btn.clicked.connect(self.webdesign_generate)
-        provider_row.addWidget(self.webdesign_generate_btn)
-
-        self.webdesign_stop_btn = QPushButton("Stop")
-        self.webdesign_stop_btn.setEnabled(False)
-        self.webdesign_stop_btn.setObjectName("DangerAction")
-        self.webdesign_stop_btn.clicked.connect(self.webdesign_stop)
-        provider_row.addWidget(self.webdesign_stop_btn)
-
-        setup_layout.addWidget(provider_row_container, 3, 0, 1, 4)
-        layout.addWidget(setup_group)
-
-        # ── Results: tabs left, sidebar right ───────────────────────
-        results_splitter = QSplitter(Qt.Horizontal)
-
-        self.webdesign_tabs = QTabWidget()
-
-        self.webdesign_html_box = QTextEdit()
-        self.webdesign_html_box.setReadOnly(True)
-        self.webdesign_tabs.addTab(self.webdesign_html_box, "HTML")
-
-        self.webdesign_css_box = QTextEdit()
-        self.webdesign_css_box.setReadOnly(True)
-        self.webdesign_tabs.addTab(self.webdesign_css_box, "CSS")
-
-        self.webdesign_js_box = QTextEdit()
-        self.webdesign_js_box.setReadOnly(True)
-        self.webdesign_tabs.addTab(self.webdesign_js_box, "JS")
-
-        results_splitter.addWidget(self.webdesign_tabs)
-
-        # Sidebar
-        sidebar = QWidget()
-        sidebar_layout = QVBoxLayout(sidebar)
-        sidebar_layout.setContentsMargins(8, 0, 0, 0)
-        sidebar_layout.setSpacing(10)
-
-        responsive_group = QGroupBox("Responsive")
-        responsive_group.setObjectName("WebdesignResponsiveBox")
-        responsive_layout = QVBoxLayout(responsive_group)
-        self.webdesign_responsive_label = QLabel("—")
-        self.webdesign_responsive_label.setAlignment(Qt.AlignCenter)
-        self.webdesign_responsive_label.setStyleSheet(f"font-size: 14px; font-weight: 600; color: {INFO};")
-        responsive_layout.addWidget(self.webdesign_responsive_label)
-        sidebar_layout.addWidget(responsive_group)
-
-        framework_group = QGroupBox("Framework Used")
-        framework_group.setObjectName("WebdesignFrameworkBox")
-        framework_layout = QVBoxLayout(framework_group)
-        self.webdesign_framework_label = QLabel("—")
-        self.webdesign_framework_label.setAlignment(Qt.AlignCenter)
-        self.webdesign_framework_label.setStyleSheet(f"font-size: 14px; font-weight: 600; color: {TEXT};")
-        framework_layout.addWidget(self.webdesign_framework_label)
-        sidebar_layout.addWidget(framework_group)
-
-        lines_group = QGroupBox("Lines of Code")
-        lines_group.setObjectName("WebdesignLinesBox")
-        lines_layout = QVBoxLayout(lines_group)
-        self.webdesign_lines_label = QLabel("—")
-        self.webdesign_lines_label.setAlignment(Qt.AlignCenter)
-        self.webdesign_lines_label.setStyleSheet(f"font-size: 20px; font-weight: 600; color: {ACCENT};")
-        lines_layout.addWidget(self.webdesign_lines_label)
-        sidebar_layout.addWidget(lines_group)
-
-        sidebar_layout.addStretch()
+        actions.addWidget(self.webdesign_generate_btn)
 
         self.webdesign_copy_btn = QPushButton("Copy All")
         self.webdesign_copy_btn.setEnabled(False)
         self.webdesign_copy_btn.clicked.connect(self.webdesign_copy_all)
-        sidebar_layout.addWidget(self.webdesign_copy_btn)
+        actions.addWidget(self.webdesign_copy_btn)
 
         self.webdesign_save_btn = QPushButton("Save .html")
         self.webdesign_save_btn.setEnabled(False)
         self.webdesign_save_btn.clicked.connect(self.webdesign_save)
-        sidebar_layout.addWidget(self.webdesign_save_btn)
+        actions.addWidget(self.webdesign_save_btn)
 
         self.webdesign_clear_btn = QPushButton("Clear")
         self.webdesign_clear_btn.clicked.connect(self.webdesign_clear)
-        sidebar_layout.addWidget(self.webdesign_clear_btn)
+        actions.addWidget(self.webdesign_clear_btn)
 
-        # min_width: without a floor the splitter squeezes this pane below its
-        # own content on a small window and the indicators clip.
-        results_splitter.addWidget(scrollable(sidebar, min_width=170))
-        results_splitter.setSizes([680, 200])
+        self.webdesign_stop_btn = QPushButton("Stop")
+        self.webdesign_stop_btn.setObjectName("DangerAction")
+        self.webdesign_stop_btn.clicked.connect(self.webdesign_stop)
+        self.webdesign_stop_btn.hide()
+        actions.addWidget(self.webdesign_stop_btn)
 
-        layout.addWidget(results_splitter, 1)
-
+        actions.addStretch()
         self.webdesign_status_label = QLabel("")
-        self.webdesign_status_label.setStyleSheet(f"font-size: 12px; color: {TEXT_MUTE};")
-        layout.addWidget(self.webdesign_status_label)
+        self.webdesign_status_label.setObjectName("EstimateLine")
+        actions.addWidget(self.webdesign_status_label)
+        layout.addLayout(actions)
+
+        # ── Output ──────────────────────────────────────────────────────
+        layout.addWidget(section("Output"))
+        stats = QHBoxLayout()
+        stats.setSpacing(LG)
+        responsive_stat = StatBlock("responsive", "—")
+        framework_stat = StatBlock("framework used", "—")
+        lines_stat = StatBlock("lines of code", "—")
+        # The existing handlers call setText on these, so they keep pointing at
+        # the value label rather than the block.
+        self.webdesign_responsive_label = responsive_stat.value_label
+        self.webdesign_framework_label = framework_stat.value_label
+        self.webdesign_lines_label = lines_stat.value_label
+        for block in (responsive_stat, framework_stat, lines_stat):
+            stats.addWidget(block)
+        stats.addStretch()
+        layout.addLayout(stats)
+
+        self.webdesign_tabs = QTabWidget()
+        self.webdesign_html_box = QTextEdit()
+        self.webdesign_html_box.setReadOnly(True)
+        self.webdesign_tabs.addTab(self.webdesign_html_box, "HTML")
+        self.webdesign_css_box = QTextEdit()
+        self.webdesign_css_box.setReadOnly(True)
+        self.webdesign_tabs.addTab(self.webdesign_css_box, "CSS")
+        self.webdesign_js_box = QTextEdit()
+        self.webdesign_js_box.setReadOnly(True)
+        self.webdesign_tabs.addTab(self.webdesign_js_box, "JS")
+        layout.addWidget(self.webdesign_tabs, 1)
 
         self.webdesign_panel.hide()
-
         self.webdesign_load_models()
-
 
     # ── Wi-Fi Adapter panel ──────────────────────────────────────────────────
     # ── Wi-Fi handlers ───────────────────────────────────────────────────────
@@ -2875,6 +2777,7 @@ class GodAI(QWidget):
         self.webdesign_status_label.setText("Generating...")
         self.webdesign_generate_btn.setEnabled(False)
         self.webdesign_stop_btn.setEnabled(True)
+        self.webdesign_stop_btn.show()
         self.webdesign_save_btn.setEnabled(False)
         self.webdesign_copy_btn.setEnabled(False)
 
@@ -2900,6 +2803,7 @@ class GodAI(QWidget):
         self.webdesign_status_label.setText("Generation complete.")
         self.webdesign_generate_btn.setEnabled(True)
         self.webdesign_stop_btn.setEnabled(False)
+        self.webdesign_stop_btn.hide()
         self.webdesign_save_btn.setEnabled(True)
         self.webdesign_copy_btn.setEnabled(True)
 
@@ -2909,6 +2813,7 @@ class GodAI(QWidget):
         self.webdesign_status_label.setText("Error.")
         self.webdesign_generate_btn.setEnabled(True)
         self.webdesign_stop_btn.setEnabled(False)
+        self.webdesign_stop_btn.hide()
 
     def webdesign_stop(self):
         if self.webdesign_worker is not None and self.webdesign_worker.isRunning():
@@ -2916,6 +2821,7 @@ class GodAI(QWidget):
         self.webdesign_status_label.setText("Stopped.")
         self.webdesign_generate_btn.setEnabled(True)
         self.webdesign_stop_btn.setEnabled(False)
+        self.webdesign_stop_btn.hide()
 
     def webdesign_save(self):
         if not self._last_webdesign_response:
@@ -2994,204 +2900,233 @@ class GodAI(QWidget):
     # ── Season Model handlers ────────────────────────────────────────────────
     # ── Fiverr Agent Panel ───────────────────────────────────────────────────
     def build_fiverr_panel(self):
+        """Client gigs: logo concepts, a delivery message, a gig listing.
+
+        Rebuilt on the shared form idiom. Three things changed beyond looks:
+
+        * The image model is now a control. "Generate Logos" is the only button
+          on this page that spends money per click, and until now the model it
+          used was hardcoded and invisible — the one visible model box drives
+          the *text* outputs only, which is why nothing appeared to recommend
+          DALL-E for the graphics work it was already doing.
+        * The Status / Est. Cost / Order Log sidebar is gone. Status is a line
+          under the buttons, the cost estimate sits beside the button that
+          incurs it, and the order log is a tab rather than a 190px column
+          with a three-column table squeezed into it.
+        * Stop is hidden until there is something to stop, so the action row
+          is three buttons with one clear answer instead of four.
+        """
+        from PySide6.QtWidgets import (
+            QHeaderView, QSpinBox, QTableWidget,
+        )
+        from services.openai_client import IMAGE_MODELS, DEFAULT_IMAGE_MODEL
+
         self.fiverr_panel = QWidget()
         self.fiverr_panel.setObjectName("FiverrPanel")
-        # The whole panel scrolls, as the music panel does and for the same
-        # reason: its form lives in the main column rather than a sidebar, so
-        # at the window's own minimum there is genuinely less height than the
-        # content needs. Scrolling keeps every control reachable; without it
-        # the grid compresses past its minimum and the fields overlap.
-        _fiverr_outer = QVBoxLayout(self.fiverr_panel)
-        _fiverr_outer.setContentsMargins(0, 0, 0, 0)
-        _fiverr_content = QWidget()
-        _fiverr_outer.addWidget(scrollable(_fiverr_content))
-        layout = QVBoxLayout(_fiverr_content)
-        layout.setContentsMargins(MD, MD, MD, MD)
-        layout.setSpacing(MD)
+        outer = QVBoxLayout(self.fiverr_panel)
+        outer.setContentsMargins(0, 0, 0, 0)
 
-        brief_group = QGroupBox("Client Brief")
-        brief_group.setObjectName("FiverrBriefBox")
-        # Fixed vertically: a form of fixed-height rows should not be the
-        # thing that shrinks. Left flexible, a short window compresses this
-        # grid past its minimum and the fields draw over each other.
-        brief_group.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
-        brief_layout = QGridLayout(brief_group)
-        brief_layout.setSpacing(6)
+        content = QWidget()
+        content.setObjectName("Transparent")
+        outer.addWidget(scrollable(content))
+        layout = QVBoxLayout(content)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(LG)
 
-        brief_layout.addWidget(QLabel("Business Name:"), 0, 0)
-        self.fiverr_name_input = QLineEdit()
-        self.fiverr_name_input.setPlaceholderText("e.g. Apex Fitness Studio")
-        brief_layout.addWidget(self.fiverr_name_input, 0, 1, 1, 3)
+        # ── Brief ───────────────────────────────────────────────────────
+        layout.addWidget(section("Client brief"))
 
-        brief_layout.addWidget(QLabel("Industry / Niche:"), 1, 0)
-        self.fiverr_industry_input = QLineEdit()
-        self.fiverr_industry_input.setPlaceholderText("e.g. fitness, law firm, bakery")
-        brief_layout.addWidget(self.fiverr_industry_input, 1, 1)
-
-        brief_layout.addWidget(QLabel("Style:"), 1, 2)
-        self.fiverr_style_box = QComboBox()
-        self.fiverr_style_box.addItems(["Minimalist", "Bold", "Vintage", "Playful", "Corporate", "Luxury", "Futuristic"])
-        brief_layout.addWidget(self.fiverr_style_box, 1, 3)
-
-        brief_layout.addWidget(QLabel("Primary Colors:"), 2, 0)
-        self.fiverr_colors_input = QLineEdit()
-        self.fiverr_colors_input.setPlaceholderText("e.g. navy blue and gold")
-        brief_layout.addWidget(self.fiverr_colors_input, 2, 1)
-
-        brief_layout.addWidget(QLabel("# Concepts:"), 2, 2)
-        from PySide6.QtWidgets import QSpinBox
+        self.fiverr_name_input = line_edit("Apex Fitness Studio")
+        self.fiverr_industry_input = line_edit("fitness, law firm, bakery")
+        self.fiverr_colors_input = line_edit("navy blue and gold")
+        self.fiverr_style_box = combo(
+            ["Minimalist", "Bold", "Vintage", "Playful", "Corporate",
+             "Luxury", "Futuristic"])
         self.fiverr_count_spin = QSpinBox()
         self.fiverr_count_spin.setRange(1, 4)
         self.fiverr_count_spin.setValue(2)
-        brief_layout.addWidget(self.fiverr_count_spin, 2, 3)
+        self.fiverr_count_spin.valueChanged.connect(self._fiverr_update_estimate)
 
-        brief_layout.addWidget(QLabel("Notes:"), 3, 0)
+        # Equal column stretch is what makes the second row's labels sit under
+        # the first row's, instead of each row packing to its own width.
+        brief = QGridLayout()
+        brief.setHorizontalSpacing(MD)
+        brief.setVerticalSpacing(MD)
+        brief.addWidget(field("Business name", self.fiverr_name_input), 0, 0, 1, 2,
+                        Qt.AlignTop)
+        brief.addWidget(field("Style", self.fiverr_style_box), 0, 2, Qt.AlignTop)
+        brief.addWidget(field("Industry / niche", self.fiverr_industry_input), 1, 0,
+                        Qt.AlignTop)
+        brief.addWidget(field("Primary colours", self.fiverr_colors_input), 1, 1,
+                        Qt.AlignTop)
+        brief.addWidget(field("Concepts", self.fiverr_count_spin), 1, 2, Qt.AlignTop)
+        for column in range(3):
+            brief.setColumnStretch(column, 1)
+        layout.addLayout(brief)
+
         self.fiverr_notes_input = QTextEdit()
-        self.fiverr_notes_input.setPlaceholderText("Optional: tagline, mood, target audience, competitors to avoid...")
-        self.fiverr_notes_input.setFixedHeight(55)
-        brief_layout.addWidget(self.fiverr_notes_input, 3, 1, 1, 3)
+        self.fiverr_notes_input.setPlaceholderText(
+            "Tagline, mood, target audience, competitors to avoid…")
+        self.fiverr_notes_input.setFixedHeight(70)
+        layout.addWidget(field("Notes", self.fiverr_notes_input))
 
-        # Row 1: Provider + Model (their own row so they don't squeeze the action buttons)
-        provider_row_container = QWidget()
-        provider_row = FlowLayout(provider_row_container, spacing=6)
-        provider_row.addWidget(QLabel("Text Provider:"))
+        # ── Models ──────────────────────────────────────────────────────
+        layout.addWidget(section("Models"))
+
         self.fiverr_panel_base = AgentPanel(
-            self, "fiverr", providers=tuple(["anthropic", "openai", "deepseek", "kimi", "gemini", "qwen", "ollama"]),
+            self, "fiverr",
+            providers=("anthropic", "openai", "deepseek", "kimi", "gemini",
+                       "qwen", "ollama"),
             default_provider="anthropic")
         self.fiverr_provider_box = self.fiverr_panel_base.provider_box
         self.fiverr_model_box = self.fiverr_panel_base.model_box
-        provider_row.addWidget(self.fiverr_provider_box)
 
-        provider_row.addWidget(QLabel("Model:"))
-        self.fiverr_model_box.setMinimumWidth(180)
-        provider_row.addWidget(self.fiverr_model_box, 1)
-        brief_layout.addWidget(provider_row_container, 4, 0, 1, 4)
+        self.fiverr_image_model_box = combo(list(IMAGE_MODELS),
+                                            DEFAULT_IMAGE_MODEL)
+        self.fiverr_image_model_box.currentTextChanged.connect(
+            self._fiverr_update_estimate)
 
-        # Row 2: All four action buttons get their own row with full width
-        # FlowLayout, not QHBoxLayout: four fixed-width buttons pin a minimum
-        # wider than this panel gets on a narrow window, and Qt then draws them
-        # over each other. These wrap onto a second line instead.
-        action_row_container = QWidget()
-        action_row = FlowLayout(action_row_container, spacing=6)
+        models = QGridLayout()
+        models.setHorizontalSpacing(MD)
+        models.setVerticalSpacing(MD)
+        models.addWidget(field("Text provider", self.fiverr_provider_box), 0, 0,
+                         Qt.AlignTop)
+        models.addWidget(field("Text model", self.fiverr_model_box), 0, 1, Qt.AlignTop)
+        models.addWidget(field("Image model", self.fiverr_image_model_box), 0, 2,
+                         Qt.AlignTop)
+        for column in range(3):
+            models.setColumnStretch(column, 1)
+        layout.addLayout(models)
 
-        self.fiverr_generate_btn = QPushButton("Generate Logos")
-        self.fiverr_generate_btn.setMinimumWidth(140)
-        self.fiverr_generate_btn.setObjectName("PrimaryAction")
+        # ── Actions ─────────────────────────────────────────────────────
+        # One filled button. The other two are real actions but not the answer
+        # to this screen, and the cost sits beside the control that spends it.
+        actions = QHBoxLayout()
+        actions.setSpacing(SM)
+
+        self.fiverr_generate_btn = primary("Generate Logos")
+        self.fiverr_generate_btn.setMinimumWidth(160)
+        self.fiverr_generate_btn.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
         self.fiverr_generate_btn.clicked.connect(self.fiverr_generate_logos)
-        action_row.addWidget(self.fiverr_generate_btn)
+        actions.addWidget(self.fiverr_generate_btn)
 
-        self.fiverr_delivery_btn = QPushButton("Delivery Msg")
-        self.fiverr_delivery_btn.setMinimumWidth(130)
-        self.fiverr_delivery_btn.setObjectName("SecondaryAction")
+        self.fiverr_delivery_btn = QPushButton("Delivery Message")
         self.fiverr_delivery_btn.clicked.connect(self.fiverr_write_delivery)
-        action_row.addWidget(self.fiverr_delivery_btn)
+        actions.addWidget(self.fiverr_delivery_btn)
 
         self.fiverr_gig_btn = QPushButton("Gig Description")
-        self.fiverr_gig_btn.setMinimumWidth(140)
-        self.fiverr_gig_btn.setObjectName("SecondaryAction")
         self.fiverr_gig_btn.clicked.connect(self.fiverr_write_gig)
-        action_row.addWidget(self.fiverr_gig_btn)
+        actions.addWidget(self.fiverr_gig_btn)
 
+        # Hidden rather than disabled: a permanently greyed button is chrome.
         self.fiverr_stop_btn = QPushButton("Stop")
-        self.fiverr_stop_btn.setEnabled(False)
         self.fiverr_stop_btn.setObjectName("DangerAction")
         self.fiverr_stop_btn.clicked.connect(self.fiverr_stop)
-        action_row.addWidget(self.fiverr_stop_btn)
+        self.fiverr_stop_btn.hide()
+        actions.addWidget(self.fiverr_stop_btn)
 
-        brief_layout.addWidget(action_row_container, 5, 0, 1, 4)
-        layout.addWidget(brief_group)
+        actions.addStretch()
+        self.fiverr_cost_label = QLabel()
+        self.fiverr_cost_label.setObjectName("EstimateLine")
+        actions.addWidget(self.fiverr_cost_label)
+        layout.addLayout(actions)
 
-        results_splitter = QSplitter(Qt.Horizontal)
+        self.fiverr_status_label = QLabel("Idle")
+        self.fiverr_status_label.setObjectName("EstimateLine")
+        self.fiverr_status_label.setWordWrap(True)
+        layout.addWidget(self.fiverr_status_label)
+
+        # ── Results ─────────────────────────────────────────────────────
         self.fiverr_tabs = QTabWidget()
 
         preview_widget = QWidget()
+        preview_widget.setObjectName("Transparent")
         preview_layout = QVBoxLayout(preview_widget)
-        preview_layout.setContentsMargins(4, 4, 4, 4)
-        preview_layout.setSpacing(6)
-        preview_top_container = QWidget()
-        preview_top = FlowLayout(preview_top_container, spacing=6)
-        self.fiverr_preview_status = QLabel("No logos generated yet.")
-        self.fiverr_preview_status.setStyleSheet(f"color: {TEXT_MUTE}; font-style: italic;")
+        preview_layout.setContentsMargins(MD, MD, MD, MD)
+        preview_layout.setSpacing(MD)
+
+        preview_top = QHBoxLayout()
+        preview_top.setSpacing(SM)
+        self.fiverr_preview_status = QLabel("No logos yet — fill in the brief and generate.")
+        self.fiverr_preview_status.setObjectName("EstimateLine")
         preview_top.addWidget(self.fiverr_preview_status)
-        self.fiverr_save_images_btn = QPushButton("Save All Images")
+        preview_top.addStretch()
+        self.fiverr_save_images_btn = quiet("Save All Images")
         self.fiverr_save_images_btn.setEnabled(False)
+        self.fiverr_save_images_btn.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
         self.fiverr_save_images_btn.clicked.connect(self.fiverr_save_images)
         preview_top.addWidget(self.fiverr_save_images_btn)
-        preview_layout.addWidget(preview_top_container)
+        preview_layout.addLayout(preview_top)
+
         self.fiverr_logo_grid = QWidget()
+        self.fiverr_logo_grid.setObjectName("Transparent")
         self.fiverr_logo_grid_layout = QHBoxLayout(self.fiverr_logo_grid)
         self.fiverr_logo_grid_layout.setContentsMargins(0, 0, 0, 0)
-        self.fiverr_logo_grid_layout.setSpacing(12)
+        self.fiverr_logo_grid_layout.setSpacing(MD)
         preview_layout.addWidget(self.fiverr_logo_grid)
         preview_layout.addStretch()
         self.fiverr_tabs.addTab(preview_widget, "Logo Preview")
 
         self.fiverr_delivery_box = QTextEdit()
         self.fiverr_delivery_box.setPlaceholderText(
-            "Click 'Write Delivery Msg' to generate a professional client delivery message..."
-        )
+            "Generate a client delivery message with the button above.")
         self.fiverr_tabs.addTab(self.fiverr_delivery_box, "Delivery Message")
 
         self.fiverr_gig_box = QTextEdit()
         self.fiverr_gig_box.setPlaceholderText(
-            "Click 'Write Gig Description' to generate a Fiverr listing..."
-        )
+            "Generate a Fiverr gig listing with the button above.")
         self.fiverr_tabs.addTab(self.fiverr_gig_box, "Gig Description")
 
-        results_splitter.addWidget(self.fiverr_tabs)
-
-        from PySide6.QtWidgets import QTableWidget, QHeaderView
-        sidebar = QWidget()
-        sidebar_layout = QVBoxLayout(sidebar)
-        sidebar_layout.setContentsMargins(8, 0, 0, 0)
-        sidebar_layout.setSpacing(10)
-        sidebar.setMaximumWidth(190)
-
-        status_group = QGroupBox("Status")
-        status_group.setObjectName("FiverrStatusBox")
-        status_layout = QVBoxLayout(status_group)
-        self.fiverr_status_label = QLabel("Idle")
-        self.fiverr_status_label.setWordWrap(True)
-        self.fiverr_status_label.setStyleSheet(f"font-size: 12px; color: {TEXT_MUTE};")
-        status_layout.addWidget(self.fiverr_status_label)
-        sidebar_layout.addWidget(status_group)
-
-        cost_group = QGroupBox("Est. Cost")
-        cost_group.setObjectName("FiverrCostBox")
-        cost_layout = QVBoxLayout(cost_group)
-        self.fiverr_cost_label = QLabel("—")
-        self.fiverr_cost_label.setStyleSheet(f"font-size: 14px; font-weight: 600; color: {ACCENT};")
-        cost_note = QLabel("DALL-E 3: ~$0.04/image\n(standard quality)")
-        cost_note.setStyleSheet(f"font-size: 10px; color: {TEXT_MUTE};")
-        cost_note.setWordWrap(True)
-        cost_layout.addWidget(self.fiverr_cost_label)
-        cost_layout.addWidget(cost_note)
-        sidebar_layout.addWidget(cost_group)
-
-        order_group = QGroupBox("Order Log")
-        order_group.setObjectName("FiverrOrderBox")
-        order_layout = QVBoxLayout(order_group)
+        # The order log was a 190px sidebar column holding a three-column
+        # table; every column was truncated. As a tab it gets the full width.
+        orders_widget = QWidget()
+        orders_widget.setObjectName("Transparent")
+        orders_layout = QVBoxLayout(orders_widget)
+        orders_layout.setContentsMargins(MD, MD, MD, MD)
+        orders_layout.setSpacing(MD)
         self.fiverr_order_table = QTableWidget(0, 3)
-        self.fiverr_order_table.setHorizontalHeaderLabels(["Business", "#", "Status"])
-        self.fiverr_order_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
-        self.fiverr_order_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeToContents)
-        self.fiverr_order_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeToContents)
+        self.fiverr_order_table.setHorizontalHeaderLabels(
+            ["Business", "Concepts", "Status"])
+        header = self.fiverr_order_table.horizontalHeader()
+        header.setSectionResizeMode(0, QHeaderView.Stretch)
+        header.setSectionResizeMode(1, QHeaderView.ResizeToContents)
+        header.setSectionResizeMode(2, QHeaderView.ResizeToContents)
         self.fiverr_order_table.setEditTriggers(QTableWidget.NoEditTriggers)
         self.fiverr_order_table.setSelectionBehavior(QTableWidget.SelectRows)
-        self.fiverr_order_table.setAlternatingRowColors(True)
         self.fiverr_order_table.verticalHeader().setVisible(False)
-        order_layout.addWidget(self.fiverr_order_table)
-        self.fiverr_clear_btn = QPushButton("Clear")
+        orders_layout.addWidget(self.fiverr_order_table)
+
+        clear_row = QHBoxLayout()
+        clear_row.addStretch()
+        self.fiverr_clear_btn = quiet("Clear log")
+        self.fiverr_clear_btn.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
         self.fiverr_clear_btn.clicked.connect(self.fiverr_clear)
-        order_layout.addWidget(self.fiverr_clear_btn)
-        sidebar_layout.addWidget(order_group)
+        clear_row.addWidget(self.fiverr_clear_btn)
+        orders_layout.addLayout(clear_row)
+        self.fiverr_tabs.addTab(orders_widget, "Orders")
 
-        results_splitter.addWidget(scrollable(sidebar, min_width=150))
-        results_splitter.setSizes([700, 180])
-        layout.addWidget(results_splitter)
+        layout.addWidget(self.fiverr_tabs, 1)
 
+        self._fiverr_update_estimate()
         self.fiverr_panel.hide()
         self.fiverr_load_models()
+
+    def _fiverr_update_estimate(self, *_args):
+        """Keep the per-image estimate next to the button that spends it.
+
+        This is a display estimate only. The budget guard is denominated in
+        tokens and cannot express "one image", so image spend does not count
+        against the session or daily cap — see SUGGESTIONS.md.
+        """
+        from services.openai_client import IMAGE_COST_USD
+        model = self.fiverr_image_model_box.currentText()
+        count = self.fiverr_count_spin.value()
+        rate = IMAGE_COST_USD.get(model)
+        if rate is None:
+            self.fiverr_cost_label.setText(f"{count} images · cost unknown")
+            return
+        self.fiverr_cost_label.setText(
+            f"{count} image{'s' if count != 1 else ''} · ≈ ${rate * count:.2f}")
 
     # ── Creator (subscription accounts) ──────────────────────────────────────
     def build_creator_panel(self):
@@ -3201,149 +3136,99 @@ class GodAI(QWidget):
         through, and the automation their terms allow is the kind that assists
         a human rather than replacing one — so everything here produces a draft
         the user reviews and sends by hand.
+
+        The 210px right sidebar is gone. It held eleven label-above-control
+        pairs and eight buttons stacked in one column, every one of them
+        truncated at that width. The compose controls now sit in the main
+        column like every other panel, and the four data actions moved into the
+        tabs they act on: Add Media into Media, Add Performer Record into
+        Records, Record Revenue and Import Earnings CSV into Earnings.
         """
         self.creator_panel = QWidget()
         self.creator_panel.setObjectName("CreatorPanel")
         outer = QVBoxLayout(self.creator_panel)
-        outer.setContentsMargins(8, 8, 8, 8)
-        outer.setSpacing(8)
+        outer.setContentsMargins(0, 0, 0, 0)
+        content = QWidget()
+        content.setObjectName("Transparent")
+        outer.addWidget(scrollable(content))
+        layout = QVBoxLayout(content)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(LG)
 
-        # ── Account bar ──────────────────────────────────────────────────
-        account_group = QGroupBox("Account")
-        account_group.setObjectName("CreatorAccountBox")
-        account_group.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
-        ag = QGridLayout(account_group)
-        ag.setSpacing(6)
+        # ── Account ─────────────────────────────────────────────────────
+        layout.addWidget(section("Account"))
 
-        ag.addWidget(QLabel("Account:"), 0, 0)
         self.creator_account_box = QComboBox()
         self.creator_account_box.currentIndexChanged.connect(self._creator_account_changed)
-        ag.addWidget(self.creator_account_box, 0, 1)
-
-        ag.addWidget(QLabel("Handle:"), 0, 2)
-        self.creator_handle_input = QLineEdit()
-        self.creator_handle_input.setPlaceholderText("@handle")
-        ag.addWidget(self.creator_handle_input, 0, 3)
-
-        ag.addWidget(QLabel("Type:"), 1, 0)
-        self.creator_type_box = QComboBox()
-        self.creator_type_box.addItems(["own", "managed", "persona"])
+        self.creator_handle_input = line_edit("@handle")
+        self.creator_type_box = combo(["own", "managed", "persona"])
         self.creator_type_box.currentTextChanged.connect(self._creator_type_changed)
-        ag.addWidget(self.creator_type_box, 1, 1)
-
-        # Only meaningful for 'managed'; the panel refuses to draft without it.
-        self.creator_consent_label = QLabel("Authorised by:")
-        ag.addWidget(self.creator_consent_label, 1, 2)
-        self.creator_consent_input = QLineEdit()
-        self.creator_consent_input.setPlaceholderText("Who authorised this, and when")
-        ag.addWidget(self.creator_consent_input, 1, 3)
-
-        self.creator_disclosure_label = QLabel("Disclosure:")
-        ag.addWidget(self.creator_disclosure_label, 2, 0)
-        self.creator_disclosure_input = QLineEdit()
-        self.creator_disclosure_input.setPlaceholderText(
+        self.creator_consent_input = line_edit("Who authorised this, and when")
+        self.creator_disclosure_input = line_edit(
             "How the account discloses it is a synthetic persona")
-        ag.addWidget(self.creator_disclosure_input, 2, 1, 1, 3)
 
-        save_row = QWidget()
-        sr = FlowLayout(save_row, spacing=6)
+        # The whole field hides, not just its input: hiding a control while
+        # leaving its label behind is what produced orphaned "Authorised by:"
+        # captions above nothing.
+        self.creator_consent_field = field("Authorised by", self.creator_consent_input)
+        self.creator_disclosure_field = field("Disclosure", self.creator_disclosure_input)
+
+        account = QGridLayout()
+        account.setHorizontalSpacing(MD)
+        account.setVerticalSpacing(MD)
+        account.addWidget(field("Account", self.creator_account_box), 0, 0, Qt.AlignTop)
+        account.addWidget(field("Handle", self.creator_handle_input), 0, 1, Qt.AlignTop)
+        account.addWidget(field("Type", self.creator_type_box), 0, 2, Qt.AlignTop)
+        account.addWidget(self.creator_consent_field, 1, 0, 1, 2, Qt.AlignTop)
+        account.addWidget(self.creator_disclosure_field, 1, 2, Qt.AlignTop)
+        for column in range(3):
+            account.setColumnStretch(column, 1)
+        layout.addLayout(account)
+
+        account_actions = QHBoxLayout()
+        account_actions.setSpacing(SM)
         self.creator_save_account_btn = QPushButton("Save Account")
         self.creator_save_account_btn.clicked.connect(self.creator_save_account)
-        sr.addWidget(self.creator_save_account_btn)
-        self.creator_delete_account_btn = QPushButton("🗑  Remove")
-        self.creator_delete_account_btn.setObjectName("DangerAction")
+        account_actions.addWidget(self.creator_save_account_btn)
+        self.creator_delete_account_btn = quiet("Remove account")
+        self.creator_delete_account_btn.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
         self.creator_delete_account_btn.clicked.connect(self.creator_delete_account)
-        sr.addWidget(self.creator_delete_account_btn)
-        ag.addWidget(save_row, 3, 0, 1, 4)
+        account_actions.addWidget(self.creator_delete_account_btn)
+        account_actions.addStretch()
+        layout.addLayout(account_actions)
 
-        outer.addWidget(account_group)
+        # ── Compose ─────────────────────────────────────────────────────
+        layout.addWidget(section("Compose"))
 
-        # ── Body: output left, controls right ────────────────────────────
-        body = QSplitter(Qt.Horizontal)
-
-        self.creator_tabs = QTabWidget()
-        self.creator_output = QTextEdit()
-        self.creator_output.setPlaceholderText(
-            "Drafts appear here, fully editable. Nothing is sent anywhere — "
-            "review it, then post it yourself.")
-        self.creator_tabs.addTab(self.creator_output, "✍️  Draft")
-
-        self.creator_calendar_table = QTableWidget(0, 5)
-        self.creator_calendar_table.setHorizontalHeaderLabels(
-            ["When", "Kind", "Title", "$", "Status"])
-        self.creator_calendar_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.Stretch)
-        self.creator_tabs.addTab(self.creator_calendar_table, "🗓  Calendar")
-
-        self.creator_earnings_output = QTextEdit()
-        self.creator_earnings_output.setReadOnly(True)
-        self.creator_earnings_output.setPlaceholderText(
-            "No earnings imported yet. There is no OnlyFans API, so export the "
-            "statement from the site and import the CSV here.")
-        self.creator_tabs.addTab(self.creator_earnings_output, "📈  Earnings")
-
-        self.creator_voice_tab = self._build_creator_voice_tab()
-        self.creator_tabs.addTab(self.creator_voice_tab, "🗣  Voice")
-
-        self.creator_media_table = QTableWidget(0, 4)
-        self.creator_media_table.setHorizontalHeaderLabels(
-            ["File", "Kind", "Source", "Caption"])
-        self.creator_media_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
-        self.creator_tabs.addTab(self.creator_media_table, "🖼  Media")
-
-        self.creator_agency_table = QTableWidget(0, 6)
-        self.creator_agency_table.setHorizontalHeaderLabels(
-            ["Account", "Type", "Authorised by", "Net $", "Subs", "Drafts"])
-        self.creator_agency_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
-        self.creator_tabs.addTab(self.creator_agency_table, "🏢  Agency")
-
-        self.creator_records_table = QTableWidget(0, 5)
-        self.creator_records_table.setHorizontalHeaderLabels(
-            ["Performer", "Verified", "ID on file", "Release", "Records held at"])
-        self.creator_records_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
-        self.creator_tabs.addTab(self.creator_records_table, "📋  Records")
-
-        body.addWidget(self.creator_tabs)
-
-        sidebar = QWidget()
-        sidebar.setObjectName("CreatorSidebar")
-        sidebar.setMinimumWidth(210)
-        sidebar.setMaximumWidth(280)
-        sb = QVBoxLayout(sidebar)
-        sb.setContentsMargins(8, 4, 4, 4)
-        sb.setSpacing(6)
-
-        sb.addWidget(QLabel("Draft:"))
-        self.creator_kind_box = QComboBox()
-        self.creator_kind_box.addItems(
+        self.creator_kind_box = combo(
             ["post", "ppv", "welcome", "promo", "bio", "campaign", "hooks"])
         self.creator_kind_box.currentTextChanged.connect(self._creator_kind_changed)
-        sb.addWidget(self.creator_kind_box)
-
-        self.creator_price_label = QLabel("Price (USD):")
-        sb.addWidget(self.creator_price_label)
-        self.creator_price_input = QLineEdit()
-        self.creator_price_input.setPlaceholderText("12.00")
-        sb.addWidget(self.creator_price_input)
-
-        self.creator_segment_label = QLabel("Audience:")
-        sb.addWidget(self.creator_segment_label)
-        self.creator_segment_box = QComboBox()
-        self.creator_segment_box.addItems(
+        self.creator_price_input = line_edit("12.00")
+        self.creator_segment_box = combo(
             ["(any)", "new", "loyal", "lapsed", "big_spender"])
-        sb.addWidget(self.creator_segment_box)
+        self.creator_channel_box = combo(list(PROMO_CHANNELS))
 
-        self.creator_channel_label = QLabel("Promo channel:")
-        sb.addWidget(self.creator_channel_label)
-        self.creator_channel_box = QComboBox()
-        self.creator_channel_box.addItems(list(PROMO_CHANNELS))
-        sb.addWidget(self.creator_channel_box)
+        self.creator_price_field = field("Price (USD)", self.creator_price_input)
+        self.creator_segment_field = field("Audience", self.creator_segment_box)
+        self.creator_channel_field = field("Promo channel", self.creator_channel_box)
 
-        sb.addWidget(QLabel("Brief:"))
+        # Three of these four fields only apply to some kinds of post, so the
+        # grid is re-packed when the kind changes. Simply hiding a cell leaves
+        # a hole in the row — which is the same "nothing lines up" complaint,
+        # produced by an empty cell instead of a misplaced one.
+        self.creator_compose_grid = QGridLayout()
+        self.creator_compose_grid.setHorizontalSpacing(MD)
+        self.creator_compose_grid.setVerticalSpacing(MD)
+        self.creator_kind_field = field("Kind", self.creator_kind_box)
+        for column in range(3):
+            self.creator_compose_grid.setColumnStretch(column, 1)
+        layout.addLayout(self.creator_compose_grid)
+
         self.creator_brief_input = QTextEdit()
         self.creator_brief_input.setPlaceholderText(
             "What is this about? The more concrete, the less generic the draft.")
-        self.creator_brief_input.setMaximumHeight(110)
-        sb.addWidget(self.creator_brief_input)
+        self.creator_brief_input.setFixedHeight(70)
+        layout.addWidget(field("Brief", self.creator_brief_input))
 
         self.creator_panel_base = AgentPanel(
             self, "creator",
@@ -3351,73 +3236,118 @@ class GodAI(QWidget):
             default_provider="anthropic")
         self.creator_provider_box = self.creator_panel_base.provider_box
         self.creator_model_box = self.creator_panel_base.model_box
-        sb.addWidget(QLabel("Provider:"))
-        sb.addWidget(self.creator_provider_box)
-        sb.addWidget(QLabel("Model:"))
-        sb.addWidget(self.creator_model_box)
 
-        self.creator_generate_btn = QPushButton("✍️  Draft")
-        self.creator_generate_btn.setObjectName("PrimaryAction")
+        models = QGridLayout()
+        models.setHorizontalSpacing(MD)
+        models.setVerticalSpacing(MD)
+        models.addWidget(field("Provider", self.creator_provider_box), 0, 0, Qt.AlignTop)
+        models.addWidget(field("Model", self.creator_model_box), 0, 1, Qt.AlignTop)
+        for column in range(3):
+            models.setColumnStretch(column, 1)
+        layout.addLayout(models)
+
+        actions = QHBoxLayout()
+        actions.setSpacing(SM)
+        self.creator_generate_btn = primary("Draft")
+        self.creator_generate_btn.setMinimumWidth(160)
+        self.creator_generate_btn.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
         self.creator_generate_btn.clicked.connect(self.creator_generate)
-        sb.addWidget(self.creator_generate_btn)
+        actions.addWidget(self.creator_generate_btn)
 
-        self.creator_stop_btn = QPushButton("⏹  Stop")
-        self.creator_stop_btn.setObjectName("DangerAction")
-        self.creator_stop_btn.setEnabled(False)
-        self.creator_stop_btn.clicked.connect(self.creator_stop)
-        sb.addWidget(self.creator_stop_btn)
-
-        self.creator_schedule_btn = QPushButton("🗓  Add to Calendar")
+        self.creator_schedule_btn = QPushButton("Add to Calendar")
         self.creator_schedule_btn.clicked.connect(self.creator_schedule)
-        sb.addWidget(self.creator_schedule_btn)
+        actions.addWidget(self.creator_schedule_btn)
 
-        divider = QFrame()
-        divider.setFrameShape(QFrame.HLine)
-        divider.setObjectName("CardDivider")
-        sb.addWidget(divider)
-
-        sb.addWidget(QLabel("Promo video (Higgsfield):"))
-        self.creator_video_btn = QPushButton("🎬  Generate Teaser")
-        self.creator_video_btn.setObjectName("SecondaryAction")
+        self.creator_video_btn = QPushButton("Generate Teaser")
+        self.creator_video_btn.setToolTip(
+            "Render a promo teaser with Higgsfield. Paid, and subject to their "
+            "content rules.")
         self.creator_video_btn.clicked.connect(self.creator_generate_video)
-        sb.addWidget(self.creator_video_btn)
+        actions.addWidget(self.creator_video_btn)
+
+        self.creator_stop_btn = QPushButton("Stop")
+        self.creator_stop_btn.setObjectName("DangerAction")
+        self.creator_stop_btn.clicked.connect(self.creator_stop)
+        self.creator_stop_btn.hide()
+        actions.addWidget(self.creator_stop_btn)
+
+        actions.addStretch()
+        self.creator_status_label = QLabel("")
+        self.creator_status_label.setObjectName("EstimateLine")
+        actions.addWidget(self.creator_status_label)
+        layout.addLayout(actions)
 
         self.creator_video_status = QLabel("")
+        self.creator_video_status.setObjectName("EstimateLine")
         self.creator_video_status.setWordWrap(True)
-        self.creator_video_status.setStyleSheet(f"font-size: 11px; color: {TEXT_MUTE};")
-        sb.addWidget(self.creator_video_status)
+        layout.addWidget(self.creator_video_status)
 
-        divider2 = QFrame()
-        divider2.setFrameShape(QFrame.HLine)
-        divider2.setObjectName("CardDivider")
-        sb.addWidget(divider2)
+        # ── Tabs ────────────────────────────────────────────────────────
+        self.creator_tabs = QTabWidget()
 
-        self.creator_add_media_btn = QPushButton("🖼  Add Media")
-        self.creator_add_media_btn.clicked.connect(self.creator_add_media)
-        sb.addWidget(self.creator_add_media_btn)
+        self.creator_output = QTextEdit()
+        self.creator_output.setPlaceholderText(
+            "Drafts appear here, fully editable. Nothing is sent anywhere — "
+            "review it, then post it yourself.")
+        self.creator_tabs.addTab(self.creator_output, "Draft")
 
-        self.creator_add_performer_btn = QPushButton("📋  Add Performer Record")
-        self.creator_add_performer_btn.clicked.connect(self.creator_add_performer)
-        sb.addWidget(self.creator_add_performer_btn)
+        self.creator_calendar_table = QTableWidget(0, 5)
+        self.creator_calendar_table.setHorizontalHeaderLabels(
+            ["When", "Kind", "Title", "$", "Status"])
+        self.creator_calendar_table.horizontalHeader().setSectionResizeMode(
+            2, QHeaderView.Stretch)
+        self.creator_tabs.addTab(self.creator_calendar_table, "Calendar")
 
-        self.creator_revenue_btn = QPushButton("💰  Record Revenue")
+        self.creator_earnings_output = QTextEdit()
+        self.creator_earnings_output.setReadOnly(True)
+        self.creator_earnings_output.setPlaceholderText(
+            "No earnings imported yet. There is no OnlyFans API, so export the "
+            "statement from the site and import the CSV here.")
+        self.creator_revenue_btn = QPushButton("Record Revenue")
         self.creator_revenue_btn.clicked.connect(self.creator_record_revenue)
-        sb.addWidget(self.creator_revenue_btn)
-
-        self.creator_import_btn = QPushButton("📥  Import Earnings CSV")
+        self.creator_import_btn = QPushButton("Import Earnings CSV")
         self.creator_import_btn.clicked.connect(self.creator_import_earnings)
-        sb.addWidget(self.creator_import_btn)
+        self.creator_tabs.addTab(
+            self._creator_tab_with_actions(
+                self.creator_earnings_output,
+                [self.creator_import_btn, self.creator_revenue_btn]),
+            "Earnings")
 
-        sb.addStretch()
+        self.creator_voice_tab = self._build_creator_voice_tab()
+        self.creator_tabs.addTab(self.creator_voice_tab, "Voice")
 
-        self.creator_status_label = QLabel("")
-        self.creator_status_label.setWordWrap(True)
-        self.creator_status_label.setStyleSheet(f"font-size: 12px; color: {TEXT_MUTE};")
-        sb.addWidget(self.creator_status_label)
+        self.creator_media_table = QTableWidget(0, 4)
+        self.creator_media_table.setHorizontalHeaderLabels(
+            ["File", "Kind", "Source", "Caption"])
+        self.creator_media_table.horizontalHeader().setSectionResizeMode(
+            0, QHeaderView.Stretch)
+        self.creator_add_media_btn = QPushButton("Add Media")
+        self.creator_add_media_btn.clicked.connect(self.creator_add_media)
+        self.creator_tabs.addTab(
+            self._creator_tab_with_actions(
+                self.creator_media_table, [self.creator_add_media_btn]),
+            "Media")
 
-        body.addWidget(scrollable(sidebar, min_width=210, max_width=280))
-        body.setSizes([720, 250])
-        outer.addWidget(body, 1)
+        self.creator_agency_table = QTableWidget(0, 6)
+        self.creator_agency_table.setHorizontalHeaderLabels(
+            ["Account", "Type", "Authorised by", "Net $", "Subs", "Drafts"])
+        self.creator_agency_table.horizontalHeader().setSectionResizeMode(
+            0, QHeaderView.Stretch)
+        self.creator_tabs.addTab(self.creator_agency_table, "Agency")
+
+        self.creator_records_table = QTableWidget(0, 5)
+        self.creator_records_table.setHorizontalHeaderLabels(
+            ["Performer", "Verified", "ID on file", "Release", "Records held at"])
+        self.creator_records_table.horizontalHeader().setSectionResizeMode(
+            0, QHeaderView.Stretch)
+        self.creator_add_performer_btn = QPushButton("Add Performer Record")
+        self.creator_add_performer_btn.clicked.connect(self.creator_add_performer)
+        self.creator_tabs.addTab(
+            self._creator_tab_with_actions(
+                self.creator_records_table, [self.creator_add_performer_btn]),
+            "Records")
+
+        layout.addWidget(self.creator_tabs, 1)
 
         self.creator_worker = None
         self.creator_panel.hide()
@@ -3425,25 +3355,63 @@ class GodAI(QWidget):
         self._creator_kind_changed(self.creator_kind_box.currentText())
         self.creator_refresh_accounts()
 
+    @staticmethod
+    def _creator_tab_with_actions(body: QWidget, buttons: list) -> QWidget:
+        """A tab page: its content, and the buttons that act on that content.
+
+        Putting "Add Media" next to the media table is the difference between
+        a button you can find and one of eight in a column labelled nothing.
+        """
+        page = QWidget()
+        page.setObjectName("Transparent")
+        page_layout = QVBoxLayout(page)
+        page_layout.setContentsMargins(MD, MD, MD, MD)
+        page_layout.setSpacing(MD)
+        page_layout.addWidget(body, 1)
+        row = QHBoxLayout()
+        row.setSpacing(SM)
+        row.addStretch()
+        for button in buttons:
+            row.addWidget(button)
+        page_layout.addLayout(row)
+        return page
+
     # ── Creator handlers ─────────────────────────────────────────────────────
     def _creator_type_changed(self, account_type: str):
         """Consent fields matter for managed accounts; disclosure for personas."""
         is_managed = account_type == "managed"
         is_persona = account_type == "persona"
-        self.creator_consent_label.setVisible(is_managed)
-        self.creator_consent_input.setVisible(is_managed)
-        self.creator_disclosure_label.setVisible(is_persona)
-        self.creator_disclosure_input.setVisible(is_persona)
+        self.creator_consent_field.setVisible(is_managed)
+        self.creator_disclosure_field.setVisible(is_persona)
 
     def _creator_kind_changed(self, kind: str):
-        self.creator_price_label.setVisible(kind == "ppv")
-        self.creator_price_input.setVisible(kind == "ppv")
-        self.creator_channel_label.setVisible(kind == "promo")
-        self.creator_channel_box.setVisible(kind == "promo")
-        # Audience only shapes a message aimed at someone.
-        wants_segment = kind in ("welcome", "ppv", "post")
-        self.creator_segment_label.setVisible(wants_segment)
-        self.creator_segment_box.setVisible(wants_segment)
+        # Which fields apply, in the order they should appear. Kind is always
+        # shown; the other three depend on it.
+        wanted = [
+            (self.creator_kind_field, True),
+            (self.creator_price_field, kind == "ppv"),
+            # Audience only shapes a message aimed at someone.
+            (self.creator_segment_field, kind in ("welcome", "ppv", "post")),
+            (self.creator_channel_field, kind == "promo"),
+        ]
+        self._creator_reflow_compose(wanted)
+
+    def _creator_reflow_compose(self, wanted: list) -> None:
+        """Re-pack the compose grid so only applicable fields take a cell.
+
+        Visibility is passed in rather than read back off the widgets: a widget
+        that has never been shown reports isHidden() as True, so asking the
+        widgets themselves emptied the grid on the first call.
+        """
+        grid = self.creator_compose_grid
+        index = 0
+        for widget, visible in wanted:
+            grid.removeWidget(widget)
+            widget.setVisible(visible)
+            if not visible:
+                continue
+            grid.addWidget(widget, index // 3, index % 3, Qt.AlignTop)
+            index += 1
 
     def creator_refresh_accounts(self):
         self.creator_account_box.blockSignals(True)
@@ -3592,6 +3560,7 @@ class GodAI(QWidget):
 
         self.creator_generate_btn.setEnabled(False)
         self.creator_stop_btn.setEnabled(True)
+        self.creator_stop_btn.show()
         self.creator_status_label.setText(f"Drafting {kind}…")
         self.creator_output.clear()
 
@@ -3605,12 +3574,14 @@ class GodAI(QWidget):
         self.record_request("creator", response)
         self.creator_generate_btn.setEnabled(True)
         self.creator_stop_btn.setEnabled(False)
+        self.creator_stop_btn.hide()
         self.creator_status_label.setText("Draft ready — review before posting.")
 
     def _creator_on_error(self, error: str):
         self.abandon_request("creator")
         self.creator_generate_btn.setEnabled(True)
         self.creator_stop_btn.setEnabled(False)
+        self.creator_stop_btn.hide()
         self.creator_status_label.setText(f"[Error] {error}")
 
     def creator_stop(self):
@@ -3620,6 +3591,7 @@ class GodAI(QWidget):
         self.abandon_request("creator", reason="stopped")
         self.creator_generate_btn.setEnabled(True)
         self.creator_stop_btn.setEnabled(False)
+        self.creator_stop_btn.hide()
         self.creator_status_label.setText("Stopped.")
 
     # ── Calendar ─────────────────────────────────────────────────────────────
@@ -4140,7 +4112,9 @@ class GodAI(QWidget):
             QMessageBox.warning(self, "Missing Input", "Please enter a business name.")
             return
         if not OpenAIClientWrapper.key_available():
-            QMessageBox.warning(self, "No API Key", "OPENAI_API_KEY is required for DALL-E 3 image generation.")
+            QMessageBox.warning(
+                self, "No API Key",
+                "OPENAI_API_KEY is required to generate logo images.")
             return
 
         count = self.fiverr_count_spin.value()
@@ -4155,6 +4129,7 @@ class GodAI(QWidget):
         self.fiverr_delivery_btn.setEnabled(False)
         self.fiverr_gig_btn.setEnabled(False)
         self.fiverr_stop_btn.setEnabled(True)
+        self.fiverr_stop_btn.show()
         self._fiverr_clear_logo_grid()
 
         if not self.authorize_request("fiverr", provider, model, messages[-1]["content"] if messages else ""):
@@ -4174,9 +4149,10 @@ class GodAI(QWidget):
         brief = self._fiverr_pending_brief
         save_dir = DATA_DIR / "fiverr_output" / datetime.now().strftime("%Y%m%d_%H%M%S")
         self.fiverr_status_label.setText(f"Generating {count} concept(s)...")
-        self.fiverr_cost_label.setText(f"~${0.04 * count:.2f}")
 
-        self.fiverr_image_worker = FiverrImageWorker(self.openai, image_prompt, count, save_dir)
+        self.fiverr_image_worker = FiverrImageWorker(
+            self.openai, image_prompt, count, save_dir,
+            image_model=self.fiverr_image_model_box.currentText())
         self.fiverr_image_worker.image_ready_signal.connect(self._fiverr_on_image_ready)
         self.fiverr_image_worker.all_done_signal.connect(self._fiverr_on_all_done)
         self.fiverr_image_worker.error_signal.connect(self._fiverr_on_image_error)
@@ -4214,6 +4190,7 @@ class GodAI(QWidget):
         self.fiverr_delivery_btn.setEnabled(True)
         self.fiverr_gig_btn.setEnabled(True)
         self.fiverr_stop_btn.setEnabled(False)
+        self.fiverr_stop_btn.hide()
         self.fiverr_save_images_btn.setEnabled(True)
         if hasattr(self, "_fiverr_order_row"):
             from PySide6.QtWidgets import QTableWidgetItem
@@ -4226,6 +4203,7 @@ class GodAI(QWidget):
         self.fiverr_delivery_btn.setEnabled(True)
         self.fiverr_gig_btn.setEnabled(True)
         self.fiverr_stop_btn.setEnabled(False)
+        self.fiverr_stop_btn.hide()
         if hasattr(self, "_fiverr_order_row"):
             from PySide6.QtWidgets import QTableWidgetItem
             self.fiverr_order_table.setItem(self._fiverr_order_row, 2, QTableWidgetItem("Error"))
@@ -4237,6 +4215,7 @@ class GodAI(QWidget):
         self.fiverr_delivery_btn.setEnabled(True)
         self.fiverr_gig_btn.setEnabled(True)
         self.fiverr_stop_btn.setEnabled(False)
+        self.fiverr_stop_btn.hide()
 
     def fiverr_write_delivery(self):
         brief = self._fiverr_get_brief()
@@ -4253,6 +4232,7 @@ class GodAI(QWidget):
         self.fiverr_delivery_btn.setEnabled(False)
         self.fiverr_gig_btn.setEnabled(False)
         self.fiverr_stop_btn.setEnabled(True)
+        self.fiverr_stop_btn.show()
         self.fiverr_tabs.setCurrentIndex(1)
         if not self.authorize_request("fiverr", provider, model, messages[-1]["content"] if messages else ""):
             return
@@ -4274,6 +4254,7 @@ class GodAI(QWidget):
         self.fiverr_delivery_btn.setEnabled(True)
         self.fiverr_gig_btn.setEnabled(True)
         self.fiverr_stop_btn.setEnabled(False)
+        self.fiverr_stop_btn.hide()
 
     def fiverr_write_gig(self):
         brief = self._fiverr_get_brief()
@@ -4290,6 +4271,7 @@ class GodAI(QWidget):
         self.fiverr_delivery_btn.setEnabled(False)
         self.fiverr_gig_btn.setEnabled(False)
         self.fiverr_stop_btn.setEnabled(True)
+        self.fiverr_stop_btn.show()
         self.fiverr_tabs.setCurrentIndex(2)
         if not self.authorize_request("fiverr", provider, model, messages[-1]["content"] if messages else ""):
             return
@@ -4311,6 +4293,7 @@ class GodAI(QWidget):
         self.fiverr_delivery_btn.setEnabled(True)
         self.fiverr_gig_btn.setEnabled(True)
         self.fiverr_stop_btn.setEnabled(False)
+        self.fiverr_stop_btn.hide()
 
     def fiverr_stop(self):
         if self.fiverr_image_worker is not None and self.fiverr_image_worker.isRunning():
@@ -4322,6 +4305,7 @@ class GodAI(QWidget):
         self.fiverr_delivery_btn.setEnabled(True)
         self.fiverr_gig_btn.setEnabled(True)
         self.fiverr_stop_btn.setEnabled(False)
+        self.fiverr_stop_btn.hide()
 
     def fiverr_save_images(self):
         if not self._fiverr_image_paths:
@@ -4339,7 +4323,7 @@ class GodAI(QWidget):
         self.fiverr_delivery_box.clear()
         self.fiverr_gig_box.clear()
         self.fiverr_status_label.setText("Idle")
-        self.fiverr_cost_label.setText("—")
+        self._fiverr_update_estimate()
         self.fiverr_preview_status.setText("No logos generated yet.")
         self.fiverr_save_images_btn.setEnabled(False)
         self._fiverr_image_paths = []
@@ -4383,46 +4367,46 @@ class GodAI(QWidget):
 
         # ── Writing phase ──
         if not profile["title"]:
-            return ("📖  Start here — fill in Title, Author and Type in the Project Bar, then open "
+            return ("Start here — fill in Title, Author and Type in the Project Bar, then open "
                     "Book Profile and click Save Profile. Everything downstream reuses it.")
         if not profile["hook"] or not profile["target_reader"]:
-            return ("📖  Complete your Book Profile (Hook + Target reader). These two fields shape "
+            return ("Complete your Book Profile (Hook + Target reader). These two fields shape "
                     "every blurb, description and social caption you'll generate later.")
         if draft_words == 0 and not outline:
-            return ("✍️  No draft yet — set Task to Generate Outline, describe the book in Direction, "
+            return ("No draft yet — set Task to Generate Outline, describe the book in Direction, "
                     "and click Write. Outline first is faster than drafting blind.")
         if draft_words == 0:
-            return ("✍️  Outline exists but no draft — switch Task to "
+            return ("Outline exists but no draft — switch Task to "
                     f"{'Write Chapter' if profile['content_type'] == 'Non-Fiction' else 'Write Scene'} "
                     "and start drafting. Use Continue to extend.")
         if draft_words < 5000:
-            return (f"✍️  Draft is {draft_words:,} words — keep going with Write / Continue. "
+            return (f"Draft is {draft_words:,} words — keep going with Write / Continue. "
                     "Add 'Chapter 1', 'Chapter 2' heading lines as you go so Chapters and Export pick them up.")
         if not self._author_export_done:
-            return (f"📤  {draft_words:,} words written — export a formatted copy (EPUB / DOCX / PDF) "
+            return (f"{draft_words:,} words written — export a formatted copy (EPUB / DOCX / PDF) "
                     "from the Write sidebar to see how it reads as a real book.")
 
         # ── Publishing phase ──
         todos = self._get_pending_todo_titles()
         if any("Upload to Amazon KDP" in t for t in todos):
-            return ("📣  Draft exported. Next: generate a Back-Cover Blurb in Publish mode, then a "
+            return ("Draft exported. Next: generate a Back-Cover Blurb in Publish mode, then a "
                     "KDP Listing in Market mode — that one output covers your description, categories, "
                     "keywords and pricing. Then create your KDP account and upload.")
         if any("cover files" in t for t in todos):
-            return ("🎨  Cover files are still on your checklist — KDP needs 3000×4500px at 300dpi. "
+            return ("Cover files are still on your checklist — KDP needs 3000×4500px at 300dpi. "
                     "This is the one step the app can't do for you; hire a designer or use Canva/Reedsy.")
 
         # ── Marketing phase ──
         if not os.environ.get("PUBLISHDRIVE_API_KEY", "").strip():
-            return ("🔌  Book is live-ready. Connect PublishDrive (see the Connections panel) to pull "
+            return ("Book is live-ready. Connect PublishDrive (see the Connections panel) to pull "
                     "real sales data in, or skip it and drop KDP CSV reports into data/kdp_reports/ instead.")
         if any("Create TikTok, Instagram" in t for t in todos):
-            return ("📱  Set up your TikTok / Instagram / Pinterest accounts (same username on all three), "
+            return ("Set up your TikTok / Instagram / Pinterest accounts (same username on all three), "
                     "then use Quote Finder → Calendar to batch a few weeks of posts in one pass.")
         if any("TikTokers/BookTokers" in t for t in todos):
-            return ("🎬  Content pipeline is ready — generate quote graphics and shorts, then pitch "
+            return ("Content pipeline is ready — generate quote graphics and shorts, then pitch "
                     "BookTok creators in your niche with a free copy plus ready-made clips.")
-        return ("✅  Core pipeline complete. Keep the Calendar filled, watch sales on the Overview tab, "
+        return ("Core pipeline complete. Keep the Calendar filled, watch sales on the Overview tab, "
                 "and work through whatever's left on your Publishing Todos.")
 
     def _get_pending_todo_titles(self) -> list:
@@ -5017,40 +5001,41 @@ class GodAI(QWidget):
         self.manuscript_panel.setObjectName("ManuscriptPanel")
         layout = QVBoxLayout(self.manuscript_panel)
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(6)
+        layout.setSpacing(MD)
 
-        # ── Top bar: period selector + refresh button ─────────────────────────
+        # ── Top bar: period selector + data actions ───────────────────────────
+        # The buttons sit on the field's baseline, not the label's, so the row
+        # reads as one line instead of a control stepping up over a caption.
         top_bar = QWidget()
+        top_bar.setObjectName("Transparent")
         tb = QHBoxLayout(top_bar)
-        tb.setContentsMargins(4, 4, 4, 4)
-        tb.setSpacing(8)
+        tb.setContentsMargins(0, 0, 0, 0)
+        tb.setSpacing(SM)
 
-        tb.addWidget(QLabel("Period:"))
-        self.manuscript_period_box = QComboBox()
-        self.manuscript_period_box.addItems(["Last 30 days", "This month", "Last 7 days", "All time"])
-        tb.addWidget(self.manuscript_period_box)
+        self.manuscript_period_box = combo(
+            ["Last 30 days", "This month", "Last 7 days", "All time"])
+        period_field = field("Period", self.manuscript_period_box)
+        period_field.setFixedWidth(180)
+        tb.addWidget(period_field)
 
-        self.manuscript_refresh_btn = QPushButton("⟳  Refresh Data")
+        self.manuscript_refresh_btn = QPushButton("Refresh Data")
         self.manuscript_refresh_btn.clicked.connect(self.manuscript_refresh)
-        tb.addWidget(self.manuscript_refresh_btn)
+        tb.addWidget(self.manuscript_refresh_btn, 0, Qt.AlignBottom)
 
-        self.manuscript_ingest_btn = QPushButton("📥  Ingest KDP CSV")
+        self.manuscript_ingest_btn = QPushButton("Ingest KDP CSV")
         self.manuscript_ingest_btn.clicked.connect(self.manuscript_ingest_kdp)
-        tb.addWidget(self.manuscript_ingest_btn)
+        tb.addWidget(self.manuscript_ingest_btn, 0, Qt.AlignBottom)
 
         tb.addStretch()
         layout.addWidget(top_bar)
 
         self.manuscript_next_step_label = QLabel("")
         self.manuscript_next_step_label.setWordWrap(True)
-        self.manuscript_next_step_label.setStyleSheet(
-            f"background: {ACCENT_WASH}; border: 1px solid {ACCENT_LINE}; "
-            f"border-radius: 6px; padding: 8px 10px; color: {ACCENT}; font-size: 12px;"
-        )
+        self.manuscript_next_step_label.setObjectName("NextStepBanner")
         layout.addWidget(self.manuscript_next_step_label)
 
         # ── Connections: which 3rd-party services are actually configured ─────
-        connections_section = CollapsibleSection("🔌  Connections", expanded=False)
+        connections_section = CollapsibleSection("Connections", expanded=False)
         self.manuscript_connections_layout = QVBoxLayout()
         self.manuscript_connections_layout.setContentsMargins(4, 2, 4, 2)
         self.manuscript_connections_layout.setSpacing(3)
@@ -5058,7 +5043,7 @@ class GodAI(QWidget):
         connections_container.setLayout(self.manuscript_connections_layout)
         connections_section.addWidget(connections_container)
 
-        connections_refresh_btn = QPushButton("🔄  Refresh Status")
+        connections_refresh_btn = QPushButton("Refresh Status")
         connections_refresh_btn.clicked.connect(self._refresh_connections_status)
         connections_section.addWidget(connections_refresh_btn)
 
@@ -5080,23 +5065,23 @@ class GodAI(QWidget):
         self.manuscript_metrics_box.setPlaceholderText("Click Refresh Data to load publishing metrics…")
         splitter.addWidget(self.manuscript_metrics_box)
 
-        # Right: Q&A sidebar
+        # Right: Q&A and todos. Section labels and fields rather than a stack
+        # of "Ask about your book:" / "Provider:" / "Model:" colon captions,
+        # each of which set its own left edge.
         sidebar = QWidget()
+        sidebar.setObjectName("Transparent")
         sb = QVBoxLayout(sidebar)
-        sb.setContentsMargins(8, 4, 4, 4)
-        sb.setSpacing(6)
-        sidebar.setMinimumWidth(220)
-        sidebar.setMaximumWidth(280)
+        sb.setContentsMargins(MD, 0, 0, 0)
+        sb.setSpacing(MD)
+        sidebar.setFixedWidth(300)
 
-        sb.addWidget(QLabel("Ask about your book:"))
+        sb.addWidget(section("Ask"))
         self.manuscript_query_input = QTextEdit()
         self.manuscript_query_input.setPlaceholderText(
-            "e.g. What did I earn this month?\nWhich platform is performing best?"
-        )
-        self.manuscript_query_input.setFixedHeight(90)
+            "What did I earn this month? Which platform performs best?")
+        self.manuscript_query_input.setFixedHeight(76)
         sb.addWidget(self.manuscript_query_input)
 
-        sb.addWidget(QLabel("Provider:"))
         # No ollama: the manuscript registry row restricts providers, and a box
         # offering one the validator refuses is a dead option.
         self.manuscript_panel_base = AgentPanel(
@@ -5104,34 +5089,23 @@ class GodAI(QWidget):
             providers=("anthropic", "openai", "deepseek", "kimi", "gemini", "qwen"))
         self.manuscript_provider_box = self.manuscript_panel_base.provider_box
         self.manuscript_model_box = self.manuscript_panel_base.model_box
-        sb.addWidget(self.manuscript_provider_box)
+        sb.addWidget(field("Provider", self.manuscript_provider_box))
+        sb.addWidget(field("Model", self.manuscript_model_box))
 
-        sb.addWidget(QLabel("Model:"))
-        sb.addWidget(self.manuscript_model_box)
-
-        self.manuscript_ask_btn = QPushButton("💬  Ask")
-        self.manuscript_ask_btn.setMinimumHeight(34)
+        self.manuscript_ask_btn = primary("Ask")
         self.manuscript_ask_btn.clicked.connect(self.manuscript_ask)
         sb.addWidget(self.manuscript_ask_btn)
 
-        sb.addStretch()
-
-        # Todos section
-        sep = QFrame()
-        sep.setFrameShape(QFrame.HLine)
-        sep.setObjectName("CardDivider")
-        sb.addWidget(sep)
-
-        sb.addWidget(QLabel("Publishing Todos:"))
+        sb.addWidget(section("Publishing todos"))
         self.manuscript_todo_list = QListWidget()
         self.manuscript_todo_list.setMinimumHeight(120)
-        sb.addWidget(self.manuscript_todo_list)
+        sb.addWidget(self.manuscript_todo_list, 1)
 
-        self.manuscript_todo_input = QLineEdit()
-        self.manuscript_todo_input.setPlaceholderText("Add todo…")
+        self.manuscript_todo_input = line_edit("Add todo…")
         sb.addWidget(self.manuscript_todo_input)
 
         todo_btn_row = QHBoxLayout()
+        todo_btn_row.setSpacing(SM)
         self.manuscript_add_todo_btn = QPushButton("Add")
         self.manuscript_add_todo_btn.clicked.connect(self.manuscript_add_todo)
         self.manuscript_done_todo_btn = QPushButton("Done")
@@ -5140,7 +5114,7 @@ class GodAI(QWidget):
         todo_btn_row.addWidget(self.manuscript_done_todo_btn)
         sb.addLayout(todo_btn_row)
 
-        splitter.addWidget(scrollable(sidebar))
+        splitter.addWidget(scrollable(sidebar, min_width=300, max_width=320))
         overview_layout.addWidget(splitter)
         self.manuscript_tabs.addTab(overview_tab, "Overview")
 
@@ -5158,7 +5132,7 @@ class GodAI(QWidget):
 
         # Status bar
         self.manuscript_status_label = QLabel("")
-        self.manuscript_status_label.setStyleSheet(f"font-size: 12px; color: {TEXT_MUTE}; padding: 2px 4px;")
+        self.manuscript_status_label.setObjectName("EstimateLine")
         layout.addWidget(self.manuscript_status_label)
 
         self.manuscript_panel.hide()
@@ -5169,16 +5143,15 @@ class GodAI(QWidget):
         layout.setContentsMargins(8, 8, 8, 8)
         layout.setSpacing(8)
 
-        layout.addWidget(QLabel("Manuscript text:"))
         self.quote_finder_text = QTextEdit()
         self.quote_finder_text.setPlaceholderText(
             "Paste a chapter or excerpt here, or load a file below…"
         )
         self.quote_finder_text.setFixedHeight(140)
-        layout.addWidget(self.quote_finder_text)
+        layout.addWidget(field("Manuscript text", self.quote_finder_text))
 
         load_row = QHBoxLayout()
-        self.quote_finder_load_btn = QPushButton("📄  Load File…")
+        self.quote_finder_load_btn = QPushButton("Load File…")
         self.quote_finder_load_btn.clicked.connect(self.quote_finder_load_file)
         load_row.addWidget(self.quote_finder_load_btn)
         load_row.addWidget(QLabel("Supports .txt, .pdf, .epub, .mobi"))
@@ -5187,37 +5160,33 @@ class GodAI(QWidget):
 
         settings_row_container = QWidget()
         settings_row = FlowLayout(settings_row_container, spacing=6)
-        settings_row.addWidget(QLabel("Quotes:"))
         self.quote_finder_count_box = QComboBox()
         self.quote_finder_count_box.addItems(["5", "10", "15", "20"])
         self.quote_finder_count_box.setCurrentText("10")
-        settings_row.addWidget(self.quote_finder_count_box)
+        settings_row.addWidget(field("Quotes", self.quote_finder_count_box))
 
-        settings_row.addWidget(QLabel("Theme:"))
         self.quote_finder_theme_box = make_theme_box()
-        settings_row.addWidget(self.quote_finder_theme_box)
+        settings_row.addWidget(field("Theme", self.quote_finder_theme_box))
 
-        settings_row.addWidget(QLabel("Voice:"))
         self.quote_finder_voice_source_box = make_voice_source_box()
         self.quote_finder_voice_source_box.currentTextChanged.connect(self.quote_finder_load_voices)
-        settings_row.addWidget(self.quote_finder_voice_source_box)
+        settings_row.addWidget(field("Voice", self.quote_finder_voice_source_box))
 
         self.quote_finder_voice_box = QComboBox()
         settings_row.addWidget(self.quote_finder_voice_box)
 
-        settings_row.addWidget(QLabel("Attribution:"))
         self.quote_finder_attribution = QLineEdit()
         self.quote_finder_attribution.setPlaceholderText("You Don't Chase")
-        settings_row.addWidget(self.quote_finder_attribution)
+        settings_row.addWidget(field("Attribution", self.quote_finder_attribution))
 
         layout.addWidget(settings_row_container)
 
-        self.quote_finder_suggest_btn = QPushButton("🔍  Suggest Quotes")
+        self.quote_finder_suggest_btn = QPushButton("Suggest Quotes")
         self.quote_finder_suggest_btn.setMinimumHeight(34)
         self.quote_finder_suggest_btn.clicked.connect(self.quote_finder_suggest)
         layout.addWidget(self.quote_finder_suggest_btn)
 
-        layout.addWidget(QLabel("Candidates — 🖼 makes a graphic, 🎬 makes a narrated short:"))
+        layout.addWidget(micro("Candidates"))
         self.quote_finder_list = QListWidget()
         layout.addWidget(self.quote_finder_list, 1)
 
@@ -5238,31 +5207,27 @@ class GodAI(QWidget):
         cl.setSpacing(6)
         controls.setMaximumWidth(280)
 
-        cl.addWidget(QLabel("Quote:"))
         self.quote_graphic_text = QTextEdit()
         self.quote_graphic_text.setPlaceholderText("You over-text. You explain yourself. You wait.")
         self.quote_graphic_text.setFixedHeight(90)
-        cl.addWidget(self.quote_graphic_text)
+        cl.addWidget(field("Quote", self.quote_graphic_text))
 
-        cl.addWidget(QLabel("Attribution (optional):"))
         self.quote_graphic_attribution = QLineEdit()
         self.quote_graphic_attribution.setPlaceholderText("You Don't Chase")
-        cl.addWidget(self.quote_graphic_attribution)
+        cl.addWidget(field("Attribution (optional)", self.quote_graphic_attribution))
 
-        cl.addWidget(QLabel("Theme:"))
         self.quote_graphic_theme_box = make_theme_box()
-        cl.addWidget(self.quote_graphic_theme_box)
+        cl.addWidget(field("Theme", self.quote_graphic_theme_box))
 
-        cl.addWidget(QLabel("Size:"))
         self.quote_graphic_size_box = make_size_box()
-        cl.addWidget(self.quote_graphic_size_box)
+        cl.addWidget(field("Size", self.quote_graphic_size_box))
 
-        self.quote_graphic_generate_btn = QPushButton("✨  Generate Graphic")
+        self.quote_graphic_generate_btn = QPushButton("Generate Graphic")
         self.quote_graphic_generate_btn.setMinimumHeight(34)
         self.quote_graphic_generate_btn.clicked.connect(self.manuscript_generate_quote_graphic)
         cl.addWidget(self.quote_graphic_generate_btn)
 
-        self.quote_graphic_open_folder_btn = QPushButton("📂  Open Folder")
+        self.quote_graphic_open_folder_btn = QPushButton("Open Folder")
         self.quote_graphic_open_folder_btn.clicked.connect(self.manuscript_open_graphics_folder)
         cl.addWidget(self.quote_graphic_open_folder_btn)
 
@@ -5291,39 +5256,35 @@ class GodAI(QWidget):
         cl.setSpacing(6)
         controls.setMaximumWidth(280)
 
-        cl.addWidget(QLabel("Quote (also narrated):"))
         self.shorts_quote_text = QTextEdit()
         self.shorts_quote_text.setPlaceholderText("You over-text. You explain yourself. You wait.")
         self.shorts_quote_text.setFixedHeight(90)
-        cl.addWidget(self.shorts_quote_text)
+        cl.addWidget(field("Quote (also narrated)", self.shorts_quote_text))
 
-        cl.addWidget(QLabel("Attribution (optional):"))
         self.shorts_attribution = QLineEdit()
         self.shorts_attribution.setPlaceholderText("You Don't Chase")
-        cl.addWidget(self.shorts_attribution)
+        cl.addWidget(field("Attribution (optional)", self.shorts_attribution))
 
-        cl.addWidget(QLabel("Theme:"))
         self.shorts_theme_box = make_theme_box()
-        cl.addWidget(self.shorts_theme_box)
+        cl.addWidget(field("Theme", self.shorts_theme_box))
 
-        cl.addWidget(QLabel("Voice source:"))
         self.shorts_voice_source_box = make_voice_source_box()
         self.shorts_voice_source_box.currentTextChanged.connect(self.shorts_load_voices)
-        cl.addWidget(self.shorts_voice_source_box)
+        cl.addWidget(field("Voice source", self.shorts_voice_source_box))
 
         self.shorts_voice_box = QComboBox()
         cl.addWidget(self.shorts_voice_box)
 
-        self.shorts_generate_btn = QPushButton("🎬  Generate Short")
+        self.shorts_generate_btn = QPushButton("Generate Short")
         self.shorts_generate_btn.setMinimumHeight(34)
         self.shorts_generate_btn.clicked.connect(self.manuscript_generate_short)
         cl.addWidget(self.shorts_generate_btn)
 
         btn_row = QHBoxLayout()
-        self.shorts_play_btn = QPushButton("▶  Play")
+        self.shorts_play_btn = QPushButton("Play")
         self.shorts_play_btn.setEnabled(False)
         self.shorts_play_btn.clicked.connect(self.manuscript_play_short)
-        self.shorts_open_folder_btn = QPushButton("📂  Folder")
+        self.shorts_open_folder_btn = QPushButton("Folder")
         self.shorts_open_folder_btn.clicked.connect(self.manuscript_open_shorts_folder)
         btn_row.addWidget(self.shorts_play_btn)
         btn_row.addWidget(self.shorts_open_folder_btn)
@@ -5358,60 +5319,63 @@ class GodAI(QWidget):
         ))
 
         settings_row = QHBoxLayout()
-        settings_row.addWidget(QLabel("Weeks:"))
         self.calendar_weeks_box = QComboBox()
         self.calendar_weeks_box.addItems(["1", "2", "4"])
-        settings_row.addWidget(self.calendar_weeks_box)
+        settings_row.addWidget(field("Weeks", self.calendar_weeks_box))
 
-        settings_row.addWidget(QLabel("Start:"))
         self.calendar_start_date = QDateEdit()
         self.calendar_start_date.setDate(QDate.currentDate())
         self.calendar_start_date.setCalendarPopup(True)
-        settings_row.addWidget(self.calendar_start_date)
+        settings_row.addWidget(field("Start", self.calendar_start_date))
 
+        # Grouped under one caption and pinned to the controls' baseline: bare
+        # checkboxes in a row of label-above-input fields otherwise float a
+        # label's height above everything beside them.
+        platforms = QHBoxLayout()
+        platforms.setContentsMargins(0, 0, 0, 0)
+        platforms.setSpacing(MD)
         self.calendar_tiktok_check = QCheckBox("TikTok")
         self.calendar_tiktok_check.setChecked(True)
-        settings_row.addWidget(self.calendar_tiktok_check)
-
         self.calendar_instagram_check = QCheckBox("Instagram")
         self.calendar_instagram_check.setChecked(True)
-        settings_row.addWidget(self.calendar_instagram_check)
-
         self.calendar_pinterest_check = QCheckBox("Pinterest")
         self.calendar_pinterest_check.setChecked(True)
-        settings_row.addWidget(self.calendar_pinterest_check)
+        for check in (self.calendar_tiktok_check, self.calendar_instagram_check,
+                      self.calendar_pinterest_check):
+            platforms.addWidget(check)
+        platform_box = QWidget()
+        platform_box.setObjectName("Transparent")
+        platform_box.setLayout(platforms)
+        settings_row.addWidget(field("Platforms", platform_box))
 
         settings_row.addStretch()
         layout.addLayout(settings_row)
 
         settings_row2 = QHBoxLayout()
-        settings_row2.addWidget(QLabel("Theme:"))
         self.calendar_theme_box = make_theme_box()
-        settings_row2.addWidget(self.calendar_theme_box)
+        settings_row2.addWidget(field("Theme", self.calendar_theme_box))
 
-        settings_row2.addWidget(QLabel("Voice:"))
         self.calendar_voice_source_box = make_voice_source_box()
         self.calendar_voice_source_box.currentTextChanged.connect(self.calendar_load_voices)
-        settings_row2.addWidget(self.calendar_voice_source_box)
+        settings_row2.addWidget(field("Voice", self.calendar_voice_source_box))
 
         self.calendar_voice_box = QComboBox()
-        settings_row2.addWidget(self.calendar_voice_box)
+        settings_row2.addWidget(field("Narrator", self.calendar_voice_box))
 
-        settings_row2.addWidget(QLabel("Attribution:"))
         self.calendar_attribution = QLineEdit()
         self.calendar_attribution.setPlaceholderText("You Don't Chase")
-        settings_row2.addWidget(self.calendar_attribution)
+        settings_row2.addWidget(field("Attribution", self.calendar_attribution))
 
         settings_row2.addStretch()
         layout.addLayout(settings_row2)
 
         btn_row = QHBoxLayout()
-        self.calendar_generate_btn = QPushButton("📅  Generate Calendar")
+        self.calendar_generate_btn = QPushButton("Generate Calendar")
         self.calendar_generate_btn.setMinimumHeight(34)
         self.calendar_generate_btn.clicked.connect(self.manuscript_generate_calendar)
         btn_row.addWidget(self.calendar_generate_btn)
 
-        self.calendar_export_btn = QPushButton("📤  Export Calendar (CSV)")
+        self.calendar_export_btn = QPushButton("Export Calendar (CSV)")
         self.calendar_export_btn.clicked.connect(self.manuscript_export_calendar_csv)
         btn_row.addWidget(self.calendar_export_btn)
         btn_row.addStretch()
@@ -5441,7 +5405,7 @@ class GodAI(QWidget):
         process's environment — restart the app after editing .env for changes to appear).
         Services with no API at all (KDP, Draft2Digital, IngramSpark, BookBub, TikTok/IG/Pinterest)
         aren't listed here since there's nothing to check — their account-creation steps are on
-        the Publishing Todos list below (hover the ℹ️ items)."""
+        the Publishing Todos list below (hover an item for its notes)."""
         import os
 
         while self.manuscript_connections_layout.count():
@@ -5452,7 +5416,7 @@ class GodAI(QWidget):
 
         note = QLabel(
             "API-key-based services only — KDP/Draft2Digital/IngramSpark/BookBub/social accounts "
-            "have no API to check; see the ℹ️ Publishing Todos below for those."
+            "have no API to check; see the Publishing Todos below for those."
         )
         note.setWordWrap(True)
         note.setStyleSheet("color: #777; font-size: 11px;")
@@ -5471,10 +5435,10 @@ class GodAI(QWidget):
         for name, connected, where, optional in checks:
             opt_tag = " (optional)" if optional else ""
             if connected:
-                text = f"✅  {name}{opt_tag} — Connected"
+                text = f"{name}{opt_tag} — connected"
                 color = ACCENT
             else:
-                text = f"⚪  {name}{opt_tag} — Not connected · get a key at {where}"
+                text = f"{name}{opt_tag} — not connected · get a key at {where}"
                 color = "#999999"
             row = QLabel(text)
             row.setStyleSheet(f"color: {color}; font-size: 12px;")
@@ -5585,10 +5549,13 @@ class GodAI(QWidget):
         conn.close()
         self.manuscript_todo_list.clear()
         for row_id, title, status, platform, notes in rows:
-            check = "✅" if status == "done" else "○"
+            # A checkbox glyph pair, not emoji: ✓ and ○ share a baseline and an
+            # optical weight, so the list has one left edge. The ℹ️ that used
+            # to mark a note sat at the end of the line, at a different size,
+            # and only repeated what the tooltip already says.
+            check = "✓" if status == "done" else "○"
             tag = f"[{platform}] " if platform else ""
-            info = " ℹ️" if notes else ""
-            item = QListWidgetItem(f"{check} {tag}{title}{info}")
+            item = QListWidgetItem(f"{check}  {tag}{title}")
             item.setData(Qt.UserRole, row_id)
             if notes:
                 item.setToolTip(notes)
@@ -5763,14 +5730,14 @@ class GodAI(QWidget):
         label.setWordWrap(True)
         h.addWidget(label, 1)
 
-        graphic_btn = QPushButton("🖼")
-        graphic_btn.setFixedWidth(36)
+        graphic_btn = QPushButton("Graphic")
+        graphic_btn.setFixedWidth(78)
         graphic_btn.setToolTip("Generate quote graphic")
         graphic_btn.clicked.connect(lambda checked=False, q=quote: self.quote_finder_generate_graphic(q))
         h.addWidget(graphic_btn)
 
-        short_btn = QPushButton("🎬")
-        short_btn.setFixedWidth(36)
+        short_btn = QPushButton("Short")
+        short_btn.setFixedWidth(70)
         short_btn.setToolTip("Generate narrated short")
         short_btn.clicked.connect(lambda checked=False, q=quote, b=short_btn: self.quote_finder_generate_short(q, b))
         h.addWidget(short_btn)
@@ -5826,7 +5793,7 @@ class GodAI(QWidget):
     def _quote_finder_short_done(self, output_path: str, button: QPushButton):
         self._last_short_path = output_path
         self.manuscript_status_label.setText(f"[Done] Saved {Path(output_path).name}")
-        button.setText("🎬")
+        button.setText("Short")
         self._quote_finder_busy = False
         for b in self._quote_finder_short_buttons:
             b.setEnabled(True)
@@ -5925,9 +5892,9 @@ class GodAI(QWidget):
             self.calendar_table.setItem(row, 3, QTableWidgetItem(slot.quote))
             self.calendar_table.setItem(row, 4, QTableWidgetItem(slot.caption))
 
-            icon = "🖼" if slot.format == "graphic" else "🎬"
-            btn = QPushButton(icon)
-            btn.setFixedWidth(36)
+            btn = QPushButton(
+                "Graphic" if slot.format == "graphic" else "Short")
+            btn.setFixedWidth(78)
             btn.clicked.connect(lambda checked=False, r=row, b=btn: self.calendar_generate_asset(r, b))
             self.calendar_table.setCellWidget(row, 5, btn)
 
@@ -6042,12 +6009,10 @@ class GodAI(QWidget):
 
         self._music_clear_displays()
         self._last_music_response = ""
-        self.music_release_label.setText(release_type.split(" ")[0])
-        self.music_genre_label.setText(genre)
-        self.music_dist_label.setText(distributor if distributor != "Not signed up yet" else "None yet")
         self.music_status_label.setText("Generating Spotify plan…")
         self.music_analyse_btn.setEnabled(False)
         self.music_stop_btn.setEnabled(True)
+        self.music_stop_btn.show()
         self.music_save_btn.setEnabled(False)
 
         if not self.authorize_request("music", provider, model, prompt):
@@ -6071,6 +6036,7 @@ class GodAI(QWidget):
         self.music_status_label.setText("Plan complete — tabs populated.")
         self.music_analyse_btn.setEnabled(True)
         self.music_stop_btn.setEnabled(False)
+        self.music_stop_btn.hide()
         self.music_save_btn.setEnabled(True)
 
     def _music_on_error(self, error: str):
@@ -6079,6 +6045,7 @@ class GodAI(QWidget):
         self.music_status_label.setText("Error.")
         self.music_analyse_btn.setEnabled(True)
         self.music_stop_btn.setEnabled(False)
+        self.music_stop_btn.hide()
 
     def music_stop(self):
         if self.music_worker is not None and self.music_worker.isRunning():
@@ -6086,6 +6053,7 @@ class GodAI(QWidget):
         self.music_status_label.setText("Stopped.")
         self.music_analyse_btn.setEnabled(True)
         self.music_stop_btn.setEnabled(False)
+        self.music_stop_btn.hide()
 
     def music_save(self):
         if not self._last_music_response:
@@ -6117,9 +6085,6 @@ class GodAI(QWidget):
             self.music_income_box,
         ):
             box.clear()
-        self.music_release_label.setText("—")
-        self.music_genre_label.setText("—")
-        self.music_dist_label.setText("—")
         self.music_save_btn.setEnabled(False)
 
     def _populate_music_tabs(self, text: str):
@@ -6145,230 +6110,155 @@ class GodAI(QWidget):
         return result
 
     def build_right_panel(self) -> QWidget:
-        right_widget = QWidget()
-        right_widget.setObjectName("RightPanel")
+        """Spend, limits, and the utilities that open a window.
 
-        right_layout = QVBoxLayout(right_widget)
-        right_layout.setContentsMargins(8, 8, 8, 8)
-        right_layout.setSpacing(0)
+        This was five cards — SYSTEM, ROUTING, SPEND, ACTIONS, API KEYS — each
+        with its own border and title bar, stacked inside a scroll area inside
+        a panel. The spend card alone was nine lines of prose at one weight
+        ("Session Cost: €0.00", "Cost Today: €0.00", …), which is five
+        sentences to read before you know whether you can afford a request.
 
-        # ── Inner container that holds all cards (scrollable) ───────────
-        cards_container = QWidget()
-        cards_container.setObjectName("RightCardsContainer")
-        cards_layout = QVBoxLayout(cards_container)
-        cards_layout.setContentsMargins(2, 2, 2, 2)
-        cards_layout.setSpacing(8)
+        Now: four numbers, two bars, and the limits that set them. The
+        reference material that is only wanted when something looks wrong
+        (system load, routing, key status) stays, collapsed, at the bottom.
+        """
+        right_widget = rail("RailRight", RAIL_RIGHT_WIDTH)
+        # The rail scrolls. A QVBoxLayout given less height than its children
+        # need compresses them past their own minimums rather than clipping,
+        # and at the window's 600px minimum that drew "€0.00" over the caption
+        # under it. Same failure the panels already use scrollable() for.
+        rail_outer = QVBoxLayout(right_widget)
+        rail_outer.setContentsMargins(0, 0, 0, 0)
+        rail_body = QWidget()
+        rail_body.setObjectName("Transparent")
+        rail_outer.addWidget(scrollable(rail_body))
+        layout = QVBoxLayout(rail_body)
+        layout.setContentsMargins(MD + XS, LG, MD + XS, LG)
+        layout.setSpacing(MD)
 
-        # Reference, not decision-making: what the machine is doing and how the
-        # router chose. Useful when something looks wrong, noise the rest of the
-        # time — so both start collapsed rather than occupying the rail.
-        system_card = CollapsibleSection("SYSTEM", expanded=False)
-        system_layout = QVBoxLayout()
-        system_layout.setContentsMargins(10, 6, 10, 10)
-        system_layout.setSpacing(6)
+        layout.addWidget(section("Spend"))
 
-        self.resource_label = QLabel()
-        self.resource_label.setTextFormat(Qt.RichText)
-        self.resource_label.setWordWrap(True)
-        # Sized to its content rather than pinned: the stat block is a fixed
-        # number of lines, and 130px left a visible gap above the button.
-        self.resource_label.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Minimum)
-        self.resource_label.setObjectName("ResourceLabel")
-        system_layout.addWidget(self.resource_label)
+        stats = QGridLayout()
+        stats.setHorizontalSpacing(MD)
+        stats.setVerticalSpacing(MD)
+        self.session_cost_stat = StatBlock("this session", "€0.00")
+        self.today_cost_stat = StatBlock("today", "€0.00")
+        self.request_count_stat = StatBlock("requests", "0")
+        self.last_request_stat = StatBlock("last request", "—")
+        stats.addWidget(self.session_cost_stat, 0, 0)
+        stats.addWidget(self.today_cost_stat, 0, 1)
+        stats.addWidget(self.request_count_stat, 1, 0)
+        stats.addWidget(self.last_request_stat, 1, 1)
+        stats.setColumnStretch(0, 1)
+        stats.setColumnStretch(1, 1)
+        layout.addLayout(stats)
 
-        self.realtime_monitor_btn = QPushButton("⚡ Realtime Monitor")
-        self.realtime_monitor_btn.setEnabled(False)
-        system_layout.addWidget(self.realtime_monitor_btn)
+        # "Session remaining: €1 / €1" is two numbers you have to subtract. A
+        # bar answers the question before you have read anything.
+        self.session_meter = Meter("Session budget")
+        self.daily_meter = Meter("Daily budget")
+        layout.addWidget(self.session_meter)
+        layout.addWidget(self.daily_meter)
 
-        _system_body = QWidget()
-        _system_body.setLayout(system_layout)
-        system_card.addWidget(_system_body)
-        cards_layout.addWidget(system_card)
-
-        # ── Card 2: Routing & Recommendation ────────────────────────────
-        routing_card = CollapsibleSection("ROUTING", expanded=False)
-        routing_layout = QVBoxLayout()
-        routing_layout.setContentsMargins(10, 6, 10, 10)
-        routing_layout.setSpacing(6)
-
-        self.route_result_label = QLabel("Router: not yet computed")
-        self.route_result_label.setWordWrap(True)
-        routing_layout.addWidget(self.route_result_label)
-
-        self.recommendation_label = QLabel("Recommendation: not yet calculated")
-        self.recommendation_label.setWordWrap(True)
-        routing_layout.addWidget(self.recommendation_label)
-
-        _routing_body = QWidget()
-        _routing_body.setLayout(routing_layout)
-        routing_card.addWidget(_routing_body)
-        cards_layout.addWidget(routing_card)
-
-        # COST and BUDGET were two cards showing the same two numbers — spend
-        # and the cap it is measured against. One card: what this request will
-        # cost, what has been spent, and the limits, in that order.
-        cost_card = QGroupBox("SPEND (€)")
-        cost_card.setObjectName("RightCard")
-        cost_layout = QVBoxLayout(cost_card)
-        cost_layout.setContentsMargins(10, 6, 10, 10)
-        cost_layout.setSpacing(6)
-
-        self.live_estimate_label = QLabel("Estimated Request Cost: -")
+        self.live_estimate_label = QLabel("No request pending")
+        self.live_estimate_label.setObjectName("EstimateLine")
         self.live_estimate_label.setWordWrap(True)
-        cost_layout.addWidget(self.live_estimate_label)
+        layout.addWidget(self.live_estimate_label)
 
-        self.last_request_label = QLabel("Last Request Cost: €0.00")
-        cost_layout.addWidget(self.last_request_label)
-
-        cost_divider = QFrame()
-        cost_divider.setFrameShape(QFrame.HLine)
-        cost_divider.setObjectName("CardDivider")
-        cost_layout.addWidget(cost_divider)
-
-        self.session_cost_label = QLabel("Session Cost: €0.00")
-        cost_layout.addWidget(self.session_cost_label)
-
-        self.today_cost_label = QLabel("Cost Today: €0.00")
-        cost_layout.addWidget(self.today_cost_label)
-
-        self.request_count_label = QLabel("Requests Today: 0 | Session: 0")
-        cost_layout.addWidget(self.request_count_label)
-
-        budget_divider = QFrame()
-        budget_divider.setFrameShape(QFrame.HLine)
-        budget_divider.setObjectName("CardDivider")
-        cost_layout.addWidget(budget_divider)
-
-        budget_layout = cost_layout
-
-        self.budget_label = QLabel("Budget: not yet calculated")
-        self.budget_label.setWordWrap(True)
-        budget_layout.addWidget(self.budget_label)
-
-        # Both limits share one row, saving ~34px of a panel that is 260px wide
-        # at its narrowest. It only fits because the euro sign moved out of the
-        # two labels and into the card heading — "Session €" and "Daily €" at
-        # 70px each did not leave room for both fields.
+        layout.addWidget(section("Limits"))
         limits_row = QHBoxLayout()
-        limits_row.setSpacing(6)
-
-        session_lbl = QLabel("Session")
-        limits_row.addWidget(session_lbl)
-        self.session_budget_input = QLineEdit(str(int(self.session_budget_eur)))
-        self.session_budget_input.setPlaceholderText("1")
+        limits_row.setSpacing(SM)
+        self.session_budget_input = line_edit("1", str(int(self.session_budget_eur)))
         self.session_budget_input.setAlignment(Qt.AlignRight)
-        self.session_budget_input.setMaximumWidth(52)
-        self.session_budget_input.setToolTip("Maximum spend for this session, in euros.")
-        limits_row.addWidget(self.session_budget_input)
-
-        limits_row.addSpacing(6)
-
-        daily_lbl = QLabel("Daily")
-        limits_row.addWidget(daily_lbl)
-        self.daily_budget_input = QLineEdit(str(int(self.daily_budget_eur)))
-        self.daily_budget_input.setPlaceholderText("5")
+        self.daily_budget_input = line_edit("5", str(int(self.daily_budget_eur)))
         self.daily_budget_input.setAlignment(Qt.AlignRight)
-        self.daily_budget_input.setMaximumWidth(52)
-        self.daily_budget_input.setToolTip("Maximum spend per day, in euros.")
-        limits_row.addWidget(self.daily_budget_input)
-
-        limits_row.addStretch()
-        budget_layout.addLayout(limits_row)
+        limits_row.addWidget(field("Session €", self.session_budget_input))
+        limits_row.addWidget(field("Daily €", self.daily_budget_input))
+        layout.addLayout(limits_row)
 
         self.save_budget_btn = QPushButton("Save Limits")
         self.save_budget_btn.clicked.connect(self.save_budget_limits)
-        budget_layout.addWidget(self.save_budget_btn)
+        layout.addWidget(self.save_budget_btn)
 
-        self.reset_session_budget_btn = QPushButton("Reset Session Spend")
+        self.reset_session_budget_btn = quiet("Reset session spend")
         self.reset_session_budget_btn.clicked.connect(self.reset_session_spend)
-        budget_layout.addWidget(self.reset_session_budget_btn)
+        layout.addWidget(self.reset_session_budget_btn)
 
-        cards_layout.addWidget(cost_card)
+        layout.addStretch()
 
-        # ── Card 5: Quick Actions ───────────────────────────────────────
-        actions_card = QGroupBox("ACTIONS")
-        actions_card.setObjectName("RightCard")
-        actions_layout = QVBoxLayout(actions_card)
-        actions_layout.setContentsMargins(10, 6, 10, 10)
-        actions_layout.setSpacing(6)
-
-        self.cost_history_btn = QPushButton("📊  Cost History")
+        # ── Utilities: open a window, change nothing. Links, not buttons. ──
+        layout.addWidget(rule())
+        links = QVBoxLayout()
+        links.setSpacing(0)
+        self.cost_history_btn = quiet("Cost History")
         self.cost_history_btn.clicked.connect(self.show_cost_history)
-        actions_layout.addWidget(self.cost_history_btn)
+        links.addWidget(self.cost_history_btn)
 
-        self.run_log_btn = QPushButton("📜  Run Log")
+        self.run_log_btn = quiet("Run Log")
         self.run_log_btn.clicked.connect(self.show_run_log)
-        actions_layout.addWidget(self.run_log_btn)
+        links.addWidget(self.run_log_btn)
 
-        self.learn_btn = QPushButton("🎓  Learning Centre")
+        self.learn_btn = quiet("Learning Centre")
         self.learn_btn.clicked.connect(self.show_learning_center)
-        actions_layout.addWidget(self.learn_btn)
+        links.addWidget(self.learn_btn)
+        layout.addLayout(links)
 
-        self.settings_btn = QPushButton("⚙   Settings")
-        self.settings_btn.clicked.connect(self.show_settings)
-        actions_layout.addWidget(self.settings_btn)
+        # ── Reference: wanted only when something looks wrong ──────────────
+        reference = QVBoxLayout()
+        reference.setSpacing(0)
 
-        cards_layout.addWidget(actions_card)
+        system_card = CollapsibleSection("SYSTEM", expanded=False)
+        system_body = QWidget()
+        system_body.setObjectName("Transparent")
+        system_layout = QVBoxLayout(system_body)
+        system_layout.setContentsMargins(SM, XS, SM, SM)
+        system_layout.setSpacing(SM)
+        self.resource_label = QLabel()
+        self.resource_label.setTextFormat(Qt.RichText)
+        self.resource_label.setWordWrap(True)
+        self.resource_label.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Minimum)
+        self.resource_label.setObjectName("ResourceLabel")
+        system_layout.addWidget(self.resource_label)
+        self.realtime_monitor_btn = QPushButton("Realtime Monitor")
+        self.realtime_monitor_btn.setEnabled(False)
+        system_layout.addWidget(self.realtime_monitor_btn)
+        system_card.addWidget(system_body)
+        reference.addWidget(system_card)
 
-        # ── Card 6: API Keys ────────────────────────────────────────────
-        # Set once, then only consulted when a provider misbehaves.
+        routing_card = CollapsibleSection("ROUTING", expanded=False)
+        routing_body = QWidget()
+        routing_body.setObjectName("Transparent")
+        routing_layout = QVBoxLayout(routing_body)
+        routing_layout.setContentsMargins(SM, XS, SM, SM)
+        routing_layout.setSpacing(XS)
+        self.route_result_label = QLabel("Router: not yet computed")
+        self.route_result_label.setWordWrap(True)
+        routing_layout.addWidget(self.route_result_label)
+        self.recommendation_label = QLabel("Recommendation: not yet calculated")
+        self.recommendation_label.setWordWrap(True)
+        routing_layout.addWidget(self.recommendation_label)
+        routing_card.addWidget(routing_body)
+        reference.addWidget(routing_card)
+
         keys_card = CollapsibleSection("API KEYS", expanded=False)
-        keys_layout = QVBoxLayout()
-        keys_layout.setContentsMargins(10, 6, 10, 10)
-        keys_layout.setSpacing(4)
-
+        keys_body = QWidget()
+        keys_body.setObjectName("Transparent")
+        keys_layout = QVBoxLayout(keys_body)
+        keys_layout.setContentsMargins(SM, XS, SM, SM)
+        keys_layout.setSpacing(XS)
         self.openai_key_label = QLabel(f"OpenAI: {self.safe_key_status(OpenAIClientWrapper)}")
-        keys_layout.addWidget(self.openai_key_label)
-
         self.deepseek_key_label = QLabel(f"DeepSeek: {self.safe_key_status(DeepSeekClientWrapper)}")
-        keys_layout.addWidget(self.deepseek_key_label)
-
         self.kimi_key_label = QLabel(f"Kimi: {self.safe_key_status(KimiClientWrapper)}")
-        keys_layout.addWidget(self.kimi_key_label)
-
         self.gemini_key_label = QLabel(f"Gemini: {self.safe_key_status(GeminiClientWrapper)}")
-        keys_layout.addWidget(self.gemini_key_label)
-
         self.anthropic_key_label = QLabel(f"Anthropic: {self.safe_key_status(AnthropicClientWrapper)}")
-        keys_layout.addWidget(self.anthropic_key_label)
+        for key_label in (self.openai_key_label, self.deepseek_key_label,
+                          self.kimi_key_label, self.gemini_key_label,
+                          self.anthropic_key_label):
+            keys_layout.addWidget(key_label)
+        keys_card.addWidget(keys_body)
+        reference.addWidget(keys_card)
 
-        _keys_body = QWidget()
-        _keys_body.setLayout(keys_layout)
-        keys_card.addWidget(_keys_body)
-        cards_layout.addWidget(keys_card)
-
-        cards_layout.addStretch()
-
-        # ── Scroll area wrapping all cards ──────────────────────────────
-        scroll_area = QScrollArea()
-        scroll_area.setWidget(cards_container)
-        scroll_area.setWidgetResizable(True)
-        scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        scroll_area.setFrameShape(QFrame.NoFrame)
-        scroll_area.setStyleSheet("QScrollArea { background: transparent; border: none; }")
-        right_layout.addWidget(scroll_area)
-
-        right_widget.setMinimumWidth(260)
-        right_widget.setMaximumWidth(320)
-
-        # ── Sizing for buttons/inputs ───────────────────────────────────
-        for w in [
-            self.realtime_monitor_btn,
-            self.save_budget_btn,
-            self.reset_session_budget_btn,
-            self.cost_history_btn,
-            self.run_log_btn,
-            self.settings_btn,
-        ]:
-            w.setFixedHeight(30)
-            w.setMinimumWidth(0)
-            w.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-
-        self.session_budget_input.setFixedHeight(28)
-        self.daily_budget_input.setFixedHeight(28)
-
-        # ── VPN-Agent-inspired card stylesheet ──────────────────────────
-        # Card styling lives in ui/style.py (QGroupBox#RightCard rules).
+        layout.addLayout(reference)
 
         return right_widget
 
@@ -6579,9 +6469,10 @@ class GodAI(QWidget):
         self._current_agent = agent_name  # track for show_agent_docs()
         # ── Update the agent header bar (title + subtitle + status pill) ─
         agent_titles = {
-            "chat": "STUDIO ASSISTANT", "fiverr": "CLIENT GIGS",
-            "author": "DRAFT", "manuscript": "PUBLISH",
-            "music": "MUSIC", "webdesign": "SITE BUILDER", "audiobook": "AUDIOBOOKS", }
+            "chat": "Studio Assistant", "fiverr": "Client Gigs",
+            "author": "Draft", "manuscript": "Publish", "music": "Music",
+            "webdesign": "Site Builder", "audiobook": "Audiobooks",
+            "creator": "Creator", }
         agent_subtitles = {
             "chat":        "General-purpose conversation. Pick a tool, pick a model, talk.",
             "fiverr":      "Create client-ready logo concepts, gig listings, and polished delivery messages.",
@@ -6590,13 +6481,15 @@ class GodAI(QWidget):
             "music":       "Plan releases, distribution, promotion, and sustainable artist income.",
             "webdesign":   "Modern HTML, CSS, and JavaScript generation with responsive layout and design advice.",
             "audiobook":   "Turn PDF, EPUB, TXT, and MOBI books into production-ready MP3 audiobooks.",
+            "creator":     "Plan, draft, and schedule subscription content across accounts you hold consent for.",
             }
         if hasattr(self, "agent_title_label"):
-            self.agent_title_label.setText(agent_titles.get(agent_name, agent_name.upper()))
+            self.agent_title_label.setText(
+                agent_titles.get(agent_name, agent_name.title()))
         if hasattr(self, "agent_subtitle_label"):
             self.agent_subtitle_label.setText(agent_subtitles.get(agent_name, ""))
         if hasattr(self, "agent_status_pill"):
-            self.agent_status_pill.setText("●  READY")
+            self.agent_status_pill.setText("●  Ready")
             self.agent_status_pill.setStyleSheet("")
 
         is_audiobook = agent_name == "audiobook"
@@ -6676,7 +6569,7 @@ class GodAI(QWidget):
             return
 
         for book in books:
-            item = QListWidgetItem(f"📖 {book.name}")
+            item = QListWidgetItem(book.name)
             item.setData(Qt.UserRole, str(book))
             self.audiobook_book_list.addItem(item)
 
@@ -6779,6 +6672,7 @@ class GodAI(QWidget):
     def run_audiobook_live(self, config):
         self.tool_progress.setValue(0)
         self.stop_btn.setEnabled(True)
+        self.stop_btn.show()
         self.audiobook_start_btn.setEnabled(False)
         self.audiobook_refresh_btn.setEnabled(False)
 
@@ -6822,6 +6716,7 @@ class GodAI(QWidget):
         }.get(error, "The converter process encountered an unknown error.")
 
         self.stop_btn.setEnabled(False)
+        self.stop_btn.hide()
         self.audiobook_start_btn.setEnabled(True)
         self.audiobook_refresh_btn.setEnabled(True)
         self.tool_progress.setValue(0)
@@ -6848,6 +6743,7 @@ class GodAI(QWidget):
 
     def handle_audiobook_finished(self):
         self.stop_btn.setEnabled(False)
+        self.stop_btn.hide()
         self.audiobook_start_btn.setEnabled(True)
         self.audiobook_refresh_btn.setEnabled(True)
 
@@ -7530,6 +7426,7 @@ class GodAI(QWidget):
                 stopped = True
 
         self.stop_btn.setEnabled(False)
+        self.stop_btn.hide()
         self.audiobook_start_btn.setEnabled(True)
         self.audiobook_refresh_btn.setEnabled(True)
 
@@ -7567,31 +7464,28 @@ class GodAI(QWidget):
         self.resource_label.setText(html)
 
     def update_usage_labels(self):
+        """Push spend into the stat blocks and the two budget bars."""
+        if not hasattr(self, "session_cost_stat"):
+            return
         today_total = self.usage_tracker.get_today_total()
         today_requests = self.usage_tracker.get_total_requests_today()
-        tool_name = getattr(self, "last_tool_name", "-")
+        tool_name = getattr(self, "last_tool_name", "") or "-"
 
-        # ✅ updated last request label (now includes tool name)
-        self.last_request_label.setText(
-            f"Last Request Cost: €{self.last_request_cost:.2f} ({tool_name})"
-        )
+        self.session_cost_stat.set_value(f"€{self.session_cost_total:.2f}")
+        self.today_cost_stat.set_value(f"€{today_total:.2f}")
+        self.request_count_stat.set_value(str(today_requests))
+        # Detail goes in the tooltip. A caption that grows with its data clips
+        # the stat sitting next to it, which is how the rail got ragged.
+        self.request_count_stat.setToolTip(
+            f"{today_requests} today · {self.session_request_count} this session")
 
-        # keep your existing labels
-        self.session_cost_label.setText(f"Session Cost: €{self.session_cost_total:.2f}")
-        self.today_cost_label.setText(f"Cost Today: €{today_total:.2f}")
-        self.request_count_label.setText(
-            f"Requests Today: {today_requests} | Session: {self.session_request_count}"
-        )
+        self.last_request_stat.set_value(f"€{self.last_request_cost:.2f}")
+        self.last_request_stat.setToolTip(f"Last request ran: {tool_name}")
 
-        # budget calculations
-        session_remaining = self.session_budget_eur - self.session_cost_total
-        daily_remaining = self.daily_budget_eur - today_total
-
-        if hasattr(self, "budget_label"):
-            self.budget_label.setText(
-                f"Session remaining: €{session_remaining:.0f} / €{int(self.session_budget_eur)}\n"
-                f"Daily remaining: €{daily_remaining:.0f} / €{int(self.daily_budget_eur)}"
-            )
+        # The bars show spend against the cap. Remaining is the gap, which is
+        # the thing you were subtracting for by hand before.
+        self.session_meter.set(self.session_cost_total, self.session_budget_eur)
+        self.daily_meter.set(today_total, self.daily_budget_eur)
 
     def start_resource_timer(self):
         self.resource_timer = QTimer(self)

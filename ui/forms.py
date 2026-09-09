@@ -24,9 +24,11 @@ previous widget ended.
 
 from __future__ import annotations
 
+from PySide6.QtCore import Qt
+
 from PySide6.QtWidgets import (
     QComboBox, QFrame, QGridLayout, QHBoxLayout, QLabel, QLineEdit,
-    QPushButton, QSizePolicy, QVBoxLayout, QWidget,
+    QProgressBar, QPushButton, QSizePolicy, QVBoxLayout, QWidget,
 )
 
 # The scale. Four numbers; nothing between them.
@@ -88,7 +90,8 @@ def form_grid(pairs: list[tuple[str, QWidget]], *, columns: int = 3) -> QGridLay
     grid.setHorizontalSpacing(MD)
     grid.setVerticalSpacing(MD)
     for index, (label, widget) in enumerate(pairs):
-        grid.addWidget(field(label, widget), index // columns, index % columns)
+        grid.addWidget(field(label, widget), index // columns, index % columns,
+                       Qt.AlignTop)
     for column in range(columns):
         grid.setColumnStretch(column, 1)
     return grid
@@ -191,3 +194,123 @@ FORM_STYLES = """
 
 def form_stylesheet(text: str, muted: str) -> str:
     return FORM_STYLES.format(text=text, muted=muted, height=CONTROL_HEIGHT)
+
+
+# ── Shell primitives ─────────────────────────────────────────────────────────
+# The chrome around the panels: one header bar, two fixed rails. Fixed rather
+# than a QSplitter because a splitter is allowed to compress a pane past its
+# children's minimum widths, and every overlapping-widget bug this app has had
+# started that way. Two numbers you cannot drag are worth more than three you
+# can.
+
+HEADER_HEIGHT = 56
+RAIL_LEFT_WIDTH = 236
+RAIL_RIGHT_WIDTH = 268
+# A form field wider than this stops being readable, so the centre column caps
+# out rather than stretching a text input across a 27" display.
+CONTENT_MAX_WIDTH = 1080
+
+
+def nav_tab(text: str) -> QPushButton:
+    """A mode tab: text with an accent underline when current.
+
+    Checkable rather than a QTabBar so it lives in the header row beside the
+    wordmark. The visual difference from `primary()` is the point — navigation
+    that looks like a button competes with the buttons that actually do work.
+    """
+    button = QPushButton(text)
+    button.setObjectName("NavTab")
+    button.setCheckable(True)
+    button.setFixedHeight(HEADER_HEIGHT)
+    return button
+
+
+def quiet(text: str) -> QPushButton:
+    """A utility affordance: reads as a link, still behaves as a button.
+
+    Used for the things that open a window and change nothing — Run Log, Cost
+    History, Settings. They were full-weight buttons stacked in a card, which
+    gave five inert utilities the same visual weight as "Generate".
+    """
+    button = QPushButton(text)
+    button.setObjectName("QuietAction")
+    button.setFixedHeight(30)
+    button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+    return button
+
+
+class StatBlock(QWidget):
+    """One number over its caption.
+
+    Replaces a line of prose like ``Session Cost: €0.00``. The number is the
+    content; putting it on its own line at a larger size is what makes a column
+    of them scannable instead of five sentences to read.
+    """
+
+    def __init__(self, caption: str, value: str = "—", parent=None):
+        super().__init__(parent)
+        self.setObjectName("Transparent")
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(1)
+        self.value_label = QLabel(value)
+        self.value_label.setObjectName("StatValue")
+        layout.addWidget(self.value_label)
+        self.caption_label = micro(caption)
+        layout.addWidget(self.caption_label)
+
+    def set_value(self, value: str) -> None:
+        self.value_label.setText(value)
+
+    def set_caption(self, caption: str) -> None:
+        self.caption_label.setText(caption.upper())
+
+
+class Meter(QWidget):
+    """A budget as a bar, with used/cap beside the label.
+
+    "Session remaining: €1 / €1" is two numbers you have to subtract to
+    understand. A bar answers the actual question — how much is left — before
+    you have read anything.
+    """
+
+    def __init__(self, label: str, parent=None):
+        super().__init__(parent)
+        self.setObjectName("Transparent")
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(XS + 1)
+
+        top = QHBoxLayout()
+        top.setContentsMargins(0, 0, 0, 0)
+        top.setSpacing(SM)
+        top.addWidget(micro(label))
+        top.addStretch()
+        self.amount_label = micro("—")
+        top.addWidget(self.amount_label)
+        layout.addLayout(top)
+
+        self.bar = QProgressBar()
+        self.bar.setObjectName("BudgetBar")
+        self.bar.setRange(0, 100)
+        self.bar.setValue(0)
+        self.bar.setTextVisible(False)
+        layout.addWidget(self.bar)
+
+    def set(self, used: float, cap: float) -> None:
+        self.amount_label.setText(f"€{used:.2f} / €{cap:.2f}".upper())
+        # A zero cap is "no limit", not "fully spent" — showing a full bar there
+        # would read as blocked when nothing is.
+        percent = 0 if cap <= 0 else min(100, int(round(used / cap * 100)))
+        self.bar.setValue(percent)
+        self.bar.setProperty("over", percent >= 100)
+        self.bar.style().unpolish(self.bar)
+        self.bar.style().polish(self.bar)
+
+
+def rail(object_name: str, width: int) -> QFrame:
+    """A fixed-width side column."""
+    frame = QFrame()
+    frame.setObjectName(object_name)
+    frame.setFixedWidth(width)
+    return frame

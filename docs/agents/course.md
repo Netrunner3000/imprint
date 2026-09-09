@@ -8,7 +8,7 @@ narration scripts, rendered slides, a voiced avatar video per lesson, and an
 `index.html` that ties them together with downloadable `.pptx` slides.
 
 ## Why this page exists
-Every other agent has a panel with a 📖 Docs button that opens its sheet from
+Every other agent has a panel with a Docs button that opens its sheet from
 `docs/agents/`. The Course Generator has no panel, so it has no button — and
 until this page existed, `run_course.py --help` was its only documentation.
 

@@ -54,7 +54,7 @@ by hand — `draft → approved → posted` is a status you set yourself), and
 **Earnings** (imported statements).
 
 ## Higgsfield promo video
-`🎬 Generate Teaser` sends a safe-for-work prompt to the Higgsfield API for a
+`Generate Teaser` sends a safe-for-work prompt to the Higgsfield API for a
 promo clip aimed at the off-platform funnels where subscription traffic
 actually originates.
 
@@ -85,7 +85,7 @@ header substrings and stores the raw rows alongside the totals.
 | `agents/creator_agent.py` | `CreatorAgent`, `require_ready()`, prompt construction. |
 | `services/higgsfield_client.py` | Video API client and the content-policy guard. |
 | `services/creator_csv.py` | Earnings statement parsing and ingest. |
-| `main.py: build_creator_panel()` | Account bar, tabs, sidebar. |
+| `main.py: build_creator_panel()` | Account section, compose section, seven tabs. |
 | `main.py: creator_generate()/creator_schedule()/creator_import_earnings()` | Lifecycle. |
 | `creator_accounts` / `creator_content` / `creator_earnings` | Tables. |
 

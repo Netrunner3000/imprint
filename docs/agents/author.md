@@ -16,12 +16,12 @@ All three modes read from one **Book Profile** (Title, Author, Content Type, Gen
 | Control | Purpose |
 |---|---|
 | Title / Author / **Type** (Fiction/Non-Fiction) | Project Bar — Type switches the Write-mode system prompt and Task list. |
-| **📖 Book Profile** (collapsible) | Hook, Target Reader, Comp Titles, Publishing Path, **💾 Save Profile** — persisted, auto-loads next launch. |
+| **Book Profile** (collapsible) | Hook, Target Reader, Comp Titles, Publishing Path, **Save Profile** — persisted, auto-loads next launch. |
 | Task / mode | Options depend on Type — fiction: Write Scene / Develop Characters / Build World / etc.; non-fiction: Write Chapter / Strengthen Argument / Tighten Structure / etc. |
 | Direction / instruction box | What to write next. |
 | Provider / Model | Large-context model recommended. |
 | Write / Continue / Stop / Save / Clear | Drafting lifecycle. |
-| Author name / Format / **📤 Export Book** | Renders the Draft tab to EPUB, DOCX, or PDF with a title page and detected chapter breaks. |
+| Author name / Format / **Export Book** | Renders the Draft tab to EPUB, DOCX, or PDF with a title page and detected chapter breaks. |
 | Publish + Market sub-panels | Their own generate / copy / save buttons. |
 
 ## Outputs
