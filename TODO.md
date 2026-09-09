@@ -7,6 +7,16 @@
 Full reasoning, measurements and verification notes for each item are kept below
 under **Detail** — this checklist is the summary view.
 
+**State, September 2026.** Eight agents behind mode tabs; the GUI rebuilt on
+`ui/forms.py` over a header bar and two fixed rails; Video and Social shipped,
+which closes the last two gaps against the original plan. Every paid path now
+goes through the request guard, including the ones billed per unit rather than
+per token. 426 tests. `main.py --selftest` passes against the packaged bundle.
+
+The largest open item is **Refactor Phase 4** — `main.py` is 9,141 lines. The
+rest of what is open is mostly `@me`: rates and platform terms I cannot verify
+for you.
+
 ---
 
 ## v2 — current
@@ -36,7 +46,7 @@ under **Detail** — this checklist is the summary view.
 
 - [x] `P1` `security` `@ai` **Higgsfield renders bypass the request guard.** Fixed: `creator_generate_video()` now authorises through the guard with a per-unit cost, and `creator` permits the `higgsfield` backend (it did not, so the guard would have refused every render). Its rate is deliberately left at 0 in `config/pricing.json` — I do not know it — so the panel asks before rendering and says plainly that it cannot be counted until you fill it in from an invoice. Original note:  `creator_generate_video()` submits straight to the API: no `authorize_request`, no `record_request`, so a video render is invisible to the session and daily caps, to the spend counters and to the confirmation prompt. This is the same class of bug as the P0 above — paid calls made outside the one guarded path — reintroduced by the agent that added a second paid provider. Higgsfield bills per render, so this is real money, not a rounding error. Needs its own cost model too: the guard is priced in tokens and a render is not.
 - [x] `P1` `docs` `@ai` The Learning Centre now covers the Creator agent and the audiobook Listen tab, and `scripts/make_learning_shots.py` has a shot of each. All nine screenshots were regenerated after the September 2026 GUI pass, so the guide shows the shell that ships.
-- [ ] `P2` `design` `@ai` **Refactor Phase 4** — one module per agent panel. `main.py` is back to ~8,000 lines: the Creator panel alone added roughly 700, and the phase 3 seam (`AgentHost` + `AgentPanel`) exists precisely so panels can move out. This is the point at which not doing it starts costing.
+- [ ] `P1` `design` `@ai` **Refactor Phase 4** — one module per agent panel. `main.py` is **9,141 lines**: Creator added ~700, then Video and Social ~700 more, and the GUI pass rewrote most of the rest. The phase 3 seam (`AgentHost` + `AgentPanel`) exists precisely so panels can move out, and `CUSTOM_PANELS` now drives both construction and switching, so moving one is mechanical. Raised from P2 — at nine thousand lines this is no longer tidiness, it is the reason every change costs more than it should.
 - [ ] `P2` `feature` `@ai` The Creator earnings tab is a text dump. It has real numbers behind it now — price points, top content, hook results — and they want a chart, not a monospace table.
 - [ ] `P2` `research` `@me` **Read the actual 2257 requirements** before trusting the performer records table. It records that documents exist and where they are held, which is the right shape, but the field list was designed from a general understanding rather than the regulation. This is a legal obligation, not a feature.
 - [ ] `P3` `feature` `@ai` Audiobook player: no sleep timer, no chapter marks, no keyboard shortcuts (space to pause is the obvious one). The resume works, which was the ask; these are what make it pleasant.
