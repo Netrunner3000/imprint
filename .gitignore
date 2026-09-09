@@ -31,3 +31,6 @@ screenshots/
 dist/
 build/
 *.iconset
+
+# Nested companion project (its own git repo, moved in under the sentinel family)
+/vidforge/
