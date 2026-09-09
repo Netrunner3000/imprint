@@ -1344,7 +1344,12 @@ class GodAI(QWidget):
     def build_left_panel(self) -> QWidget:
         """The project rail. Projects only — navigation lives in the header."""
         left_widget = rail("RailLeft", RAIL_LEFT_WIDTH)
-        left_layout = QVBoxLayout(left_widget)
+        left_outer = QVBoxLayout(left_widget)
+        left_outer.setContentsMargins(0, 0, 0, 0)
+        left_body = QWidget()
+        left_body.setObjectName("Transparent")
+        left_outer.addWidget(scrollable(left_body))
+        left_layout = QVBoxLayout(left_body)
         left_layout.setContentsMargins(MD, LG, MD, LG)
         left_layout.setSpacing(MD)
 
@@ -6118,7 +6123,16 @@ class GodAI(QWidget):
         (system load, routing, key status) stays, collapsed, at the bottom.
         """
         right_widget = rail("RailRight", RAIL_RIGHT_WIDTH)
-        layout = QVBoxLayout(right_widget)
+        # The rail scrolls. A QVBoxLayout given less height than its children
+        # need compresses them past their own minimums rather than clipping,
+        # and at the window's 600px minimum that drew "€0.00" over the caption
+        # under it. Same failure the panels already use scrollable() for.
+        rail_outer = QVBoxLayout(right_widget)
+        rail_outer.setContentsMargins(0, 0, 0, 0)
+        rail_body = QWidget()
+        rail_body.setObjectName("Transparent")
+        rail_outer.addWidget(scrollable(rail_body))
+        layout = QVBoxLayout(rail_body)
         layout.setContentsMargins(MD + XS, LG, MD + XS, LG)
         layout.setSpacing(MD)
 

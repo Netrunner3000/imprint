@@ -254,3 +254,26 @@ def test_no_control_label_carries_an_emoji(app, window):
                 offenders.append(f"{widget.objectName() or type(widget).__name__}: {text!r}")
                 break
     assert not offenders, "emoji in control labels: " + "; ".join(sorted(set(offenders))[:8])
+
+
+# ── The shell ────────────────────────────────────────────────────────────────
+@pytest.mark.parametrize("size", SIZES, ids=lambda s: f"{s[0]}x{s[1]}")
+def test_shell_chrome_never_overlaps(app, window, size):
+    """The header and the two rails, not just the panel between them.
+
+    The panel tests only ever looked inside `<agent>_panel`, so the rails were
+    unchecked — and at the window's own 600px minimum the spend rail drew
+    "€0.00" straight over the caption beneath it. Same cause the panels use
+    scrollable() for: a QVBoxLayout given less height than its children need
+    compresses them past their own minimums instead of clipping.
+    """
+    _settle(app, window, size, "fiverr")
+    bad = []
+    for name in ("RailLeft", "RailRight", "AppHeader"):
+        chrome = window.findChild(object, name)
+        if chrome is None:
+            continue
+        bad += [(name, a, b) for a, b, _ in _overlapping_pairs(chrome)]
+    assert not bad, "\n".join(
+        f"  [{where}] {_describe(a)} overlaps {_describe(b)}"
+        for where, a, b in bad[:6])
