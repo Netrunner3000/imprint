@@ -112,5 +112,15 @@
       "input_per_1m_usd": 1.65,
       "output_per_1m_usd": 4.951
     }
+  },
+  "per_unit_usd": {
+    "_comment": "Per-unit prices in USD. A rate of 0 means UNKNOWN, not free: the app warns instead of silently billing zero. Fill in a real number to have it counted against the budget caps.",
+    "openai_image": {
+      "dall-e-3": 0.04,
+      "gpt-image-1": 0.04
+    },
+    "openai_tts_per_1k_chars": 0.015,
+    "openai_whisper_per_minute": 0.006,
+    "higgsfield_render": 0.0
   }
 }

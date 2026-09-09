@@ -129,11 +129,15 @@ class FakeUsageTracker:
     def get_today_total(self):
         return self.today_total
 
-    def log_request(self, agent, backend, model, prompt_text, response_text, usage=None):
+    def log_request(self, agent, backend, model, prompt_text, response_text,
+                    usage=None, flat_cost_eur=None):
+        # Mirrors the real tracker: a per-unit price wins over the token cost.
+        cost = 0.02 if flat_cost_eur is None else float(flat_cost_eur)
         entry = {
             "agent": agent, "backend": backend, "model": model,
-            "cost_eur": 0.02, "estimated_cost": 0.02,
+            "cost_eur": cost, "estimated_cost": cost,
             "input_tokens": 10, "output_tokens": 20, "usage": usage,
+            "flat_cost_eur": flat_cost_eur,
         }
         self.logged.append(entry)
         return entry
