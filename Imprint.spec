@@ -4,6 +4,8 @@
 Build:   .venv/bin/pyinstaller --noconfirm Imprint.spec
 Output:  dist/Imprint.app
 """
+from pathlib import Path
+
 from PyInstaller.utils.hooks import collect_all, collect_submodules
 
 datas = []
@@ -12,14 +14,39 @@ hiddenimports = [
     "tiktoken_ext",
     "tiktoken_ext.openai_public",
     "services.narrator.converter",   # invoked via the --narrator-worker sentinel
+    # vidforge is imported through services/video_studio.py at runtime, so
+    # static analysis of main.py never sees these.
+    "vidforge",
+    "vidforge.pipeline",
+    "vidforge.progress",
+    "vidforge.config",
+    "vidforge.history",
+    "vidforge.youtube",
 ]
 
 # SDKs / libs with data files or plugin discovery that static analysis can miss.
-for pkg in ("google.genai", "tiktoken", "anthropic", "openai", "certifi"):
+for pkg in ("google.genai", "tiktoken", "anthropic", "openai", "certifi",
+            "yaml", "googleapiclient", "google_auth_oauthlib"):
     d, b, h = collect_all(pkg)
     datas += d
     binaries += b
     hiddenimports += h
+
+# vidforge is a nested sibling repository, not a vendored copy — see
+# services/video_studio.py. The package ships as source so the same checkout
+# drives both this bundle and the standalone vidforge.app.
+_VIDFORGE = Path("vidforge")
+if (_VIDFORGE / "vidforge").is_dir():
+    datas += [(str(_VIDFORGE / "vidforge"), "vidforge")]
+    # config.yaml and topics.txt are seeded into ~/Library/Application Support/
+    # vidforge on first run, and its assets/ holds the music and fonts the
+    # pipeline composites in. Frozen, vidforge resolves BUNDLE_ROOT to this
+    # bundle's root, so they have to sit at the top level.
+    for _name in ("config.yaml", "topics.txt"):
+        if (_VIDFORGE / _name).is_file():
+            datas += [(str(_VIDFORGE / _name), ".")]
+    if (_VIDFORGE / "assets").is_dir():
+        datas += [(str(_VIDFORGE / "assets"), "assets")]
 
 # Read-only resources seeded into the writable user-data dir on first launch.
 datas += [

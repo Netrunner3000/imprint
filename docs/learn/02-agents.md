@@ -122,11 +122,90 @@ and its default taste is generic.
 
 ![Client Gigs](img/agent-fiverr.png)
 
-Logo concepts via DALL·E, gig descriptions, and client delivery messages.
+Logo concepts, gig descriptions, and client delivery messages.
 
-**Generate Logos** is the paid, headline action — it bills per image. **Delivery
-Msg** and **Gig Description** are text-only and cheap. The order log tracks what
-you produced for whom.
+**Generate Logos** is the paid, headline action — it bills per image, and that
+now counts against your budget caps. Pick the **Image model**: `dall-e-3` is
+the long-standing default, `gpt-image-1` is newer and noticeably better at text
+inside an image, which is most of what a logo is. **Delivery Message** and
+**Gig Description** are text-only and cheap. The Orders tab tracks what you
+produced for whom.
+
+---
+
+## Video → Video  *(video)*
+
+![Video](img/agent-video.png)
+
+Topic in, finished video out: script, narration, aligned captions, generated
+visuals, Ken Burns motion, music and a thumbnail. This is the `vidforge`
+pipeline running inside Imprint — the same code as the standalone app, not a
+copy, so a render started in either shows up in both libraries.
+
+**Format** is the only decision that changes the shape of the run:
+
+| | |
+|---|---|
+| **Long-form** | Whatever `config.yaml` says — 1920×1080, aimed at ~8 minutes. For YouTube. |
+| **Social clip** | Vertical or square, 15–90 seconds, cut roughly every 6 seconds. For TikTok, Reels, Shorts. |
+
+The estimate beside the button is real: it comes from the pipeline's own
+per-stage arithmetic (images, narration characters, caption alignment) and is
+charged against your session and daily caps before the run starts. A long-form
+video is typically €1–2; a 30-second clip about €0.25. Most of that is images.
+
+**Stop** cancels at the next stage boundary rather than mid-ffmpeg, so you are
+never left with a half-written file. A cancelled run stays in the Library and
+can be resumed.
+
+![Video library](img/agent-video-library.png)
+
+---
+
+## Social → Social  *(social)*
+
+![Social](img/agent-social.png)
+
+The funnel for everything else in the studio. A **campaign** is one subject —
+a book, a release, a product, a gig — and its goal. Posts are written per
+platform, laid on a schedule, and either posted directly or copied out.
+
+Write for the platform, not for "social media". The same announcement is a
+different piece of writing on each one, and not because of length: Reddit
+removes posts that read as marketing, Pinterest is a search engine wearing a
+mood board, X gives you seven words before someone scrolls. That guidance is
+built into each platform's prompt.
+
+**Angle** matters more than most people expect. `launch` is the one everyone
+reaches for and the one that works least often; `behind_the_scenes`, `excerpt`
+and `value` all give someone a reason to read who was not already going to buy.
+
+**Make a Clip** is where Video and Social meet: it writes a topic brief, hands
+it to the video pipeline at the right aspect and length for the platform, and
+files the finished mp4 against the campaign. You are not maintaining two video
+workflows.
+
+**Schedule Drafts** spreads undated drafts across the coming weeks at each
+platform's own cadence — seven a week on X, one a week on Reddit. That last
+number is not timidity: posting more often than that on Reddit is how accounts
+get banned, whatever the API allows.
+
+### What can actually post
+
+![Social accounts](img/agent-social-accounts.png)
+
+Writing works everywhere. Posting does not, and the Accounts tab is honest
+about which is which:
+
+| | |
+|---|---|
+| **YouTube, Reddit, Pinterest** | Can post today. Each needs credentials you can obtain yourself — see the tab for exactly which. |
+| **X, Instagram, TikTok, Threads, LinkedIn** | Drafting only. Each needs a paid tier, a linked business account, or an app review that Imprint cannot obtain on your behalf. |
+
+Nothing posts on its own. There is no scheduler running in the background and
+no "publish all" — the schedule is a plan you work through, one confirmed click
+at a time. That is deliberate: a tool that posts unattended is how an account
+gets banned for something its owner never saw.
 
 ---
 

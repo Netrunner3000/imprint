@@ -9026,7 +9026,90 @@ def _hand_off_to_running_instance() -> bool:
     return True
 
 
+def _selftest() -> int:
+    """Check the things only a packaged run can break.
+
+    Three of the four traps in AGENTS.md are invisible from source — there is
+    nothing to inherit, nothing to resolve and no bundle to read from until the
+    app is frozen. Video mode adds a fourth: vidforge is a nested sibling
+    repository imported at runtime, so PyInstaller's static analysis never sees
+    it and only a real bundle proves it shipped.
+
+    Run:  /Applications/Imprint.app/Contents/MacOS/Imprint --selftest
+    """
+    from pathlib import Path as _Path
+
+    failures: list[str] = []
+
+    def check(label: str, ok: bool, detail: str = "") -> None:
+        print(f"  {'PASS' if ok else 'FAIL'}  {label}" + (f" — {detail}" if detail else ""))
+        if not ok:
+            failures.append(label)
+
+    print(f"Imprint self-test  (frozen={is_frozen()})")
+
+    # 1. Writable data directory. A frozen app that writes inside its own
+    #    bundle breaks its signature and loses everything on reinstall.
+    try:
+        data_dir = _Path(BASE_DIR)
+        probe = data_dir / ".selftest"
+        probe.write_text("ok", encoding="utf-8")
+        probe.unlink()
+        inside_bundle = ".app/Contents/" in str(data_dir)
+        check("data directory is writable", True, str(data_dir))
+        check("data directory is outside the bundle", not inside_bundle)
+    except Exception as exc:
+        check("data directory is writable", False, str(exc))
+
+    # 2. Database opens and carries the agents the shell switches between.
+    try:
+        from services.registry import Registry
+        registry = Registry()
+        missing = [a for a in CUSTOM_PANELS if not registry.is_agent_enabled(a)]
+        check("every panel agent is registered", not missing, ", ".join(missing))
+    except Exception as exc:
+        check("registry is readable", False, str(exc))
+
+    # 3. vidforge, imported rather than vendored — the whole Video mode.
+    try:
+        from services import video_studio
+        ok = video_studio.available()
+        check("vidforge imports", ok,
+              "" if ok else video_studio.unavailable_reason().split("\n")[0])
+        if ok:
+            cfg = video_studio.load_config()
+            check("vidforge config loads", bool(cfg.get("video.width")))
+            check("vidforge output root is writable",
+                  video_studio.output_root().is_dir(),
+                  str(video_studio.output_root()))
+    except Exception as exc:
+        check("vidforge imports", False, f"{type(exc).__name__}: {exc}")
+
+    # 4. Libraries that resolve through entry points or data files silently
+    #    no-op once packaged unless they were collected.
+    for module in ("yaml", "tiktoken", "PIL"):
+        try:
+            __import__(module)
+            check(f"{module} importable", True)
+        except Exception as exc:
+            check(f"{module} importable", False, str(exc))
+
+    # 5. Read-only resources that are seeded from the bundle on first run.
+    for name in ("docs/agents", "docs/learn", "config"):
+        check(f"bundled resource: {name}", (_Path(RESOURCE_DIR) / name).exists())
+
+    print()
+    if failures:
+        print(f"{len(failures)} check(s) failed: {', '.join(failures)}")
+        return 1
+    print("all checks passed")
+    return 0
+
+
 if __name__ == "__main__":
+    if "--selftest" in sys.argv:
+        sys.exit(_selftest())
+
     app = QApplication([])
 
     # Second launch: focus the window that is already open and leave. The exit

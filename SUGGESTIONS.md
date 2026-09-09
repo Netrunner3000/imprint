@@ -43,8 +43,8 @@ consequences of what just landed rather than new ideas.
 | 40 | **Price the second provider.** The budget guard is denominated in tokens, so it cannot express "one video render". Higgsfield bills per render, Fiverr's logo path bills per image, and TTS bills per character — three paid paths the cost model cannot see. A per-unit cost type alongside the token one would let all three count against the same caps instead of each needing its own exemption. | security | M | IDEA |
 | 41 | **A doc test that fails when an agent has no guide.** The Learning Centre silently fell a full agent behind twice. `WORKSPACES` is the list of what exists; a test asserting every agent in it appears in `docs/learn/02-agents.md` and has a `docs/agents/*.md` sheet would make that impossible rather than merely noticed. | testing | S | IDEA |
 | 42 | **Project as the object everything hangs off.** A book, a release and a product are each worked on across Write, Audio, Video and Creator, but each mode keeps its own state and the projects rail is decorative. Making Project real — one record the modes read from — is what would turn five tools that share a window into a studio. | design | L | IDEA |
-| 43 | **Video mode.** Still the largest gap against the original plan: `vidforge` has a clean `pipeline.produce()` and a working YouTube upload, and Imprint has no video tab. The Higgsfield client already proves the async-render shape the panel would use. | feature | L | IDEA |
-| 44 | **Social mode.** Scheduling and drafting for the public funnels — X, Reddit, TikTok, Instagram — which every other mode already depends on for traffic and none of them owns. Some of those have real APIs, unlike the subscription platforms. | feature | L | IDEA |
+| 43 | DONE — **Video mode.** vidforge imported from the nested repo (not vendored), long-form and clips as one pipeline, cost estimated per stage and charged against the caps. | feature | L | DONE |
+| 44 | DONE — **Social mode.** Campaigns, per-platform drafting, cadence scheduling, and real posting for the three platforms where that is possible from a personal account. | feature | L | DONE |
 | 45 | **Charts, not monospace.** Three panels now compute genuinely interesting numbers (KDP royalties, creator price points, cost history) and all three render them as aligned text. One small charting layer would serve all of them. | design | M | IDEA |
 | 46 | **A "what should I do today" view.** The app knows the publishing todos, the content calendar, which drafts are unposted and which books are part-listened. Nothing assembles that into the one screen a person actually opens in the morning. | feature | M | IDEA |
 | 47 | **Retire or rehome the chat agent.** It is still constructed and still owns `normal_panel`, but the tabbed shell reaches no part of it. Either it becomes a real mode or it goes, and with it a meaningful amount of machinery. | infra | M | IDEA |
@@ -64,6 +64,10 @@ consequences of what just landed rather than new ideas.
 
 | Suggestion | When |
 |---|---|
+| Video mode — vidforge as an eighth agent, imported from its nested repo rather than vendored; long-form and social clips are one pipeline | Sep 2026 |
+| Social mode — the public funnel: campaigns, per-platform drafting, cadence scheduling, and posting for YouTube/Reddit/Pinterest | Sep 2026 |
+| Per-unit billing — images, renders and TTS count against the budget caps instead of pricing a $0.04 image at €0.000001 | Sep 2026 |
+| `main.py --selftest` — the packaging traps AGENTS.md names, plus proof that vidforge shipped in the bundle | Sep 2026 |
 | GUI overhaul — header bar plus two fixed rails instead of a splitter; every panel rebuilt on `ui/forms.py`; one control height enforced in the stylesheet; 58 emoji and 36 colon captions removed; spend as stat blocks and budget bars | Sep 2026 |
 | The Gigs image model is a control (`dall-e-3` / `gpt-image-1`) rather than a hardcoded call, and `generate_image()` returns bytes so both models have one caller | Sep 2026 |
 | Refactor Phase 3 — `ui/host.py`'s `AgentHost` protocol and `ui/panels/base.py`'s `AgentPanel`, absorbing the five `*_load_models` methods | Sep 2026 |
