@@ -193,7 +193,35 @@ def test_ollama_ignores_every_budget():
 # ─────────────────────────────────────────────────────────────────────────────
 @pytest.fixture
 def tracker():
-    return UsageTracker()
+    """A tracker whose writes land in a throwaway database.
+
+    `UsageTracker.log_request` INSERTs into the app's real `usage` table, so a
+    test that calls it bills the user: the first version of the per-unit tests
+    below put nine fabricated requests and €0.47 of imaginary spend into the
+    live spend counters. Read-only helpers never needed the isolation, which is
+    why it was missing until a test wrote something.
+    """
+    import sqlite3
+    import tempfile
+    from pathlib import Path
+
+    from services import database
+
+    original = database.DB_PATH
+    with tempfile.TemporaryDirectory() as tmp:
+        database.DB_PATH = Path(tmp) / "test.db"
+        conn = sqlite3.connect(str(database.DB_PATH))
+        conn.executescript(database.SCHEMA)
+        # Seeded the same way a real launch seeds it. Without the pricing rows
+        # calculate_cost_eur returns 0.0 for every provider, which would make
+        # the billing tests pass against an empty table for the wrong reason.
+        database._seed_pricing_from_json(conn)
+        conn.commit()
+        conn.close()
+        try:
+            yield UsageTracker()
+        finally:
+            database.DB_PATH = original
 
 
 def test_missing_usage_falls_back_to_an_estimate(tracker):
@@ -385,3 +413,68 @@ def test_a_populated_database_is_never_clobbered(tmp_path, monkeypatch):
     kept.close()
     assert value == "current"
     assert (data / "create_and_publish.db").exists(), "old database should be left alone"
+
+
+# ── Per-unit billing ─────────────────────────────────────────────────────────
+class TestPerUnitPricing:
+    """Work that is not billed per token.
+
+    An image, a video render and a minute of speech are all priced per unit,
+    and the token cost model returns 0.00 for every one of them. That is how
+    DALL-E generation, Higgsfield renders and TTS all ran outside the session
+    and daily caps regardless of what they actually cost.
+    """
+
+    def test_a_flat_cost_wins_over_the_token_arithmetic(self, tracker):
+        entry = tracker.log_request(
+            agent="fiverr", backend="openai", model="dall-e-3",
+            prompt_text="two logo concepts", response_text="",
+            flat_cost_eur=0.0736)
+        assert entry["cost_eur"] == 0.0736
+        assert entry["cost_type"] == "per_unit"
+
+    def test_without_it_an_image_request_bills_effectively_nothing(self, tracker):
+        """The bug this exists to prevent, pinned so it cannot come back.
+
+        dall-e-3 has no row of its own, so the token path falls through to
+        OpenAI's default text rates and prices a $0.04 image as the handful of
+        tokens in its prompt — €0.000001 here. Not literally zero, which is
+        worse: it looks like a real number.
+        """
+        entry = tracker.log_request(
+            agent="fiverr", backend="openai", model="dall-e-3",
+            prompt_text="two logo concepts", response_text="")
+        real_cost = 0.04 * per_unit_eur_per_usd()
+        assert entry["cost_eur"] < real_cost / 1000, (
+            "the token path should badly under-price an image; if this now "
+            "prices it correctly the per-unit path may be redundant")
+
+
+def per_unit_eur_per_usd() -> float:
+    from services import per_unit_pricing
+    return per_unit_pricing.eur_per_usd()
+
+    def test_a_flat_cost_counts_toward_the_daily_total(self, tracker):
+        before = tracker.get_today_total()
+        tracker.log_request(
+            agent="creator", backend="higgsfield", model="higgsfield-video",
+            prompt_text="teaser", response_text="", flat_cost_eur=0.25)
+        assert tracker.get_today_total() == pytest.approx(before + 0.25)
+
+    def test_zero_in_the_price_table_reads_as_unknown_not_free(self):
+        """An unfilled placeholder and a genuinely free service look identical
+        in JSON. Of the two readings, silently billing nothing is the one that
+        costs money, so 0 means unknown."""
+        from services import per_unit_pricing
+        assert per_unit_pricing.rate_usd("higgsfield_render") is None
+        assert per_unit_pricing.render_cost_eur() is None
+        assert "not priced" in per_unit_pricing.describe(None, "1 render")
+
+    def test_a_known_rate_converts_to_euros(self):
+        from services import per_unit_pricing
+        cost = per_unit_pricing.image_cost_eur("dall-e-3", 2)
+        assert cost == pytest.approx(0.04 * 2 * per_unit_pricing.eur_per_usd())
+
+    def test_an_unpriced_model_is_unknown_rather_than_zero(self):
+        from services import per_unit_pricing
+        assert per_unit_pricing.image_cost_eur("some-unlisted-model", 1) is None
