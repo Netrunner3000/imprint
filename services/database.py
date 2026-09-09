@@ -590,10 +590,35 @@ def _seed_default_agents(conn: sqlite3.Connection) -> None:
             "auto_generated": 0,
         },
         {
+            "name": "audiobook",
+            "label": "Audiobooks",
+            "description": "Turn PDF, EPUB, TXT and MOBI books into MP3 audiobooks with OpenAI text-to-speech, and play them back with resume.",
+            "allowed_providers": json.dumps([]),
+            "allowed_tools": None,
+            "budget_limit_eur": None,
+            "requires_approval": 0,
+            "log_path": "data/logs/runs.jsonl",
+            "auto_generated": 0,
+        },
+        {
+            "name": "video",
+            "label": "Video",
+            "description": "Topic to finished video — script, narration, captions, generated visuals, Ken Burns motion, music and thumbnail. Runs the vidforge pipeline in-process. Long-form for YouTube or a vertical clip for social.",
+            "allowed_providers": json.dumps([]),
+            "allowed_tools": None,
+            "budget_limit_eur": None,
+            "requires_approval": 0,
+            "log_path": "data/logs/runs.jsonl",
+            "auto_generated": 0,
+        },
+        {
             "name": "creator",
             "label": "Creator",
             "description": "Subscription-platform account management — content calendar, captions, PPV and promo drafting, and earnings import. Drafts only; it has no posting path.",
-            "allowed_providers": json.dumps(["anthropic", "openai", "deepseek", "gemini", "kimi", "qwen"]),
+            # higgsfield is the video renderer, not a chat provider, but it is a paid
+            # backend the guard authorises against and so has to be permitted here.
+            "allowed_providers": json.dumps(["anthropic", "openai", "deepseek",
+                                             "gemini", "kimi", "qwen", "higgsfield"]),
             "allowed_tools": None,
             "budget_limit_eur": None,
             "requires_approval": 0,
@@ -624,7 +649,40 @@ def _seed_default_agents(conn: sqlite3.Connection) -> None:
             a["budget_limit_eur"], a["requires_approval"],
             a["description"], a["log_path"], a["auto_generated"],
         ))
+    _reconcile_agent_providers(conn, agents)
     conn.commit()
+
+
+def _reconcile_agent_providers(conn: sqlite3.Connection, agents: list[dict]) -> None:
+    """Add providers this build knows about to agents that already exist.
+
+    INSERT OR IGNORE above only helps a *missing* agent. An agent whose row was
+    written by an earlier build keeps that build's provider list forever, and
+    the validator refuses anything not on it — so adding a provider to an
+    existing agent silently did nothing on every machine that had already run
+    the app once. That is how the Higgsfield guard, on the first run, blocked
+    the very renders it was added to meter.
+
+    Additive only: a provider the user has removed by hand is not re-added
+    unless this build introduces it, and nothing is ever taken away.
+    """
+    for a in agents:
+        wanted = json.loads(a["allowed_providers"] or "[]")
+        if not wanted:
+            continue                      # empty means "all", nothing to merge
+        row = conn.execute(
+            "SELECT allowed_providers FROM agents WHERE name = ?",
+            (a["name"],)).fetchone()
+        if row is None:
+            continue
+        current = json.loads(row["allowed_providers"] or "[]")
+        if not current:
+            continue                      # already permissive; leave it alone
+        missing = [p for p in wanted if p not in current]
+        if missing:
+            conn.execute(
+                "UPDATE agents SET allowed_providers = ? WHERE name = ?",
+                (json.dumps(current + missing), a["name"]))
 
 
 # ──────────────────────────────────────────────────────────────

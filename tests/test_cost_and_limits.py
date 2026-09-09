@@ -193,7 +193,35 @@ def test_ollama_ignores_every_budget():
 # ─────────────────────────────────────────────────────────────────────────────
 @pytest.fixture
 def tracker():
-    return UsageTracker()
+    """A tracker whose writes land in a throwaway database.
+
+    `UsageTracker.log_request` INSERTs into the app's real `usage` table, so a
+    test that calls it bills the user: the first version of the per-unit tests
+    below put nine fabricated requests and €0.47 of imaginary spend into the
+    live spend counters. Read-only helpers never needed the isolation, which is
+    why it was missing until a test wrote something.
+    """
+    import sqlite3
+    import tempfile
+    from pathlib import Path
+
+    from services import database
+
+    original = database.DB_PATH
+    with tempfile.TemporaryDirectory() as tmp:
+        database.DB_PATH = Path(tmp) / "test.db"
+        conn = sqlite3.connect(str(database.DB_PATH))
+        conn.executescript(database.SCHEMA)
+        # Seeded the same way a real launch seeds it. Without the pricing rows
+        # calculate_cost_eur returns 0.0 for every provider, which would make
+        # the billing tests pass against an empty table for the wrong reason.
+        database._seed_pricing_from_json(conn)
+        conn.commit()
+        conn.close()
+        try:
+            yield UsageTracker()
+        finally:
+            database.DB_PATH = original
 
 
 def test_missing_usage_falls_back_to_an_estimate(tracker):
