@@ -14,7 +14,7 @@ A senior front-end assistant that produces clean, modern, self-contained HTML/CS
 | Sidebar | Responsive toggle, framework choice, line-count indicator. |
 
 ## Outputs
-Generated code streamed into the output area; sidebar shows a **lines** count. **Save .html** writes it to a file you can open in a browser immediately.
+Generated code streams into HTML / CSS / JS tabs; a row of stats above them shows responsive, framework and line count. **Save .html** writes it to a file you can open in a browser immediately.
 
 ## How it works
 `WebdesignAgent.build_messages()` uses a system prompt that: delivers complete self-contained code in one block, prefers CSS variables and vanilla ES6 (no jQuery), uses placeholder/SVG assets when none given, and shows code first then a short rationale.
@@ -23,7 +23,7 @@ Generated code streamed into the output area; sidebar shows a **lines** count. *
 | Location | Role |
 |---|---|
 | `agents/webdesign_agent.py` | `WebdesignAgent` — front-end system prompt + standards. |
-| `main.py: build_webdesign_panel()` | Brief form, output, sidebar toggles. |
+| `main.py: build_webdesign_panel()` | Brief form, model row, output stats and tabs. |
 | `main.py: webdesign_generate()/webdesign_stop()/webdesign_save()` | Lifecycle. |
 
 ## Extend it

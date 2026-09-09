@@ -7,11 +7,11 @@
 ## What it does
 Five tabs covering the post-draft, pre/post-launch side of publishing a book:
 
-1. **Overview** — PublishDrive sales/royalty summary, a chat sidebar grounded in that data, and the publishing todo checklist.
+1. **Overview** — PublishDrive sales/royalty summary, a question box grounded in that data, and the publishing todo checklist.
 2. **Quote Finder** — load the manuscript (`.txt`/`.pdf`/`.epub`/`.mobi`) or paste an excerpt; the agent extracts a batch of verbatim, screenshot-worthy lines. Each candidate has inline buttons to turn it directly into a graphic or a narrated short.
 3. **Quote Graphics** — turn one quote into a styled PNG (3 themes, square or vertical) for Instagram/Pinterest/TikTok — pure Pillow, no API cost.
 4. **Shorts** — narrate a quote (free on-device TTS by default, ElevenLabs optional) and combine it with a quote graphic into a vertical MP4 via ffmpeg.
-5. **Calendar** — turn the Quote Finder candidates into a dated posting schedule across TikTok/Instagram/Pinterest, with a platform-native caption per post and a one-click 🖼/🎬 button per row, then export the whole plan as a CSV punch list for manual posting.
+5. **Calendar** — turn the Quote Finder candidates into a dated posting schedule across TikTok/Instagram/Pinterest, with a platform-native caption per post and a one-click Graphic / Short button per row, then export the whole plan as a CSV punch list for manual posting.
 
 ## Inputs (panel controls)
 | Control | Purpose |
@@ -31,7 +31,7 @@ Sales JSON and chat responses in the Overview text browser. PNGs in `data/quote_
 ## How it works
 `ManuscriptAgent.build_messages()` injects the last-fetched sales JSON as system-prompt context so Q&A stays grounded. `build_quote_suggestions_messages()` uses a dedicated prompt that requires quotes to be exact substrings of the source (verified in testing — the model does not paraphrase). `services/quote_graphics.py` renders a vertical gradient + wrapped serif text with Pillow — no external API. `services/shorts_generator.py` narrates via `providers/voice/` (mock/system `say` by default, ElevenLabs optional) then combines the narration with the quote-graphic PNG via a single `ffmpeg -loop 1 -i image -i audio` call — the exact pattern used by `services/course/video_assembler.py`.
 
-**Calendar** splits scheduling from writing deliberately: `services/content_calendar.py: build_calendar()` is pure Python (no LLM) that assigns quotes to day/platform/format slots by a fixed weekly cadence per platform (TikTok 4/wk short, Instagram 3/wk alternating graphic/short, Pinterest 7/wk graphic), cycling quotes if there are more slots than quotes — deterministic and free. Captions are the one LLM step: all slots go out in a *single* batched call (`build_calendar_caption_messages()`), not one call per post, and come back as a JSON array parsed by the same `_parse_quote_list()` helper Quote Finder uses. Each row's 🖼/🎬 button reuses the exact same generation path as Quote Finder and Shorts — `render_quote_graphic()` / `ShortsWorker` — so there's one asset pipeline, not three.
+**Calendar** splits scheduling from writing deliberately: `services/content_calendar.py: build_calendar()` is pure Python (no LLM) that assigns quotes to day/platform/format slots by a fixed weekly cadence per platform (TikTok 4/wk short, Instagram 3/wk alternating graphic/short, Pinterest 7/wk graphic), cycling quotes if there are more slots than quotes — deterministic and free. Captions are the one LLM step: all slots go out in a *single* batched call (`build_calendar_caption_messages()`), not one call per post, and come back as a JSON array parsed by the same `_parse_quote_list()` helper Quote Finder uses. Each row's Graphic / Short button reuses the exact same generation path as Quote Finder and Shorts — `render_quote_graphic()` / `ShortsWorker` — so there's one asset pipeline, not three.
 
 ## Under the hood — files & functions
 | Location | Role |
