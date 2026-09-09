@@ -356,6 +356,16 @@ GLOBAL_STYLESHEET = f"""
             font-weight: 600;
             padding: 0;
         }}
+        /* The "next step" hint. Both panels carried their own copy of these
+           five declarations inline. */
+        QLabel#NextStepBanner {{
+            background-color: {ACCENT_WASH};
+            border: 1px solid {ACCENT_LINE};
+            border-radius: {RADIUS_SM};
+            padding: 9px 12px;
+            color: {ACCENT};
+            font-size: 12px;
+        }}
         QLabel#EstimateLine {{ color: {TEXT_MUTE}; font-size: 11px; }}
         QLabel#ResourceLabel {{ color: {TEXT_DIM}; font-size: 12px; }}
 
