@@ -1,5 +1,11 @@
 # Which agents stay in Sentinel, and what becomes its own app
 
+> **Historical.** This is the case for the split as it was argued in August
+> 2026, kept for the record. It happened: the creative half became Imprint,
+> which has since gone from the six agents proposed here to eight (Video and
+> Social were not scoped at the time). Current state is in `README.md`.
+
+
 ## The seam is already visible in `services/`
 
 This is not a matter of taste. Look at what each group of agents drags along:
