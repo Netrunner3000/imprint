@@ -173,6 +173,45 @@ CREATE TABLE IF NOT EXISTS creator_content (
     FOREIGN KEY (account_id) REFERENCES creator_accounts(id)
 );
 
+-- ── Social ───────────────────────────────────────────────────────────────────
+-- The public funnel every other mode depends on for traffic and none of them
+-- owned. A "subject" is whatever is being promoted — a book, a release, a gig,
+-- a product — kept as free text rather than a foreign key because the modes do
+-- not yet share a Project record (see SUGGESTIONS.md #42).
+
+CREATE TABLE IF NOT EXISTS social_campaigns (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    created_at  TEXT NOT NULL,
+    name        TEXT NOT NULL DEFAULT '',
+    subject     TEXT NOT NULL DEFAULT '',
+    -- book | release | product | gig | other — shapes the prompt, nothing else.
+    subject_kind TEXT NOT NULL DEFAULT 'other',
+    goal        TEXT NOT NULL DEFAULT '',
+    audience    TEXT NOT NULL DEFAULT '',
+    tone        TEXT NOT NULL DEFAULT '',
+    links       TEXT NOT NULL DEFAULT ''
+);
+
+CREATE TABLE IF NOT EXISTS social_posts (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    campaign_id  INTEGER NOT NULL,
+    created_at   TEXT NOT NULL,
+    platform     TEXT NOT NULL DEFAULT '',
+    -- text | image | clip: what the post carries, which decides whether a
+    -- render is needed before it can go out.
+    format       TEXT NOT NULL DEFAULT 'text',
+    body         TEXT NOT NULL DEFAULT '',
+    media_path   TEXT NOT NULL DEFAULT '',
+    scheduled_for TEXT NOT NULL DEFAULT '',
+    -- draft -> scheduled -> posted | failed. "posted" is set by the publisher
+    -- when it really went out, or by the user marking a manual post done.
+    status       TEXT NOT NULL DEFAULT 'draft',
+    posted_at    TEXT NOT NULL DEFAULT '',
+    permalink    TEXT NOT NULL DEFAULT '',
+    last_error   TEXT NOT NULL DEFAULT '',
+    FOREIGN KEY (campaign_id) REFERENCES social_campaigns(id)
+);
+
 CREATE TABLE IF NOT EXISTS creator_earnings (
     id             INTEGER PRIMARY KEY AUTOINCREMENT,
     account_id     INTEGER NOT NULL,
@@ -593,6 +632,17 @@ def _seed_default_agents(conn: sqlite3.Connection) -> None:
             "name": "audiobook",
             "label": "Audiobooks",
             "description": "Turn PDF, EPUB, TXT and MOBI books into MP3 audiobooks with OpenAI text-to-speech, and play them back with resume.",
+            "allowed_providers": json.dumps([]),
+            "allowed_tools": None,
+            "budget_limit_eur": None,
+            "requires_approval": 0,
+            "log_path": "data/logs/runs.jsonl",
+            "auto_generated": 0,
+        },
+        {
+            "name": "social",
+            "label": "Social",
+            "description": "Public-funnel promotion for anything the studio made — per-platform drafting, a posting schedule, and direct posting where the platform's API allows it.",
             "allowed_providers": json.dumps([]),
             "allowed_tools": None,
             "budget_limit_eur": None,

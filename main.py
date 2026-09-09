@@ -110,6 +110,7 @@ WORKSPACES = {
     "Write": ("author", "manuscript"),
     "Audio": ("audiobook", "music"),
     "Video": ("video",),
+    "Social": ("social",),
     "Web": ("webdesign",),
     "Gigs": ("fiverr",),
     "Creator": ("creator",),
@@ -118,7 +119,7 @@ WORKSPACES = {
 # Agents that own a dedicated `<name>_panel` rather than sharing `normal_panel`.
 # update_agent_ui walks this instead of a chain of `is_x` booleans.
 CUSTOM_PANELS = ("audiobook", "author", "manuscript", "music", "video",
-                 "fiverr", "webdesign", "creator")
+                 "social", "fiverr", "webdesign", "creator")
 WORKSPACE_LABELS = {
     "author": "Draft",
     "manuscript": "Publish",
@@ -126,6 +127,7 @@ WORKSPACE_LABELS = {
     "music": "Music",
     "webdesign": "Site Builder",
     "video": "Video",
+    "social": "Social",
     "fiverr": "Client Gigs",
     "creator": "Creator",
 }
@@ -244,6 +246,10 @@ from ui.forms import (
 )
 from ui.widgets import (
     FlowLayout, CollapsibleSection, scrollable, let_combos_shrink,
+)
+from agents.social_agent import (
+    ANGLES, SUBJECT_KINDS, build_clip_brief_messages,
+    build_post_messages, over_limit, split_variants,
 )
 from ui.tooltips import seed_tooltips
 
@@ -3112,6 +3118,725 @@ class GodAI(QWidget):
         unit = f"{count} image{'s' if count != 1 else ''}"
         self.fiverr_cost_label.setText(
             describe(image_cost_eur(model, count), unit))
+
+    # ── Social ───────────────────────────────────────────────────────────────
+    def build_social_panel(self):
+        """The public funnel for whatever the studio just made.
+
+        Every other mode produces something that then needs an audience, and
+        each had grown half a promotion story — Publish schedules quote
+        graphics, Creator drafts one promo post — while nobody owned the funnel
+        itself.
+
+        Two things it deliberately does not do. It does not post on a timer:
+        the schedule is a plan the user works through, and a tool that posts
+        unattended is how an account gets banned for something its owner never
+        saw. And it does not pretend every platform is postable — three are,
+        today, and the Accounts tab says exactly what stands in the way of the
+        rest rather than offering eight buttons of which five fail.
+        """
+        from services import social_platforms
+
+        self.social_panel = QWidget()
+        self.social_panel.setObjectName("SocialPanel")
+        outer = QVBoxLayout(self.social_panel)
+        outer.setContentsMargins(0, 0, 0, 0)
+        content = QWidget()
+        content.setObjectName("Transparent")
+        outer.addWidget(scrollable(content))
+        layout = QVBoxLayout(content)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(LG)
+
+        # ── Campaign ────────────────────────────────────────────────────
+        layout.addWidget(section("Campaign"))
+
+        self.social_campaign_box = QComboBox()
+        self.social_campaign_box.currentIndexChanged.connect(
+            self._social_campaign_changed)
+        self.social_subject_input = line_edit("The Salt Road")
+        self.social_kind_box = combo(list(SUBJECT_KINDS))
+        self.social_goal_input = line_edit("launch week sales")
+        self.social_audience_input = line_edit("literary fiction readers")
+        self.social_links_input = line_edit("https://…")
+
+        campaign = QGridLayout()
+        campaign.setHorizontalSpacing(MD)
+        campaign.setVerticalSpacing(MD)
+        campaign.addWidget(field("Campaign", self.social_campaign_box), 0, 0, Qt.AlignTop)
+        campaign.addWidget(field("Subject", self.social_subject_input), 0, 1, Qt.AlignTop)
+        campaign.addWidget(field("Subject is a", self.social_kind_box), 0, 2, Qt.AlignTop)
+        campaign.addWidget(field("Goal", self.social_goal_input), 1, 0, Qt.AlignTop)
+        campaign.addWidget(field("Audience", self.social_audience_input), 1, 1, Qt.AlignTop)
+        campaign.addWidget(field("Link", self.social_links_input), 1, 2, Qt.AlignTop)
+        for column in range(3):
+            campaign.setColumnStretch(column, 1)
+        layout.addLayout(campaign)
+
+        campaign_actions = QHBoxLayout()
+        campaign_actions.setSpacing(SM)
+        self.social_new_campaign_btn = QPushButton("New Campaign")
+        self.social_new_campaign_btn.clicked.connect(self.social_new_campaign)
+        campaign_actions.addWidget(self.social_new_campaign_btn)
+        self.social_save_campaign_btn = QPushButton("Save Campaign")
+        self.social_save_campaign_btn.clicked.connect(self.social_save_campaign)
+        campaign_actions.addWidget(self.social_save_campaign_btn)
+        self.social_delete_campaign_btn = quiet("Delete campaign")
+        self.social_delete_campaign_btn.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+        self.social_delete_campaign_btn.clicked.connect(self.social_delete_campaign)
+        campaign_actions.addWidget(self.social_delete_campaign_btn)
+        campaign_actions.addStretch()
+        layout.addLayout(campaign_actions)
+
+        # ── Compose ─────────────────────────────────────────────────────
+        layout.addWidget(section("Compose"))
+
+        self.social_platform_box = combo(list(social_platforms.names()))
+        self.social_platform_box.currentTextChanged.connect(self._social_platform_changed)
+        self.social_angle_box = combo(list(ANGLES))
+        self.social_variants_box = combo(["1", "2", "3"], "2")
+        self.social_notes_input = line_edit("Anything specific to include")
+
+        compose = QGridLayout()
+        compose.setHorizontalSpacing(MD)
+        compose.setVerticalSpacing(MD)
+        compose.addWidget(field("Platform", self.social_platform_box), 0, 0, Qt.AlignTop)
+        compose.addWidget(field("Angle", self.social_angle_box), 0, 1, Qt.AlignTop)
+        compose.addWidget(field("Variants", self.social_variants_box), 0, 2, Qt.AlignTop)
+        compose.addWidget(field("Specifics", self.social_notes_input), 1, 0, 1, 3, Qt.AlignTop)
+        for column in range(3):
+            compose.setColumnStretch(column, 1)
+        layout.addLayout(compose)
+
+        self.social_panel_base = AgentPanel(
+            self, "social",
+            providers=("anthropic", "openai", "deepseek", "kimi", "gemini",
+                       "qwen", "ollama"),
+            default_provider="anthropic")
+        self.social_provider_box = self.social_panel_base.provider_box
+        self.social_model_box = self.social_panel_base.model_box
+
+        models = QGridLayout()
+        models.setHorizontalSpacing(MD)
+        models.setVerticalSpacing(MD)
+        models.addWidget(field("Provider", self.social_provider_box), 0, 0, Qt.AlignTop)
+        models.addWidget(field("Model", self.social_model_box), 0, 1, Qt.AlignTop)
+        for column in range(3):
+            models.setColumnStretch(column, 1)
+        layout.addLayout(models)
+
+        actions = QHBoxLayout()
+        actions.setSpacing(SM)
+        self.social_write_btn = primary("Write Posts")
+        self.social_write_btn.setMinimumWidth(160)
+        self.social_write_btn.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+        self.social_write_btn.clicked.connect(self.social_write)
+        actions.addWidget(self.social_write_btn)
+
+        # The cooperation with Video: Social does not render anything itself,
+        # it asks the video pipeline for a clip sized for the platform.
+        self.social_clip_btn = QPushButton("Make a Clip")
+        self.social_clip_btn.setToolTip(
+            "Write a brief and hand it to the Video pipeline as a vertical "
+            "clip for this platform.")
+        self.social_clip_btn.clicked.connect(self.social_make_clip)
+        actions.addWidget(self.social_clip_btn)
+
+        self.social_schedule_btn = QPushButton("Schedule Drafts")
+        self.social_schedule_btn.setToolTip(
+            "Spread the campaign's undated drafts across the coming weeks at "
+            "each platform's own cadence.")
+        self.social_schedule_btn.clicked.connect(self.social_schedule_drafts)
+        actions.addWidget(self.social_schedule_btn)
+
+        self.social_stop_btn = QPushButton("Stop")
+        self.social_stop_btn.setObjectName("DangerAction")
+        self.social_stop_btn.clicked.connect(self.social_stop)
+        self.social_stop_btn.hide()
+        actions.addWidget(self.social_stop_btn)
+
+        actions.addStretch()
+        self.social_status_label = QLabel("")
+        self.social_status_label.setObjectName("EstimateLine")
+        actions.addWidget(self.social_status_label)
+        layout.addLayout(actions)
+
+        # ── Tabs ────────────────────────────────────────────────────────
+        self.social_tabs = QTabWidget()
+
+        drafts_page = QWidget()
+        drafts_page.setObjectName("Transparent")
+        drafts = QVBoxLayout(drafts_page)
+        drafts.setContentsMargins(MD, MD, MD, MD)
+        drafts.setSpacing(MD)
+        self.social_draft_box = QTextEdit()
+        self.social_draft_box.setPlaceholderText(
+            "Drafts appear here, fully editable. Nothing is sent until you "
+            "press Post on a row in the Schedule tab.")
+        drafts.addWidget(self.social_draft_box, 1)
+        draft_actions = QHBoxLayout()
+        draft_actions.setSpacing(SM)
+        self.social_limit_label = QLabel("")
+        self.social_limit_label.setObjectName("EstimateLine")
+        draft_actions.addWidget(self.social_limit_label)
+        draft_actions.addStretch()
+        self.social_save_draft_btn = QPushButton("Save to Schedule")
+        self.social_save_draft_btn.clicked.connect(self.social_save_draft)
+        draft_actions.addWidget(self.social_save_draft_btn)
+        drafts.addLayout(draft_actions)
+        self.social_draft_box.textChanged.connect(self._social_update_limit)
+        self.social_tabs.addTab(drafts_page, "Draft")
+
+        schedule_page = QWidget()
+        schedule_page.setObjectName("Transparent")
+        schedule = QVBoxLayout(schedule_page)
+        schedule.setContentsMargins(MD, MD, MD, MD)
+        schedule.setSpacing(MD)
+        self.social_schedule_table = QTableWidget(0, 6)
+        self.social_schedule_table.setHorizontalHeaderLabels(
+            ["When", "Platform", "Format", "Post", "Status", "Link"])
+        header = self.social_schedule_table.horizontalHeader()
+        header.setSectionResizeMode(3, QHeaderView.Stretch)
+        for column in (0, 1, 2, 4, 5):
+            header.setSectionResizeMode(column, QHeaderView.ResizeToContents)
+        self.social_schedule_table.setEditTriggers(QTableWidget.NoEditTriggers)
+        self.social_schedule_table.setSelectionBehavior(QTableWidget.SelectRows)
+        self.social_schedule_table.verticalHeader().setVisible(False)
+        schedule.addWidget(self.social_schedule_table, 1)
+
+        schedule_actions = QHBoxLayout()
+        schedule_actions.setSpacing(SM)
+        schedule_actions.addStretch()
+        self.social_copy_btn = QPushButton("Copy Text")
+        self.social_copy_btn.clicked.connect(self.social_copy_selected)
+        schedule_actions.addWidget(self.social_copy_btn)
+        self.social_mark_posted_btn = QPushButton("Mark Posted")
+        self.social_mark_posted_btn.setToolTip(
+            "For the platforms you post by hand.")
+        self.social_mark_posted_btn.clicked.connect(self.social_mark_posted)
+        schedule_actions.addWidget(self.social_mark_posted_btn)
+        self.social_post_btn = QPushButton("Post Now")
+        self.social_post_btn.setObjectName("WarnAction")
+        self.social_post_btn.setToolTip(
+            "Publishes this one post through the platform's API. Only enabled "
+            "where that is configured.")
+        self.social_post_btn.clicked.connect(self.social_post_selected)
+        schedule_actions.addWidget(self.social_post_btn)
+        self.social_delete_post_btn = quiet("Delete")
+        self.social_delete_post_btn.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+        self.social_delete_post_btn.clicked.connect(self.social_delete_post)
+        schedule_actions.addWidget(self.social_delete_post_btn)
+        schedule.addLayout(schedule_actions)
+        self.social_tabs.addTab(schedule_page, "Schedule")
+
+        accounts_page = QWidget()
+        accounts_page.setObjectName("Transparent")
+        accounts = QVBoxLayout(accounts_page)
+        accounts.setContentsMargins(MD, MD, MD, MD)
+        accounts.setSpacing(MD)
+        self.social_accounts_box = QTextBrowser()
+        accounts.addWidget(self.social_accounts_box, 1)
+        refresh_row = QHBoxLayout()
+        refresh_row.addStretch()
+        self.social_refresh_accounts_btn = quiet("Re-check")
+        self.social_refresh_accounts_btn.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+        self.social_refresh_accounts_btn.clicked.connect(self.social_refresh_accounts)
+        refresh_row.addWidget(self.social_refresh_accounts_btn)
+        accounts.addLayout(refresh_row)
+        self.social_tabs.addTab(accounts_page, "Accounts")
+
+        layout.addWidget(self.social_tabs, 1)
+
+        self.social_worker = None
+        self.social_panel_base.load_models()
+        self.social_refresh_campaigns()
+        self.social_refresh_accounts()
+        self._social_platform_changed(self.social_platform_box.currentText())
+        self.social_panel.hide()
+
+    # ── Social handlers ──────────────────────────────────────────────────────
+    def social_refresh_campaigns(self):
+        from services import social_store
+        self.social_campaign_box.blockSignals(True)
+        self.social_campaign_box.clear()
+        for campaign in social_store.list_campaigns():
+            self.social_campaign_box.addItem(
+                campaign["name"] or campaign["subject"] or "Untitled",
+                campaign["id"])
+        self.social_campaign_box.blockSignals(False)
+        self._social_campaign_changed(self.social_campaign_box.currentIndex())
+
+    def social_current_campaign(self) -> dict | None:
+        from services import social_store
+        campaign_id = self.social_campaign_box.currentData()
+        return social_store.get_campaign(campaign_id) if campaign_id else None
+
+    def _social_campaign_changed(self, _index):
+        campaign = self.social_current_campaign()
+        if not campaign:
+            for widget in (self.social_subject_input, self.social_goal_input,
+                           self.social_audience_input, self.social_links_input):
+                widget.clear()
+            self.social_refresh_schedule()
+            return
+        self.social_subject_input.setText(campaign.get("subject", ""))
+        self.social_kind_box.setCurrentText(campaign.get("subject_kind", "other"))
+        self.social_goal_input.setText(campaign.get("goal", ""))
+        self.social_audience_input.setText(campaign.get("audience", ""))
+        self.social_links_input.setText(campaign.get("links", ""))
+        self.social_refresh_schedule()
+
+    def social_new_campaign(self):
+        from services import social_store
+        subject = self.social_subject_input.text().strip() or "Untitled"
+        campaign_id = social_store.create_campaign(
+            name=subject, subject=subject,
+            subject_kind=self.social_kind_box.currentText(),
+            goal=self.social_goal_input.text().strip(),
+            audience=self.social_audience_input.text().strip(),
+            links=self.social_links_input.text().strip())
+        self.social_refresh_campaigns()
+        index = self.social_campaign_box.findData(campaign_id)
+        if index >= 0:
+            self.social_campaign_box.setCurrentIndex(index)
+        self.social_status_label.setText(f"Created “{subject}”")
+
+    def social_save_campaign(self):
+        from services import social_store
+        campaign = self.social_current_campaign()
+        if not campaign:
+            self.social_new_campaign()
+            return
+        subject = self.social_subject_input.text().strip()
+        social_store.update_campaign(
+            campaign["id"], name=subject or campaign["name"], subject=subject,
+            subject_kind=self.social_kind_box.currentText(),
+            goal=self.social_goal_input.text().strip(),
+            audience=self.social_audience_input.text().strip(),
+            links=self.social_links_input.text().strip())
+        self.social_refresh_campaigns()
+        self.social_status_label.setText("Saved")
+
+    def social_delete_campaign(self):
+        from services import social_store
+        campaign = self.social_current_campaign()
+        if not campaign:
+            return
+        confirm = QMessageBox.question(
+            self, "Delete campaign",
+            f"Delete “{campaign['name']}” and all of its posts?",
+            QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
+        if confirm != QMessageBox.Yes:
+            return
+        social_store.delete_campaign(campaign["id"])
+        self.social_refresh_campaigns()
+
+    def _social_platform(self):
+        from services import social_platforms
+        return social_platforms.get(
+            social_platforms.key_for_name(self.social_platform_box.currentText()))
+
+    def _social_platform_changed(self, _name=""):
+        self._social_update_limit()
+
+    def _social_update_limit(self):
+        """Character count against the platform ceiling, live.
+
+        The limit is in the prompt and models overshoot it anyway; posting an
+        over-length draft is a rejected API call at the worst moment, so the
+        count is visible while editing rather than checked at submit.
+        """
+        platform = self._social_platform()
+        if platform is None:
+            self.social_limit_label.setText("")
+            return
+        text = self.social_draft_box.toPlainText().strip()
+        if not platform.limit:
+            self.social_limit_label.setText(f"{len(text)} characters")
+            return
+        over = over_limit(text, platform)
+        suffix = f" · {over} over" if over else ""
+        self.social_limit_label.setText(
+            f"{len(text)} / {platform.limit} characters{suffix}")
+
+    # ── Writing ──────────────────────────────────────────────────────────────
+    def social_write(self):
+        campaign = self.social_current_campaign()
+        if not campaign:
+            QMessageBox.warning(self, "No Campaign",
+                                "Create a campaign first.")
+            return
+        platform = self._social_platform()
+        provider = self.social_provider_box.currentText()
+        model = self.social_model_box.currentText()
+        if not model:
+            QMessageBox.warning(self, "No Model", "Pick a model first.")
+            return
+
+        variants = int(self.social_variants_box.currentText() or 1)
+        messages = build_post_messages(
+            campaign, platform, self.social_angle_box.currentText(),
+            notes=self.social_notes_input.text().strip(), variants=variants)
+
+        if not self.authorize_request("social", provider, model,
+                                      messages[-1]["content"],
+                                      label=f"{platform.key} post"):
+            return
+
+        self.social_write_btn.setEnabled(False)
+        self.social_stop_btn.show()
+        self.social_stop_btn.setEnabled(True)
+        self.social_status_label.setText(f"Writing for {platform.name}…")
+
+        self.social_worker = ChatWorker(self.run_backend, provider, model,
+                                        messages, "")
+        self.social_worker.finished_signal.connect(self._social_on_written)
+        self.social_worker.usage_signal.connect(
+            lambda u: self.note_request_usage("social", u))
+        self.social_worker.error_signal.connect(self._social_on_error)
+        self.social_worker.start()
+
+    def _social_on_written(self, response: str):
+        self.record_request("social", response)
+        variants = split_variants(response)
+        separator = "\n\n" + "—" * 30 + "\n\n"
+        self.social_draft_box.setPlainText(separator.join(variants))
+        self.social_status_label.setText(
+            f"{len(variants)} variant(s) — edit, then Save to Schedule")
+        self._social_reset_buttons()
+        self.social_tabs.setCurrentIndex(0)
+
+    def _social_on_error(self, error: str):
+        self.abandon_request("social")
+        self.social_status_label.setText(f"[Error] {error}")
+        self._social_reset_buttons()
+
+    def _social_reset_buttons(self):
+        self.social_write_btn.setEnabled(True)
+        self.social_stop_btn.setEnabled(False)
+        self.social_stop_btn.hide()
+
+    def social_stop(self):
+        if self.social_worker is not None:
+            self.social_worker.stop()
+        self.abandon_request("social")
+        self._social_reset_buttons()
+
+    # ── Clips, via the Video pipeline ────────────────────────────────────────
+    def social_make_clip(self):
+        """Ask the Video mode for a clip sized for this platform.
+
+        Social owns no rendering of its own. It writes a topic brief and hands
+        it to the same `produce()` the Video tab uses, with the platform's
+        aspect and a short length — which is why adding video to social cost a
+        brief-writing prompt rather than a second video pipeline.
+        """
+        from services import video_studio
+
+        campaign = self.social_current_campaign()
+        if not campaign:
+            QMessageBox.warning(self, "No Campaign", "Create a campaign first.")
+            return
+        if not video_studio.available():
+            QMessageBox.warning(self, "Video Unavailable",
+                                video_studio.unavailable_reason())
+            return
+        platform = self._social_platform()
+        if "clip" not in platform.formats:
+            QMessageBox.information(
+                self, "Not a video platform",
+                f"{platform.name} does not take video posts.")
+            return
+
+        provider = self.social_provider_box.currentText()
+        model = self.social_model_box.currentText()
+        if not model:
+            QMessageBox.warning(self, "No Model", "Pick a model first.")
+            return
+
+        seconds = 30
+        messages = build_clip_brief_messages(campaign, platform, seconds,
+                                             self.social_notes_input.text().strip())
+        if not self.authorize_request("social", provider, model,
+                                      messages[-1]["content"],
+                                      label="clip brief"):
+            return
+
+        self.social_write_btn.setEnabled(False)
+        self.social_clip_btn.setEnabled(False)
+        self.social_status_label.setText("Writing the clip brief…")
+        self._social_pending_clip = (platform.key, seconds)
+
+        self.social_worker = ChatWorker(self.run_backend, provider, model,
+                                        messages, "")
+        self.social_worker.finished_signal.connect(self._social_on_clip_brief)
+        self.social_worker.usage_signal.connect(
+            lambda u: self.note_request_usage("social", u))
+        self.social_worker.error_signal.connect(self._social_on_clip_error)
+        self.social_worker.start()
+
+    def _social_on_clip_brief(self, brief: str):
+        from services import video_studio
+        from services.per_unit_pricing import eur_per_usd
+
+        self.record_request("social", brief)
+        platform_key, seconds = getattr(self, "_social_pending_clip",
+                                        ("tiktok", 30))
+        topic = brief.strip().split("\n")[0][:300]
+
+        aspect = ("Square 1:1" if platform_key == "pinterest"
+                  else "Vertical 9:16")
+        overrides = video_studio.clip_overrides(aspect, seconds)
+        estimate = video_studio.pre_estimate(video_studio.load_config(overrides))
+        cost_eur = round(estimate["total"] * eur_per_usd(), 4)
+
+        confirm = QMessageBox.question(
+            self, "Render this clip?",
+            f"Topic:\n{topic}\n\n{aspect}, {seconds}s, "
+            f"{estimate['scenes']} scenes — about €{cost_eur:.2f}.\n\nRender it?",
+            QMessageBox.Yes | QMessageBox.No, QMessageBox.Yes)
+        if confirm != QMessageBox.Yes:
+            self.social_status_label.setText("Clip cancelled")
+            self._social_clip_done()
+            return
+
+        if not self.authorize_request(
+                "video", "openai", "vidforge-pipeline", topic,
+                label=f"{platform_key} clip", flat_cost_eur=cost_eur):
+            self._social_clip_done()
+            return
+
+        self.social_status_label.setText("Rendering clip — see the Video tab")
+        self.social_worker = None
+        self._social_clip_worker = VideoWorker(topic=topic, overrides=overrides)
+        self._social_clip_worker.progress_signal.connect(
+            lambda pct, detail: self.social_status_label.setText(
+                f"Rendering clip… {pct}%"))
+        self._social_clip_worker.done_signal.connect(self._social_on_clip_done)
+        self._social_clip_worker.error_signal.connect(self._social_on_clip_error)
+        self._social_clip_worker.start()
+
+    def _social_on_clip_done(self, slug: str, path: str):
+        from services import social_store
+        self.record_request("video", f"social clip {slug}")
+        campaign = self.social_current_campaign()
+        platform_key, _seconds = getattr(self, "_social_pending_clip",
+                                         ("tiktok", 30))
+        if campaign:
+            social_store.add_post(
+                campaign["id"], platform_key,
+                self.social_draft_box.toPlainText().strip(),
+                fmt="clip", media_path=path)
+            self.social_refresh_schedule()
+        self.social_status_label.setText(f"Clip ready — {Path(path).name}")
+        self._social_clip_done()
+        self.refresh_video_library()
+
+    def _social_on_clip_error(self, error: str):
+        self.abandon_request("social")
+        self.abandon_request("video")
+        self.social_status_label.setText(f"[Error] {error}")
+        self._social_clip_done()
+
+    def _social_clip_done(self):
+        self.social_write_btn.setEnabled(True)
+        self.social_clip_btn.setEnabled(True)
+        self._social_reset_buttons()
+
+    # ── Schedule ─────────────────────────────────────────────────────────────
+    def social_save_draft(self):
+        """Split the editor on its variant separators and store each as a post."""
+        from services import social_store
+        campaign = self.social_current_campaign()
+        if not campaign:
+            QMessageBox.warning(self, "No Campaign", "Create a campaign first.")
+            return
+        text = self.social_draft_box.toPlainText().strip()
+        if not text:
+            return
+        platform = self._social_platform()
+        pieces = [p.strip() for p in text.split("—" * 30)]
+        pieces = [p for p in pieces if p]
+        for piece in pieces:
+            social_store.add_post(campaign["id"], platform.key, piece,
+                                  fmt="text")
+        self.social_refresh_schedule()
+        self.social_tabs.setCurrentIndex(1)
+        self.social_status_label.setText(
+            f"{len(pieces)} post(s) saved to the schedule")
+
+    def social_schedule_drafts(self):
+        """Give every undated draft a date at its platform's own cadence."""
+        from datetime import date
+
+        from services import social_store
+        campaign = self.social_current_campaign()
+        if not campaign:
+            return
+        undated = [p for p in social_store.list_posts(campaign["id"])
+                   if not p.get("scheduled_for")]
+        if not undated:
+            self.social_status_label.setText("Nothing undated to schedule")
+            return
+
+        platforms = sorted({p["platform"] for p in undated})
+        slots = social_store.build_schedule(platforms, weeks=4,
+                                            start=date.today())
+        by_platform: dict[str, list] = {}
+        for day, platform_key in slots:
+            by_platform.setdefault(platform_key, []).append(day)
+
+        scheduled = 0
+        for post in undated:
+            days = by_platform.get(post["platform"], [])
+            if not days:
+                continue
+            social_store.update_post(post["id"],
+                                     scheduled_for=days.pop(0).isoformat(),
+                                     status="scheduled")
+            scheduled += 1
+        self.social_refresh_schedule()
+        self.social_status_label.setText(f"{scheduled} post(s) scheduled")
+
+    def social_refresh_schedule(self):
+        from PySide6.QtWidgets import QTableWidgetItem
+
+        from services import social_platforms, social_store
+        if not hasattr(self, "social_schedule_table"):
+            return
+        campaign = self.social_current_campaign()
+        posts = social_store.list_posts(campaign["id"]) if campaign else []
+        self.social_schedule_table.setRowCount(0)
+        for post in posts:
+            row = self.social_schedule_table.rowCount()
+            self.social_schedule_table.insertRow(row)
+            platform = social_platforms.get(post["platform"])
+            body = " ".join(post["body"].split())
+            values = [
+                post.get("scheduled_for") or "—",
+                platform.name if platform else post["platform"],
+                post.get("format", "text"),
+                body[:120] + ("…" if len(body) > 120 else ""),
+                post.get("status", "draft"),
+                post.get("permalink") or "",
+            ]
+            for column, value in enumerate(values):
+                item = QTableWidgetItem(str(value))
+                if column == 0:
+                    item.setData(Qt.UserRole, post["id"])
+                self.social_schedule_table.setItem(row, column, item)
+
+    def _selected_social_post(self) -> dict | None:
+        from services import social_store
+        row = self.social_schedule_table.currentRow()
+        if row < 0:
+            return None
+        item = self.social_schedule_table.item(row, 0)
+        post_id = item.data(Qt.UserRole) if item else None
+        return social_store.get_post(post_id) if post_id else None
+
+    def social_copy_selected(self):
+        post = self._selected_social_post()
+        if not post:
+            return
+        QApplication.clipboard().setText(post["body"])
+        self.social_status_label.setText("Copied")
+
+    def social_mark_posted(self):
+        from services import social_store
+        post = self._selected_social_post()
+        if not post:
+            return
+        social_store.mark_posted(post["id"])
+        self.social_refresh_schedule()
+
+    def social_delete_post(self):
+        from services import social_store
+        post = self._selected_social_post()
+        if not post:
+            return
+        social_store.delete_post(post["id"])
+        self.social_refresh_schedule()
+
+    def social_post_selected(self):
+        """Publish one post. Never more than one, never unattended."""
+        from services import social_platforms, social_publishing, social_store
+
+        post = self._selected_social_post()
+        if not post:
+            return
+        platform = social_platforms.get(post["platform"])
+        publisher = social_publishing.publisher_for(post["platform"])
+        if publisher is None or not publisher.configured:
+            QMessageBox.information(
+                self, f"{platform.name if platform else post['platform']} cannot post",
+                (publisher.why_not() if publisher else platform.posting_note))
+            return
+
+        extra: dict = {}
+        if post["platform"] == "reddit":
+            subreddit, ok = QInputDialog.getText(
+                self, "Subreddit", "Post to which subreddit? (without r/)")
+            if not ok or not subreddit.strip():
+                return
+            title, ok = QInputDialog.getText(self, "Title", "Post title:")
+            if not ok or not title.strip():
+                return
+            extra = {"subreddit": subreddit.strip(), "title": title.strip()}
+        elif post["platform"] == "pinterest":
+            board_id, ok = QInputDialog.getText(self, "Board", "Pinterest board id:")
+            if not ok or not board_id.strip():
+                return
+            extra = {"board_id": board_id.strip(),
+                     "link": (self.social_links_input.text().strip() or "")}
+        elif post["platform"] == "youtube":
+            title, ok = QInputDialog.getText(self, "Title", "Video title:")
+            if not ok or not title.strip():
+                return
+            extra = {"title": title.strip(), "privacy": "private"}
+
+        confirm = QMessageBox.question(
+            self, "Post now?",
+            f"This publishes to {platform.name if platform else post['platform']} "
+            f"from your own account, immediately.\n\nContinue?",
+            QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
+        if confirm != QMessageBox.Yes:
+            return
+
+        self.social_status_label.setText("Posting…")
+        try:
+            result = publisher.publish(post["body"], post.get("media_path", ""),
+                                       **extra)
+        except Exception as exc:
+            social_store.mark_failed(post["id"], str(exc))
+            self.social_refresh_schedule()
+            QMessageBox.warning(self, "Post failed", str(exc))
+            self.social_status_label.setText("[Error] post failed")
+            return
+        social_store.mark_posted(post["id"], result.permalink)
+        self.social_refresh_schedule()
+        self.social_status_label.setText(f"Posted — {result.permalink or 'done'}")
+
+    def social_refresh_accounts(self):
+        """What can post today, and what stands in the way of the rest."""
+        from services import social_publishing
+
+        rows = []
+        for name, ready, note in social_publishing.status_lines():
+            colour = ACCENT if ready else TEXT_MUTE
+            label = "ready" if ready else "drafting only"
+            rows.append(
+                f"<p style='margin:0 0 10px 0'>"
+                f"<b style='color:{colour}'>{name}</b> "
+                f"<span style='color:{TEXT_MUTE}'>— {label}</span><br>"
+                f"<span style='color:{TEXT_DIM}'>{note}</span></p>")
+        self.social_accounts_box.setHtml(
+            f"<div style='color:{TEXT_DIM}; font-size:12px'>"
+            "<p style='margin:0 0 14px 0'>Writing works for every platform "
+            "below. Posting works for the ones marked ready — the rest need an "
+            "app review, a business account or a paid tier that this app "
+            "cannot obtain on your behalf.</p>"
+            + "".join(rows) + "</div>")
 
     # ── Video (vidforge) ─────────────────────────────────────────────────────
     def build_video_panel(self):
@@ -6829,7 +7554,8 @@ class GodAI(QWidget):
             "chat": "Studio Assistant", "fiverr": "Client Gigs",
             "author": "Draft", "manuscript": "Publish", "music": "Music",
             "webdesign": "Site Builder", "audiobook": "Audiobooks",
-            "creator": "Creator", "video": "Video", }
+            "creator": "Creator", "video": "Video",
+            "social": "Social", }
         agent_subtitles = {
             "chat":        "General-purpose conversation. Pick a tool, pick a model, talk.",
             "fiverr":      "Create client-ready logo concepts, gig listings, and polished delivery messages.",
@@ -6840,6 +7566,7 @@ class GodAI(QWidget):
             "audiobook":   "Turn PDF, EPUB, TXT, and MOBI books into production-ready MP3 audiobooks.",
             "creator":     "Plan, draft, and schedule subscription content across accounts you hold consent for.",
             "video":       "Script, narrate, illustrate and cut a video — long-form for YouTube or a vertical clip for social.",
+            "social":      "Promote a book, release, product or gig: write per platform, schedule it, and post where the API allows.",
             }
         if hasattr(self, "agent_title_label"):
             self.agent_title_label.setText(
