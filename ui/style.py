@@ -245,22 +245,26 @@ GLOBAL_STYLESHEET = f"""
         }}
 
         /* Mode switch inside a panel (Write / Publish · Market). */
+        /* The stage switcher inside a workspace (Draft|Publish,
+           Audiobooks|Music). A segmented control, not two more buttons: it
+           sits directly above the page title, and as accent-filled pills it
+           read as the most important thing on the screen when it is only
+           navigation. */
         QPushButton#WorkspaceTool {{
             background-color: transparent;
-            color: {TEXT_DIM};
-            border: 1px solid {BORDER};
-            border-radius: {RADIUS};
-            padding: 9px 16px;
-            font-weight: 600;
+            color: {TEXT_MUTE};
+            border: none;
+            border-bottom: 2px solid transparent;
+            border-radius: 0;
+            padding: 0 2px;
+            margin-right: 20px;
+            font-weight: 550;
         }}
-        QPushButton#WorkspaceTool:hover {{
-            color: {TEXT};
-            background-color: {ELEVATED};
-        }}
+        QPushButton#WorkspaceTool:hover {{ color: {TEXT_DIM}; }}
         QPushButton#WorkspaceTool:checked {{
-            background-color: {ACCENT_WASH};
-            color: {ACCENT};
-            border: 1px solid {ACCENT_LINE};
+            color: {TEXT};
+            border-bottom: 2px solid {ACCENT};
+            font-weight: 650;
         }}
 
         /* Left rail nav rows. */

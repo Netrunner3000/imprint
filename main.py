@@ -386,7 +386,7 @@ class GodAI(QWidget):
         """Enable or disable hover tooltips application-wide."""
         self.tooltips_enabled = self.tooltips_toggle_btn.isChecked()
         self.tooltips_toggle_btn.setText(
-            "💡 Tooltips: On" if self.tooltips_enabled else "💡 Tooltips: Off"
+            "Tooltips: On" if self.tooltips_enabled else "Tooltips: Off"
         )
 
     def eventFilter(self, obj, event):
@@ -416,7 +416,7 @@ class GodAI(QWidget):
 
     def safe_key_status(self, cls):
         try:
-            return "✅ available" if cls.key_available() else "❌ not set"
+            return "available" if cls.key_available() else "not set"
         except Exception:
             return "unknown"
 
@@ -1489,7 +1489,7 @@ class GodAI(QWidget):
 
         # Offers a one-click pull of Meta's Muse Glimmer. Hidden once the model
         # is installed, since it is then just another entry in the model box.
-        self.get_muse_btn = QPushButton("⬇ Get Muse Glimmer")
+        self.get_muse_btn = QPushButton("Get Muse Glimmer")
         self.get_muse_btn.setObjectName("ChipBtn")
         self.get_muse_btn.clicked.connect(self.pull_muse_glimmer)
         top_row_2.addWidget(self.get_muse_btn)
@@ -1733,19 +1733,19 @@ class GodAI(QWidget):
         books_btn_row = QHBoxLayout()
         books_btn_row.setSpacing(6)
 
-        self.audiobook_refresh_btn = QPushButton("🔄 Refresh List")
+        self.audiobook_refresh_btn = QPushButton("Refresh List")
         self.audiobook_refresh_btn.clicked.connect(self.refresh_audiobook_books)
         books_btn_row.addWidget(self.audiobook_refresh_btn)
 
         books_btn_row.addStretch()
 
-        self.stop_btn = QPushButton("⛔ Stop")
+        self.stop_btn = QPushButton("Stop")
         self.stop_btn.clicked.connect(self.stop_current_task)
         self.stop_btn.setEnabled(False)
         self.stop_btn.setObjectName("DangerAction")
         books_btn_row.addWidget(self.stop_btn)
 
-        self.audiobook_start_btn = QPushButton("▶ Start")
+        self.audiobook_start_btn = QPushButton("Start")
         self.audiobook_start_btn.clicked.connect(self.start_selected_audiobook_book)
         self.audiobook_start_btn.setMinimumWidth(130)
         self.audiobook_start_btn.setObjectName("PrimaryAction")
@@ -1810,8 +1810,8 @@ class GodAI(QWidget):
         progress_layout.addWidget(self.audiobook_status_label)
 
         panel_layout.addWidget(progress_group)
-        self.audiobook_tabs.addTab(_convert_page, "🎙  Convert")
-        self.audiobook_tabs.addTab(self._build_audiobook_library_tab(), "🎧  Listen")
+        self.audiobook_tabs.addTab(_convert_page, "Convert")
+        self.audiobook_tabs.addTab(self._build_audiobook_library_tab(), "Listen")
         self.audiobook_panel.hide()
 
     def _build_audiobook_library_tab(self) -> QWidget:
@@ -1824,7 +1824,7 @@ class GodAI(QWidget):
         header = QHBoxLayout()
         header.addWidget(QLabel("Audiobooks in your output folder:"))
         header.addStretch()
-        self.audiobook_refresh_btn = QPushButton("↻  Rescan")
+        self.audiobook_refresh_btn = QPushButton("Rescan")
         self.audiobook_refresh_btn.setObjectName("ChipBtn")
         self.audiobook_refresh_btn.clicked.connect(self.refresh_audiobook_library)
         header.addWidget(self.audiobook_refresh_btn)
@@ -1844,18 +1844,18 @@ class GodAI(QWidget):
         layout.addWidget(self.audiobook_library_table, 1)
 
         row = QHBoxLayout()
-        self.audiobook_play_btn = QPushButton("▶  Listen")
+        self.audiobook_play_btn = QPushButton("Listen")
         self.audiobook_play_btn.setObjectName("PrimaryAction")
         self.audiobook_play_btn.setEnabled(False)
         self.audiobook_play_btn.clicked.connect(self.play_selected_audiobook)
         row.addWidget(self.audiobook_play_btn)
 
-        self.audiobook_restart_btn = QPushButton("↺  Start Over")
+        self.audiobook_restart_btn = QPushButton("Start Over")
         self.audiobook_restart_btn.setEnabled(False)
         self.audiobook_restart_btn.clicked.connect(self.restart_selected_audiobook)
         row.addWidget(self.audiobook_restart_btn)
 
-        self.audiobook_reveal_btn = QPushButton("📂  Show in Finder")
+        self.audiobook_reveal_btn = QPushButton("Show in Finder")
         self.audiobook_reveal_btn.setEnabled(False)
         self.audiobook_reveal_btn.clicked.connect(self.reveal_selected_audiobook)
         row.addWidget(self.audiobook_reveal_btn)
@@ -1922,9 +1922,9 @@ class GodAI(QWidget):
             button.setEnabled(book is not None)
         if book and book.started:
             self.audiobook_play_btn.setText(
-                f"▶  Resume at {format_audiobook_time(book.position_ms)}")
+                f"Resume at {format_audiobook_time(book.position_ms)}")
         else:
-            self.audiobook_play_btn.setText("▶  Listen")
+            self.audiobook_play_btn.setText("Listen")
 
     def _audiobook_refresh_row(self):
         """Update the selected row in place while playing.
@@ -2033,7 +2033,7 @@ class GodAI(QWidget):
         layout.addWidget(self.author_next_step_label)
 
         # ── Book Profile (collapsed by default — persisted, injected into every mode) ──
-        profile_section = CollapsibleSection("📖  Book Profile", expanded=False)
+        profile_section = CollapsibleSection("Book Profile", expanded=False)
 
         profile_row1 = QWidget()
         pr1 = QHBoxLayout(profile_row1)
@@ -2074,7 +2074,7 @@ class GodAI(QWidget):
         self.author_profile_path_box.addItems(["Undecided", "Self-Publishing (KDP)", "Traditional"])
         pr4.addWidget(self.author_profile_path_box)
         pr4.addStretch()
-        self.author_profile_save_btn = QPushButton("💾  Save Profile")
+        self.author_profile_save_btn = QPushButton("Save Profile")
         self.author_profile_save_btn.clicked.connect(self.author_save_profile)
         pr4.addWidget(self.author_profile_save_btn)
         profile_section.addWidget(profile_row4)
@@ -2091,19 +2091,19 @@ class GodAI(QWidget):
         self.author_draft_box.setPlaceholderText(
             "Your draft appears here. You can type and edit directly alongside the AI."
         )
-        self.author_tabs.addTab(self.author_draft_box, "✍️  Draft")
+        self.author_tabs.addTab(self.author_draft_box, "Draft")
 
         self.author_outline_box = QTextEdit()
         self.author_outline_box.setPlaceholderText("Chapter and scene outline…")
-        self.author_tabs.addTab(self.author_outline_box, "📋  Outline")
+        self.author_tabs.addTab(self.author_outline_box, "Outline")
 
         self.author_characters_box = QTextEdit()
         self.author_characters_box.setPlaceholderText("Character profiles, arcs, relationships…")
-        self.author_tabs.addTab(self.author_characters_box, "👤  Characters")
+        self.author_tabs.addTab(self.author_characters_box, "Characters")
 
         self.author_world_box = QTextEdit()
         self.author_world_box.setPlaceholderText("World-building notes, lore, setting, rules…")
-        self.author_tabs.addTab(self.author_world_box, "🌍  World Notes")
+        self.author_tabs.addTab(self.author_world_box, "World Notes")
 
         self.author_chapters_tab = QWidget()
         ct_layout = QVBoxLayout(self.author_chapters_tab)
@@ -2118,12 +2118,12 @@ class GodAI(QWidget):
         self.author_chapters_list.itemDoubleClicked.connect(self._author_jump_to_chapter)
         ct_layout.addWidget(self.author_chapters_list, 1)
 
-        author_chapters_refresh_btn = QPushButton("🔄  Refresh Chapters")
+        author_chapters_refresh_btn = QPushButton("Refresh Chapters")
         author_chapters_refresh_btn.clicked.connect(self._author_refresh_chapters)
         ct_layout.addWidget(author_chapters_refresh_btn)
 
         self._author_chapter_offsets: list = []
-        self.author_tabs.addTab(self.author_chapters_tab, "📑  Chapters")
+        self.author_tabs.addTab(self.author_chapters_tab, "Chapters")
         self.author_tabs.currentChanged.connect(self._author_on_tab_changed)
 
         workspace_splitter.addWidget(self.author_tabs)
@@ -2165,19 +2165,19 @@ class GodAI(QWidget):
         sb.addWidget(field("Provider", self.author_provider_box))
         sb.addWidget(field("Model", self.author_model_box))
 
-        self.author_write_btn = QPushButton("✍️  Write")
+        self.author_write_btn = QPushButton("Write")
         self.author_write_btn.setMinimumHeight(34)
         self.author_write_btn.setObjectName("PrimaryAction")
         self.author_write_btn.clicked.connect(self.author_write)
         sb.addWidget(self.author_write_btn)
 
-        self.author_continue_btn = QPushButton("▶  Continue")
+        self.author_continue_btn = QPushButton("Continue")
         self.author_continue_btn.setMinimumHeight(34)
         self.author_continue_btn.setObjectName("SecondaryAction")
         self.author_continue_btn.clicked.connect(self.author_continue)
         sb.addWidget(self.author_continue_btn)
 
-        self.author_stop_btn = QPushButton("⬛  Stop")
+        self.author_stop_btn = QPushButton("Stop")
         self.author_stop_btn.setEnabled(False)
         self.author_stop_btn.setMinimumHeight(34)
         self.author_stop_btn.setObjectName("DangerAction")
@@ -2220,7 +2220,7 @@ class GodAI(QWidget):
         sep2.setObjectName("CardDivider")
         sb.addWidget(sep2)
 
-        self.author_save_btn = QPushButton("💾  Save Draft")
+        self.author_save_btn = QPushButton("Save Draft")
         self.author_save_btn.setEnabled(False)
         self.author_save_btn.clicked.connect(self.author_save)
         sb.addWidget(self.author_save_btn)
@@ -2238,7 +2238,7 @@ class GodAI(QWidget):
         self.author_export_format_box = QComboBox()
         self.author_export_format_box.addItems(["EPUB", "DOCX", "PDF"])
         export_row.addWidget(self.author_export_format_box)
-        self.author_export_btn = QPushButton("📤  Export Book")
+        self.author_export_btn = QPushButton("Export Book")
         self.author_export_btn.clicked.connect(self.author_export_book)
         export_row.addWidget(self.author_export_btn)
         sb.addWidget(export_row_container)
@@ -2254,7 +2254,7 @@ class GodAI(QWidget):
         mode_row = QHBoxLayout()
         mode_row.setSpacing(0)
 
-        self.author_mode_write_btn = QPushButton("✍️  Write")
+        self.author_mode_write_btn = QPushButton("Write")
         self.author_mode_write_btn.setCheckable(True)
         self.author_mode_write_btn.setChecked(True)
         self.author_mode_write_btn.setMinimumHeight(32)
@@ -2265,12 +2265,13 @@ class GodAI(QWidget):
         # "&&", not "&": Qt reads a single ampersand in button text as a mnemonic
         # marker and swallows it, so this rendered as "Publish_Market" with the
         # M underlined. Same trap CollapsibleSection documents for its titles.
-        self.author_mode_pubmkt_btn = QPushButton("📣  Publish && Market")
+        self.author_mode_pubmkt_btn = QPushButton("Publish && Market")
         self.author_mode_pubmkt_btn.setCheckable(True)
         self.author_mode_pubmkt_btn.setMinimumHeight(32)
         self.author_mode_pubmkt_btn.setObjectName("WorkspaceTool")
         self.author_mode_pubmkt_btn.clicked.connect(lambda: self._author_set_mode("pubmkt"))
         mode_row.addWidget(self.author_mode_pubmkt_btn)
+        mode_row.addStretch()
 
         layout.addLayout(mode_row)
 
@@ -2288,7 +2289,7 @@ class GodAI(QWidget):
         sub_row = QHBoxLayout()
         sub_row.setSpacing(0)
 
-        self.author_sub_publish_btn = QPushButton("📄  Publish")
+        self.author_sub_publish_btn = QPushButton("Publish")
         self.author_sub_publish_btn.setCheckable(True)
         self.author_sub_publish_btn.setChecked(True)
         self.author_sub_publish_btn.setMinimumHeight(28)
@@ -2296,12 +2297,13 @@ class GodAI(QWidget):
         self.author_sub_publish_btn.clicked.connect(lambda: self._author_set_sub_mode("publish"))
         sub_row.addWidget(self.author_sub_publish_btn)
 
-        self.author_sub_market_btn = QPushButton("📢  Market")
+        self.author_sub_market_btn = QPushButton("Market")
         self.author_sub_market_btn.setCheckable(True)
         self.author_sub_market_btn.setMinimumHeight(28)
         self.author_sub_market_btn.setObjectName("WorkspaceTool")
         self.author_sub_market_btn.clicked.connect(lambda: self._author_set_sub_mode("market"))
         sub_row.addWidget(self.author_sub_market_btn)
+        sub_row.addStretch()
 
         pm_layout.addLayout(sub_row)
 
@@ -3299,7 +3301,7 @@ class GodAI(QWidget):
         self.creator_save_account_btn = QPushButton("Save Account")
         self.creator_save_account_btn.clicked.connect(self.creator_save_account)
         sr.addWidget(self.creator_save_account_btn)
-        self.creator_delete_account_btn = QPushButton("🗑  Remove")
+        self.creator_delete_account_btn = QPushButton("Remove")
         self.creator_delete_account_btn.setObjectName("DangerAction")
         self.creator_delete_account_btn.clicked.connect(self.creator_delete_account)
         sr.addWidget(self.creator_delete_account_btn)
@@ -3315,41 +3317,41 @@ class GodAI(QWidget):
         self.creator_output.setPlaceholderText(
             "Drafts appear here, fully editable. Nothing is sent anywhere — "
             "review it, then post it yourself.")
-        self.creator_tabs.addTab(self.creator_output, "✍️  Draft")
+        self.creator_tabs.addTab(self.creator_output, "Draft")
 
         self.creator_calendar_table = QTableWidget(0, 5)
         self.creator_calendar_table.setHorizontalHeaderLabels(
             ["When", "Kind", "Title", "$", "Status"])
         self.creator_calendar_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.Stretch)
-        self.creator_tabs.addTab(self.creator_calendar_table, "🗓  Calendar")
+        self.creator_tabs.addTab(self.creator_calendar_table, "Calendar")
 
         self.creator_earnings_output = QTextEdit()
         self.creator_earnings_output.setReadOnly(True)
         self.creator_earnings_output.setPlaceholderText(
             "No earnings imported yet. There is no OnlyFans API, so export the "
             "statement from the site and import the CSV here.")
-        self.creator_tabs.addTab(self.creator_earnings_output, "📈  Earnings")
+        self.creator_tabs.addTab(self.creator_earnings_output, "Earnings")
 
         self.creator_voice_tab = self._build_creator_voice_tab()
-        self.creator_tabs.addTab(self.creator_voice_tab, "🗣  Voice")
+        self.creator_tabs.addTab(self.creator_voice_tab, "Voice")
 
         self.creator_media_table = QTableWidget(0, 4)
         self.creator_media_table.setHorizontalHeaderLabels(
             ["File", "Kind", "Source", "Caption"])
         self.creator_media_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
-        self.creator_tabs.addTab(self.creator_media_table, "🖼  Media")
+        self.creator_tabs.addTab(self.creator_media_table, "Media")
 
         self.creator_agency_table = QTableWidget(0, 6)
         self.creator_agency_table.setHorizontalHeaderLabels(
             ["Account", "Type", "Authorised by", "Net $", "Subs", "Drafts"])
         self.creator_agency_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
-        self.creator_tabs.addTab(self.creator_agency_table, "🏢  Agency")
+        self.creator_tabs.addTab(self.creator_agency_table, "Agency")
 
         self.creator_records_table = QTableWidget(0, 5)
         self.creator_records_table.setHorizontalHeaderLabels(
             ["Performer", "Verified", "ID on file", "Release", "Records held at"])
         self.creator_records_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
-        self.creator_tabs.addTab(self.creator_records_table, "📋  Records")
+        self.creator_tabs.addTab(self.creator_records_table, "Records")
 
         body.addWidget(self.creator_tabs)
 
@@ -3405,18 +3407,18 @@ class GodAI(QWidget):
         sb.addWidget(QLabel("Model:"))
         sb.addWidget(self.creator_model_box)
 
-        self.creator_generate_btn = QPushButton("✍️  Draft")
+        self.creator_generate_btn = QPushButton("Draft")
         self.creator_generate_btn.setObjectName("PrimaryAction")
         self.creator_generate_btn.clicked.connect(self.creator_generate)
         sb.addWidget(self.creator_generate_btn)
 
-        self.creator_stop_btn = QPushButton("⏹  Stop")
+        self.creator_stop_btn = QPushButton("Stop")
         self.creator_stop_btn.setObjectName("DangerAction")
         self.creator_stop_btn.setEnabled(False)
         self.creator_stop_btn.clicked.connect(self.creator_stop)
         sb.addWidget(self.creator_stop_btn)
 
-        self.creator_schedule_btn = QPushButton("🗓  Add to Calendar")
+        self.creator_schedule_btn = QPushButton("Add to Calendar")
         self.creator_schedule_btn.clicked.connect(self.creator_schedule)
         sb.addWidget(self.creator_schedule_btn)
 
@@ -3426,7 +3428,7 @@ class GodAI(QWidget):
         sb.addWidget(divider)
 
         sb.addWidget(QLabel("Promo video (Higgsfield):"))
-        self.creator_video_btn = QPushButton("🎬  Generate Teaser")
+        self.creator_video_btn = QPushButton("Generate Teaser")
         self.creator_video_btn.setObjectName("SecondaryAction")
         self.creator_video_btn.clicked.connect(self.creator_generate_video)
         sb.addWidget(self.creator_video_btn)
@@ -3441,19 +3443,19 @@ class GodAI(QWidget):
         divider2.setObjectName("CardDivider")
         sb.addWidget(divider2)
 
-        self.creator_add_media_btn = QPushButton("🖼  Add Media")
+        self.creator_add_media_btn = QPushButton("Add Media")
         self.creator_add_media_btn.clicked.connect(self.creator_add_media)
         sb.addWidget(self.creator_add_media_btn)
 
-        self.creator_add_performer_btn = QPushButton("📋  Add Performer Record")
+        self.creator_add_performer_btn = QPushButton("Add Performer Record")
         self.creator_add_performer_btn.clicked.connect(self.creator_add_performer)
         sb.addWidget(self.creator_add_performer_btn)
 
-        self.creator_revenue_btn = QPushButton("💰  Record Revenue")
+        self.creator_revenue_btn = QPushButton("Record Revenue")
         self.creator_revenue_btn.clicked.connect(self.creator_record_revenue)
         sb.addWidget(self.creator_revenue_btn)
 
-        self.creator_import_btn = QPushButton("📥  Import Earnings CSV")
+        self.creator_import_btn = QPushButton("Import Earnings CSV")
         self.creator_import_btn.clicked.connect(self.creator_import_earnings)
         sb.addWidget(self.creator_import_btn)
 
@@ -4444,46 +4446,46 @@ class GodAI(QWidget):
 
         # ── Writing phase ──
         if not profile["title"]:
-            return ("📖  Start here — fill in Title, Author and Type in the Project Bar, then open "
+            return ("Start here — fill in Title, Author and Type in the Project Bar, then open "
                     "Book Profile and click Save Profile. Everything downstream reuses it.")
         if not profile["hook"] or not profile["target_reader"]:
-            return ("📖  Complete your Book Profile (Hook + Target reader). These two fields shape "
+            return ("Complete your Book Profile (Hook + Target reader). These two fields shape "
                     "every blurb, description and social caption you'll generate later.")
         if draft_words == 0 and not outline:
-            return ("✍️  No draft yet — set Task to Generate Outline, describe the book in Direction, "
+            return ("No draft yet — set Task to Generate Outline, describe the book in Direction, "
                     "and click Write. Outline first is faster than drafting blind.")
         if draft_words == 0:
-            return ("✍️  Outline exists but no draft — switch Task to "
+            return ("Outline exists but no draft — switch Task to "
                     f"{'Write Chapter' if profile['content_type'] == 'Non-Fiction' else 'Write Scene'} "
                     "and start drafting. Use Continue to extend.")
         if draft_words < 5000:
-            return (f"✍️  Draft is {draft_words:,} words — keep going with Write / Continue. "
+            return (f"Draft is {draft_words:,} words — keep going with Write / Continue. "
                     "Add 'Chapter 1', 'Chapter 2' heading lines as you go so Chapters and Export pick them up.")
         if not self._author_export_done:
-            return (f"📤  {draft_words:,} words written — export a formatted copy (EPUB / DOCX / PDF) "
+            return (f"{draft_words:,} words written — export a formatted copy (EPUB / DOCX / PDF) "
                     "from the Write sidebar to see how it reads as a real book.")
 
         # ── Publishing phase ──
         todos = self._get_pending_todo_titles()
         if any("Upload to Amazon KDP" in t for t in todos):
-            return ("📣  Draft exported. Next: generate a Back-Cover Blurb in Publish mode, then a "
+            return ("Draft exported. Next: generate a Back-Cover Blurb in Publish mode, then a "
                     "KDP Listing in Market mode — that one output covers your description, categories, "
                     "keywords and pricing. Then create your KDP account and upload.")
         if any("cover files" in t for t in todos):
-            return ("🎨  Cover files are still on your checklist — KDP needs 3000×4500px at 300dpi. "
+            return ("Cover files are still on your checklist — KDP needs 3000×4500px at 300dpi. "
                     "This is the one step the app can't do for you; hire a designer or use Canva/Reedsy.")
 
         # ── Marketing phase ──
         if not os.environ.get("PUBLISHDRIVE_API_KEY", "").strip():
-            return ("🔌  Book is live-ready. Connect PublishDrive (see the Connections panel) to pull "
+            return ("Book is live-ready. Connect PublishDrive (see the Connections panel) to pull "
                     "real sales data in, or skip it and drop KDP CSV reports into data/kdp_reports/ instead.")
         if any("Create TikTok, Instagram" in t for t in todos):
-            return ("📱  Set up your TikTok / Instagram / Pinterest accounts (same username on all three), "
+            return ("Set up your TikTok / Instagram / Pinterest accounts (same username on all three), "
                     "then use Quote Finder → Calendar to batch a few weeks of posts in one pass.")
         if any("TikTokers/BookTokers" in t for t in todos):
-            return ("🎬  Content pipeline is ready — generate quote graphics and shorts, then pitch "
+            return ("Content pipeline is ready — generate quote graphics and shorts, then pitch "
                     "BookTok creators in your niche with a free copy plus ready-made clips.")
-        return ("✅  Core pipeline complete. Keep the Calendar filled, watch sales on the Overview tab, "
+        return ("Core pipeline complete. Keep the Calendar filled, watch sales on the Overview tab, "
                 "and work through whatever's left on your Publishing Todos.")
 
     def _get_pending_todo_titles(self) -> list:
@@ -5095,7 +5097,7 @@ class GodAI(QWidget):
         self.manuscript_refresh_btn.clicked.connect(self.manuscript_refresh)
         tb.addWidget(self.manuscript_refresh_btn)
 
-        self.manuscript_ingest_btn = QPushButton("📥  Ingest KDP CSV")
+        self.manuscript_ingest_btn = QPushButton("Ingest KDP CSV")
         self.manuscript_ingest_btn.clicked.connect(self.manuscript_ingest_kdp)
         tb.addWidget(self.manuscript_ingest_btn)
 
@@ -5111,7 +5113,7 @@ class GodAI(QWidget):
         layout.addWidget(self.manuscript_next_step_label)
 
         # ── Connections: which 3rd-party services are actually configured ─────
-        connections_section = CollapsibleSection("🔌  Connections", expanded=False)
+        connections_section = CollapsibleSection("Connections", expanded=False)
         self.manuscript_connections_layout = QVBoxLayout()
         self.manuscript_connections_layout.setContentsMargins(4, 2, 4, 2)
         self.manuscript_connections_layout.setSpacing(3)
@@ -5119,7 +5121,7 @@ class GodAI(QWidget):
         connections_container.setLayout(self.manuscript_connections_layout)
         connections_section.addWidget(connections_container)
 
-        connections_refresh_btn = QPushButton("🔄  Refresh Status")
+        connections_refresh_btn = QPushButton("Refresh Status")
         connections_refresh_btn.clicked.connect(self._refresh_connections_status)
         connections_section.addWidget(connections_refresh_btn)
 
@@ -5170,7 +5172,7 @@ class GodAI(QWidget):
         sb.addWidget(QLabel("Model:"))
         sb.addWidget(self.manuscript_model_box)
 
-        self.manuscript_ask_btn = QPushButton("💬  Ask")
+        self.manuscript_ask_btn = QPushButton("Ask")
         self.manuscript_ask_btn.setMinimumHeight(34)
         self.manuscript_ask_btn.clicked.connect(self.manuscript_ask)
         sb.addWidget(self.manuscript_ask_btn)
@@ -5239,7 +5241,7 @@ class GodAI(QWidget):
         layout.addWidget(self.quote_finder_text)
 
         load_row = QHBoxLayout()
-        self.quote_finder_load_btn = QPushButton("📄  Load File…")
+        self.quote_finder_load_btn = QPushButton("Load File…")
         self.quote_finder_load_btn.clicked.connect(self.quote_finder_load_file)
         load_row.addWidget(self.quote_finder_load_btn)
         load_row.addWidget(QLabel("Supports .txt, .pdf, .epub, .mobi"))
@@ -5273,12 +5275,12 @@ class GodAI(QWidget):
 
         layout.addWidget(settings_row_container)
 
-        self.quote_finder_suggest_btn = QPushButton("🔍  Suggest Quotes")
+        self.quote_finder_suggest_btn = QPushButton("Suggest Quotes")
         self.quote_finder_suggest_btn.setMinimumHeight(34)
         self.quote_finder_suggest_btn.clicked.connect(self.quote_finder_suggest)
         layout.addWidget(self.quote_finder_suggest_btn)
 
-        layout.addWidget(QLabel("Candidates — 🖼 makes a graphic, 🎬 makes a narrated short:"))
+        layout.addWidget(micro("Candidates"))
         self.quote_finder_list = QListWidget()
         layout.addWidget(self.quote_finder_list, 1)
 
@@ -5318,12 +5320,12 @@ class GodAI(QWidget):
         self.quote_graphic_size_box = make_size_box()
         cl.addWidget(self.quote_graphic_size_box)
 
-        self.quote_graphic_generate_btn = QPushButton("✨  Generate Graphic")
+        self.quote_graphic_generate_btn = QPushButton("Generate Graphic")
         self.quote_graphic_generate_btn.setMinimumHeight(34)
         self.quote_graphic_generate_btn.clicked.connect(self.manuscript_generate_quote_graphic)
         cl.addWidget(self.quote_graphic_generate_btn)
 
-        self.quote_graphic_open_folder_btn = QPushButton("📂  Open Folder")
+        self.quote_graphic_open_folder_btn = QPushButton("Open Folder")
         self.quote_graphic_open_folder_btn.clicked.connect(self.manuscript_open_graphics_folder)
         cl.addWidget(self.quote_graphic_open_folder_btn)
 
@@ -5375,16 +5377,16 @@ class GodAI(QWidget):
         self.shorts_voice_box = QComboBox()
         cl.addWidget(self.shorts_voice_box)
 
-        self.shorts_generate_btn = QPushButton("🎬  Generate Short")
+        self.shorts_generate_btn = QPushButton("Generate Short")
         self.shorts_generate_btn.setMinimumHeight(34)
         self.shorts_generate_btn.clicked.connect(self.manuscript_generate_short)
         cl.addWidget(self.shorts_generate_btn)
 
         btn_row = QHBoxLayout()
-        self.shorts_play_btn = QPushButton("▶  Play")
+        self.shorts_play_btn = QPushButton("Play")
         self.shorts_play_btn.setEnabled(False)
         self.shorts_play_btn.clicked.connect(self.manuscript_play_short)
-        self.shorts_open_folder_btn = QPushButton("📂  Folder")
+        self.shorts_open_folder_btn = QPushButton("Folder")
         self.shorts_open_folder_btn.clicked.connect(self.manuscript_open_shorts_folder)
         btn_row.addWidget(self.shorts_play_btn)
         btn_row.addWidget(self.shorts_open_folder_btn)
@@ -5467,12 +5469,12 @@ class GodAI(QWidget):
         layout.addLayout(settings_row2)
 
         btn_row = QHBoxLayout()
-        self.calendar_generate_btn = QPushButton("📅  Generate Calendar")
+        self.calendar_generate_btn = QPushButton("Generate Calendar")
         self.calendar_generate_btn.setMinimumHeight(34)
         self.calendar_generate_btn.clicked.connect(self.manuscript_generate_calendar)
         btn_row.addWidget(self.calendar_generate_btn)
 
-        self.calendar_export_btn = QPushButton("📤  Export Calendar (CSV)")
+        self.calendar_export_btn = QPushButton("Export Calendar (CSV)")
         self.calendar_export_btn.clicked.connect(self.manuscript_export_calendar_csv)
         btn_row.addWidget(self.calendar_export_btn)
         btn_row.addStretch()
@@ -5513,7 +5515,7 @@ class GodAI(QWidget):
 
         note = QLabel(
             "API-key-based services only — KDP/Draft2Digital/IngramSpark/BookBub/social accounts "
-            "have no API to check; see the ℹ️ Publishing Todos below for those."
+            "have no API to check; see the Publishing Todos below for those."
         )
         note.setWordWrap(True)
         note.setStyleSheet("color: #777; font-size: 11px;")
@@ -5532,10 +5534,10 @@ class GodAI(QWidget):
         for name, connected, where, optional in checks:
             opt_tag = " (optional)" if optional else ""
             if connected:
-                text = f"✅  {name}{opt_tag} — Connected"
+                text = f"{name}{opt_tag} — connected"
                 color = ACCENT
             else:
-                text = f"⚪  {name}{opt_tag} — Not connected · get a key at {where}"
+                text = f"{name}{opt_tag} — not connected · get a key at {where}"
                 color = "#999999"
             row = QLabel(text)
             row.setStyleSheet(f"color: {color}; font-size: 12px;")
@@ -5824,14 +5826,14 @@ class GodAI(QWidget):
         label.setWordWrap(True)
         h.addWidget(label, 1)
 
-        graphic_btn = QPushButton("🖼")
-        graphic_btn.setFixedWidth(36)
+        graphic_btn = QPushButton("Graphic")
+        graphic_btn.setFixedWidth(78)
         graphic_btn.setToolTip("Generate quote graphic")
         graphic_btn.clicked.connect(lambda checked=False, q=quote: self.quote_finder_generate_graphic(q))
         h.addWidget(graphic_btn)
 
-        short_btn = QPushButton("🎬")
-        short_btn.setFixedWidth(36)
+        short_btn = QPushButton("Short")
+        short_btn.setFixedWidth(70)
         short_btn.setToolTip("Generate narrated short")
         short_btn.clicked.connect(lambda checked=False, q=quote, b=short_btn: self.quote_finder_generate_short(q, b))
         h.addWidget(short_btn)
@@ -5887,7 +5889,7 @@ class GodAI(QWidget):
     def _quote_finder_short_done(self, output_path: str, button: QPushButton):
         self._last_short_path = output_path
         self.manuscript_status_label.setText(f"[Done] Saved {Path(output_path).name}")
-        button.setText("🎬")
+        button.setText("Short")
         self._quote_finder_busy = False
         for b in self._quote_finder_short_buttons:
             b.setEnabled(True)
@@ -5986,9 +5988,9 @@ class GodAI(QWidget):
             self.calendar_table.setItem(row, 3, QTableWidgetItem(slot.quote))
             self.calendar_table.setItem(row, 4, QTableWidgetItem(slot.caption))
 
-            icon = "🖼" if slot.format == "graphic" else "🎬"
-            btn = QPushButton(icon)
-            btn.setFixedWidth(36)
+            btn = QPushButton(
+                "Graphic" if slot.format == "graphic" else "Short")
+            btn.setFixedWidth(78)
             btn.clicked.connect(lambda checked=False, r=row, b=btn: self.calendar_generate_asset(r, b))
             self.calendar_table.setCellWidget(row, 5, btn)
 
@@ -6656,7 +6658,7 @@ class GodAI(QWidget):
             return
 
         for book in books:
-            item = QListWidgetItem(f"📖 {book.name}")
+            item = QListWidgetItem(book.name)
             item.setData(Qt.UserRole, str(book))
             self.audiobook_book_list.addItem(item)
 
