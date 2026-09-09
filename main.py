@@ -3014,204 +3014,233 @@ class GodAI(QWidget):
     # ── Season Model handlers ────────────────────────────────────────────────
     # ── Fiverr Agent Panel ───────────────────────────────────────────────────
     def build_fiverr_panel(self):
+        """Client gigs: logo concepts, a delivery message, a gig listing.
+
+        Rebuilt on the shared form idiom. Three things changed beyond looks:
+
+        * The image model is now a control. "Generate Logos" is the only button
+          on this page that spends money per click, and until now the model it
+          used was hardcoded and invisible — the one visible model box drives
+          the *text* outputs only, which is why nothing appeared to recommend
+          DALL-E for the graphics work it was already doing.
+        * The Status / Est. Cost / Order Log sidebar is gone. Status is a line
+          under the buttons, the cost estimate sits beside the button that
+          incurs it, and the order log is a tab rather than a 190px column
+          with a three-column table squeezed into it.
+        * Stop is hidden until there is something to stop, so the action row
+          is three buttons with one clear answer instead of four.
+        """
+        from PySide6.QtWidgets import (
+            QHeaderView, QSpinBox, QTableWidget,
+        )
+        from services.openai_client import IMAGE_MODELS, DEFAULT_IMAGE_MODEL
+
         self.fiverr_panel = QWidget()
         self.fiverr_panel.setObjectName("FiverrPanel")
-        # The whole panel scrolls, as the music panel does and for the same
-        # reason: its form lives in the main column rather than a sidebar, so
-        # at the window's own minimum there is genuinely less height than the
-        # content needs. Scrolling keeps every control reachable; without it
-        # the grid compresses past its minimum and the fields overlap.
-        _fiverr_outer = QVBoxLayout(self.fiverr_panel)
-        _fiverr_outer.setContentsMargins(0, 0, 0, 0)
-        _fiverr_content = QWidget()
-        _fiverr_outer.addWidget(scrollable(_fiverr_content))
-        layout = QVBoxLayout(_fiverr_content)
-        layout.setContentsMargins(MD, MD, MD, MD)
-        layout.setSpacing(MD)
+        outer = QVBoxLayout(self.fiverr_panel)
+        outer.setContentsMargins(0, 0, 0, 0)
 
-        brief_group = QGroupBox("Client Brief")
-        brief_group.setObjectName("FiverrBriefBox")
-        # Fixed vertically: a form of fixed-height rows should not be the
-        # thing that shrinks. Left flexible, a short window compresses this
-        # grid past its minimum and the fields draw over each other.
-        brief_group.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
-        brief_layout = QGridLayout(brief_group)
-        brief_layout.setSpacing(6)
+        content = QWidget()
+        content.setObjectName("Transparent")
+        outer.addWidget(scrollable(content))
+        layout = QVBoxLayout(content)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(LG)
 
-        brief_layout.addWidget(QLabel("Business Name:"), 0, 0)
-        self.fiverr_name_input = QLineEdit()
-        self.fiverr_name_input.setPlaceholderText("e.g. Apex Fitness Studio")
-        brief_layout.addWidget(self.fiverr_name_input, 0, 1, 1, 3)
+        # ── Brief ───────────────────────────────────────────────────────
+        layout.addWidget(section("Client brief"))
 
-        brief_layout.addWidget(QLabel("Industry / Niche:"), 1, 0)
-        self.fiverr_industry_input = QLineEdit()
-        self.fiverr_industry_input.setPlaceholderText("e.g. fitness, law firm, bakery")
-        brief_layout.addWidget(self.fiverr_industry_input, 1, 1)
-
-        brief_layout.addWidget(QLabel("Style:"), 1, 2)
-        self.fiverr_style_box = QComboBox()
-        self.fiverr_style_box.addItems(["Minimalist", "Bold", "Vintage", "Playful", "Corporate", "Luxury", "Futuristic"])
-        brief_layout.addWidget(self.fiverr_style_box, 1, 3)
-
-        brief_layout.addWidget(QLabel("Primary Colors:"), 2, 0)
-        self.fiverr_colors_input = QLineEdit()
-        self.fiverr_colors_input.setPlaceholderText("e.g. navy blue and gold")
-        brief_layout.addWidget(self.fiverr_colors_input, 2, 1)
-
-        brief_layout.addWidget(QLabel("# Concepts:"), 2, 2)
-        from PySide6.QtWidgets import QSpinBox
+        self.fiverr_name_input = line_edit("Apex Fitness Studio")
+        self.fiverr_industry_input = line_edit("fitness, law firm, bakery")
+        self.fiverr_colors_input = line_edit("navy blue and gold")
+        self.fiverr_style_box = combo(
+            ["Minimalist", "Bold", "Vintage", "Playful", "Corporate",
+             "Luxury", "Futuristic"])
         self.fiverr_count_spin = QSpinBox()
         self.fiverr_count_spin.setRange(1, 4)
         self.fiverr_count_spin.setValue(2)
-        brief_layout.addWidget(self.fiverr_count_spin, 2, 3)
+        self.fiverr_count_spin.valueChanged.connect(self._fiverr_update_estimate)
 
-        brief_layout.addWidget(QLabel("Notes:"), 3, 0)
+        # Equal column stretch is what makes the second row's labels sit under
+        # the first row's, instead of each row packing to its own width.
+        brief = QGridLayout()
+        brief.setHorizontalSpacing(MD)
+        brief.setVerticalSpacing(MD)
+        brief.addWidget(field("Business name", self.fiverr_name_input), 0, 0, 1, 2,
+                        Qt.AlignTop)
+        brief.addWidget(field("Style", self.fiverr_style_box), 0, 2, Qt.AlignTop)
+        brief.addWidget(field("Industry / niche", self.fiverr_industry_input), 1, 0,
+                        Qt.AlignTop)
+        brief.addWidget(field("Primary colours", self.fiverr_colors_input), 1, 1,
+                        Qt.AlignTop)
+        brief.addWidget(field("Concepts", self.fiverr_count_spin), 1, 2, Qt.AlignTop)
+        for column in range(3):
+            brief.setColumnStretch(column, 1)
+        layout.addLayout(brief)
+
         self.fiverr_notes_input = QTextEdit()
-        self.fiverr_notes_input.setPlaceholderText("Optional: tagline, mood, target audience, competitors to avoid...")
-        self.fiverr_notes_input.setFixedHeight(55)
-        brief_layout.addWidget(self.fiverr_notes_input, 3, 1, 1, 3)
+        self.fiverr_notes_input.setPlaceholderText(
+            "Tagline, mood, target audience, competitors to avoid…")
+        self.fiverr_notes_input.setFixedHeight(70)
+        layout.addWidget(field("Notes", self.fiverr_notes_input))
 
-        # Row 1: Provider + Model (their own row so they don't squeeze the action buttons)
-        provider_row_container = QWidget()
-        provider_row = FlowLayout(provider_row_container, spacing=6)
-        provider_row.addWidget(QLabel("Text Provider:"))
+        # ── Models ──────────────────────────────────────────────────────
+        layout.addWidget(section("Models"))
+
         self.fiverr_panel_base = AgentPanel(
-            self, "fiverr", providers=tuple(["anthropic", "openai", "deepseek", "kimi", "gemini", "qwen", "ollama"]),
+            self, "fiverr",
+            providers=("anthropic", "openai", "deepseek", "kimi", "gemini",
+                       "qwen", "ollama"),
             default_provider="anthropic")
         self.fiverr_provider_box = self.fiverr_panel_base.provider_box
         self.fiverr_model_box = self.fiverr_panel_base.model_box
-        provider_row.addWidget(self.fiverr_provider_box)
 
-        provider_row.addWidget(QLabel("Model:"))
-        self.fiverr_model_box.setMinimumWidth(180)
-        provider_row.addWidget(self.fiverr_model_box, 1)
-        brief_layout.addWidget(provider_row_container, 4, 0, 1, 4)
+        self.fiverr_image_model_box = combo(list(IMAGE_MODELS),
+                                            DEFAULT_IMAGE_MODEL)
+        self.fiverr_image_model_box.currentTextChanged.connect(
+            self._fiverr_update_estimate)
 
-        # Row 2: All four action buttons get their own row with full width
-        # FlowLayout, not QHBoxLayout: four fixed-width buttons pin a minimum
-        # wider than this panel gets on a narrow window, and Qt then draws them
-        # over each other. These wrap onto a second line instead.
-        action_row_container = QWidget()
-        action_row = FlowLayout(action_row_container, spacing=6)
+        models = QGridLayout()
+        models.setHorizontalSpacing(MD)
+        models.setVerticalSpacing(MD)
+        models.addWidget(field("Text provider", self.fiverr_provider_box), 0, 0,
+                         Qt.AlignTop)
+        models.addWidget(field("Text model", self.fiverr_model_box), 0, 1, Qt.AlignTop)
+        models.addWidget(field("Image model", self.fiverr_image_model_box), 0, 2,
+                         Qt.AlignTop)
+        for column in range(3):
+            models.setColumnStretch(column, 1)
+        layout.addLayout(models)
 
-        self.fiverr_generate_btn = QPushButton("Generate Logos")
-        self.fiverr_generate_btn.setMinimumWidth(140)
-        self.fiverr_generate_btn.setObjectName("PrimaryAction")
+        # ── Actions ─────────────────────────────────────────────────────
+        # One filled button. The other two are real actions but not the answer
+        # to this screen, and the cost sits beside the control that spends it.
+        actions = QHBoxLayout()
+        actions.setSpacing(SM)
+
+        self.fiverr_generate_btn = primary("Generate Logos")
+        self.fiverr_generate_btn.setMinimumWidth(160)
+        self.fiverr_generate_btn.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
         self.fiverr_generate_btn.clicked.connect(self.fiverr_generate_logos)
-        action_row.addWidget(self.fiverr_generate_btn)
+        actions.addWidget(self.fiverr_generate_btn)
 
-        self.fiverr_delivery_btn = QPushButton("Delivery Msg")
-        self.fiverr_delivery_btn.setMinimumWidth(130)
-        self.fiverr_delivery_btn.setObjectName("SecondaryAction")
+        self.fiverr_delivery_btn = QPushButton("Delivery Message")
         self.fiverr_delivery_btn.clicked.connect(self.fiverr_write_delivery)
-        action_row.addWidget(self.fiverr_delivery_btn)
+        actions.addWidget(self.fiverr_delivery_btn)
 
         self.fiverr_gig_btn = QPushButton("Gig Description")
-        self.fiverr_gig_btn.setMinimumWidth(140)
-        self.fiverr_gig_btn.setObjectName("SecondaryAction")
         self.fiverr_gig_btn.clicked.connect(self.fiverr_write_gig)
-        action_row.addWidget(self.fiverr_gig_btn)
+        actions.addWidget(self.fiverr_gig_btn)
 
+        # Hidden rather than disabled: a permanently greyed button is chrome.
         self.fiverr_stop_btn = QPushButton("Stop")
-        self.fiverr_stop_btn.setEnabled(False)
         self.fiverr_stop_btn.setObjectName("DangerAction")
         self.fiverr_stop_btn.clicked.connect(self.fiverr_stop)
-        action_row.addWidget(self.fiverr_stop_btn)
+        self.fiverr_stop_btn.hide()
+        actions.addWidget(self.fiverr_stop_btn)
 
-        brief_layout.addWidget(action_row_container, 5, 0, 1, 4)
-        layout.addWidget(brief_group)
+        actions.addStretch()
+        self.fiverr_cost_label = QLabel()
+        self.fiverr_cost_label.setObjectName("EstimateLine")
+        actions.addWidget(self.fiverr_cost_label)
+        layout.addLayout(actions)
 
-        results_splitter = QSplitter(Qt.Horizontal)
+        self.fiverr_status_label = QLabel("Idle")
+        self.fiverr_status_label.setObjectName("EstimateLine")
+        self.fiverr_status_label.setWordWrap(True)
+        layout.addWidget(self.fiverr_status_label)
+
+        # ── Results ─────────────────────────────────────────────────────
         self.fiverr_tabs = QTabWidget()
 
         preview_widget = QWidget()
+        preview_widget.setObjectName("Transparent")
         preview_layout = QVBoxLayout(preview_widget)
-        preview_layout.setContentsMargins(4, 4, 4, 4)
-        preview_layout.setSpacing(6)
-        preview_top_container = QWidget()
-        preview_top = FlowLayout(preview_top_container, spacing=6)
-        self.fiverr_preview_status = QLabel("No logos generated yet.")
-        self.fiverr_preview_status.setStyleSheet(f"color: {TEXT_MUTE}; font-style: italic;")
+        preview_layout.setContentsMargins(MD, MD, MD, MD)
+        preview_layout.setSpacing(MD)
+
+        preview_top = QHBoxLayout()
+        preview_top.setSpacing(SM)
+        self.fiverr_preview_status = QLabel("No logos yet — fill in the brief and generate.")
+        self.fiverr_preview_status.setObjectName("EstimateLine")
         preview_top.addWidget(self.fiverr_preview_status)
-        self.fiverr_save_images_btn = QPushButton("Save All Images")
+        preview_top.addStretch()
+        self.fiverr_save_images_btn = quiet("Save All Images")
         self.fiverr_save_images_btn.setEnabled(False)
+        self.fiverr_save_images_btn.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
         self.fiverr_save_images_btn.clicked.connect(self.fiverr_save_images)
         preview_top.addWidget(self.fiverr_save_images_btn)
-        preview_layout.addWidget(preview_top_container)
+        preview_layout.addLayout(preview_top)
+
         self.fiverr_logo_grid = QWidget()
+        self.fiverr_logo_grid.setObjectName("Transparent")
         self.fiverr_logo_grid_layout = QHBoxLayout(self.fiverr_logo_grid)
         self.fiverr_logo_grid_layout.setContentsMargins(0, 0, 0, 0)
-        self.fiverr_logo_grid_layout.setSpacing(12)
+        self.fiverr_logo_grid_layout.setSpacing(MD)
         preview_layout.addWidget(self.fiverr_logo_grid)
         preview_layout.addStretch()
         self.fiverr_tabs.addTab(preview_widget, "Logo Preview")
 
         self.fiverr_delivery_box = QTextEdit()
         self.fiverr_delivery_box.setPlaceholderText(
-            "Click 'Write Delivery Msg' to generate a professional client delivery message..."
-        )
+            "Generate a client delivery message with the button above.")
         self.fiverr_tabs.addTab(self.fiverr_delivery_box, "Delivery Message")
 
         self.fiverr_gig_box = QTextEdit()
         self.fiverr_gig_box.setPlaceholderText(
-            "Click 'Write Gig Description' to generate a Fiverr listing..."
-        )
+            "Generate a Fiverr gig listing with the button above.")
         self.fiverr_tabs.addTab(self.fiverr_gig_box, "Gig Description")
 
-        results_splitter.addWidget(self.fiverr_tabs)
-
-        from PySide6.QtWidgets import QTableWidget, QHeaderView
-        sidebar = QWidget()
-        sidebar_layout = QVBoxLayout(sidebar)
-        sidebar_layout.setContentsMargins(8, 0, 0, 0)
-        sidebar_layout.setSpacing(10)
-        sidebar.setMaximumWidth(190)
-
-        status_group = QGroupBox("Status")
-        status_group.setObjectName("FiverrStatusBox")
-        status_layout = QVBoxLayout(status_group)
-        self.fiverr_status_label = QLabel("Idle")
-        self.fiverr_status_label.setWordWrap(True)
-        self.fiverr_status_label.setStyleSheet(f"font-size: 12px; color: {TEXT_MUTE};")
-        status_layout.addWidget(self.fiverr_status_label)
-        sidebar_layout.addWidget(status_group)
-
-        cost_group = QGroupBox("Est. Cost")
-        cost_group.setObjectName("FiverrCostBox")
-        cost_layout = QVBoxLayout(cost_group)
-        self.fiverr_cost_label = QLabel("—")
-        self.fiverr_cost_label.setStyleSheet(f"font-size: 14px; font-weight: 600; color: {ACCENT};")
-        cost_note = QLabel("DALL-E 3: ~$0.04/image\n(standard quality)")
-        cost_note.setStyleSheet(f"font-size: 10px; color: {TEXT_MUTE};")
-        cost_note.setWordWrap(True)
-        cost_layout.addWidget(self.fiverr_cost_label)
-        cost_layout.addWidget(cost_note)
-        sidebar_layout.addWidget(cost_group)
-
-        order_group = QGroupBox("Order Log")
-        order_group.setObjectName("FiverrOrderBox")
-        order_layout = QVBoxLayout(order_group)
+        # The order log was a 190px sidebar column holding a three-column
+        # table; every column was truncated. As a tab it gets the full width.
+        orders_widget = QWidget()
+        orders_widget.setObjectName("Transparent")
+        orders_layout = QVBoxLayout(orders_widget)
+        orders_layout.setContentsMargins(MD, MD, MD, MD)
+        orders_layout.setSpacing(MD)
         self.fiverr_order_table = QTableWidget(0, 3)
-        self.fiverr_order_table.setHorizontalHeaderLabels(["Business", "#", "Status"])
-        self.fiverr_order_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
-        self.fiverr_order_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeToContents)
-        self.fiverr_order_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeToContents)
+        self.fiverr_order_table.setHorizontalHeaderLabels(
+            ["Business", "Concepts", "Status"])
+        header = self.fiverr_order_table.horizontalHeader()
+        header.setSectionResizeMode(0, QHeaderView.Stretch)
+        header.setSectionResizeMode(1, QHeaderView.ResizeToContents)
+        header.setSectionResizeMode(2, QHeaderView.ResizeToContents)
         self.fiverr_order_table.setEditTriggers(QTableWidget.NoEditTriggers)
         self.fiverr_order_table.setSelectionBehavior(QTableWidget.SelectRows)
-        self.fiverr_order_table.setAlternatingRowColors(True)
         self.fiverr_order_table.verticalHeader().setVisible(False)
-        order_layout.addWidget(self.fiverr_order_table)
-        self.fiverr_clear_btn = QPushButton("Clear")
+        orders_layout.addWidget(self.fiverr_order_table)
+
+        clear_row = QHBoxLayout()
+        clear_row.addStretch()
+        self.fiverr_clear_btn = quiet("Clear log")
+        self.fiverr_clear_btn.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
         self.fiverr_clear_btn.clicked.connect(self.fiverr_clear)
-        order_layout.addWidget(self.fiverr_clear_btn)
-        sidebar_layout.addWidget(order_group)
+        clear_row.addWidget(self.fiverr_clear_btn)
+        orders_layout.addLayout(clear_row)
+        self.fiverr_tabs.addTab(orders_widget, "Orders")
 
-        results_splitter.addWidget(scrollable(sidebar, min_width=150))
-        results_splitter.setSizes([700, 180])
-        layout.addWidget(results_splitter)
+        layout.addWidget(self.fiverr_tabs, 1)
 
+        self._fiverr_update_estimate()
         self.fiverr_panel.hide()
         self.fiverr_load_models()
+
+    def _fiverr_update_estimate(self, *_args):
+        """Keep the per-image estimate next to the button that spends it.
+
+        This is a display estimate only. The budget guard is denominated in
+        tokens and cannot express "one image", so image spend does not count
+        against the session or daily cap — see SUGGESTIONS.md.
+        """
+        from services.openai_client import IMAGE_COST_USD
+        model = self.fiverr_image_model_box.currentText()
+        count = self.fiverr_count_spin.value()
+        rate = IMAGE_COST_USD.get(model)
+        if rate is None:
+            self.fiverr_cost_label.setText(f"{count} images · cost unknown")
+            return
+        self.fiverr_cost_label.setText(
+            f"{count} image{'s' if count != 1 else ''} · ≈ ${rate * count:.2f}")
 
     # ── Creator (subscription accounts) ──────────────────────────────────────
     def build_creator_panel(self):
@@ -4160,7 +4189,9 @@ class GodAI(QWidget):
             QMessageBox.warning(self, "Missing Input", "Please enter a business name.")
             return
         if not OpenAIClientWrapper.key_available():
-            QMessageBox.warning(self, "No API Key", "OPENAI_API_KEY is required for DALL-E 3 image generation.")
+            QMessageBox.warning(
+                self, "No API Key",
+                "OPENAI_API_KEY is required to generate logo images.")
             return
 
         count = self.fiverr_count_spin.value()
@@ -4175,6 +4206,7 @@ class GodAI(QWidget):
         self.fiverr_delivery_btn.setEnabled(False)
         self.fiverr_gig_btn.setEnabled(False)
         self.fiverr_stop_btn.setEnabled(True)
+        self.fiverr_stop_btn.show()
         self._fiverr_clear_logo_grid()
 
         if not self.authorize_request("fiverr", provider, model, messages[-1]["content"] if messages else ""):
@@ -4194,9 +4226,10 @@ class GodAI(QWidget):
         brief = self._fiverr_pending_brief
         save_dir = DATA_DIR / "fiverr_output" / datetime.now().strftime("%Y%m%d_%H%M%S")
         self.fiverr_status_label.setText(f"Generating {count} concept(s)...")
-        self.fiverr_cost_label.setText(f"~${0.04 * count:.2f}")
 
-        self.fiverr_image_worker = FiverrImageWorker(self.openai, image_prompt, count, save_dir)
+        self.fiverr_image_worker = FiverrImageWorker(
+            self.openai, image_prompt, count, save_dir,
+            image_model=self.fiverr_image_model_box.currentText())
         self.fiverr_image_worker.image_ready_signal.connect(self._fiverr_on_image_ready)
         self.fiverr_image_worker.all_done_signal.connect(self._fiverr_on_all_done)
         self.fiverr_image_worker.error_signal.connect(self._fiverr_on_image_error)
@@ -4234,6 +4267,7 @@ class GodAI(QWidget):
         self.fiverr_delivery_btn.setEnabled(True)
         self.fiverr_gig_btn.setEnabled(True)
         self.fiverr_stop_btn.setEnabled(False)
+        self.fiverr_stop_btn.hide()
         self.fiverr_save_images_btn.setEnabled(True)
         if hasattr(self, "_fiverr_order_row"):
             from PySide6.QtWidgets import QTableWidgetItem
@@ -4246,6 +4280,7 @@ class GodAI(QWidget):
         self.fiverr_delivery_btn.setEnabled(True)
         self.fiverr_gig_btn.setEnabled(True)
         self.fiverr_stop_btn.setEnabled(False)
+        self.fiverr_stop_btn.hide()
         if hasattr(self, "_fiverr_order_row"):
             from PySide6.QtWidgets import QTableWidgetItem
             self.fiverr_order_table.setItem(self._fiverr_order_row, 2, QTableWidgetItem("Error"))
@@ -4257,6 +4292,7 @@ class GodAI(QWidget):
         self.fiverr_delivery_btn.setEnabled(True)
         self.fiverr_gig_btn.setEnabled(True)
         self.fiverr_stop_btn.setEnabled(False)
+        self.fiverr_stop_btn.hide()
 
     def fiverr_write_delivery(self):
         brief = self._fiverr_get_brief()
@@ -4273,6 +4309,7 @@ class GodAI(QWidget):
         self.fiverr_delivery_btn.setEnabled(False)
         self.fiverr_gig_btn.setEnabled(False)
         self.fiverr_stop_btn.setEnabled(True)
+        self.fiverr_stop_btn.show()
         self.fiverr_tabs.setCurrentIndex(1)
         if not self.authorize_request("fiverr", provider, model, messages[-1]["content"] if messages else ""):
             return
@@ -4294,6 +4331,7 @@ class GodAI(QWidget):
         self.fiverr_delivery_btn.setEnabled(True)
         self.fiverr_gig_btn.setEnabled(True)
         self.fiverr_stop_btn.setEnabled(False)
+        self.fiverr_stop_btn.hide()
 
     def fiverr_write_gig(self):
         brief = self._fiverr_get_brief()
@@ -4310,6 +4348,7 @@ class GodAI(QWidget):
         self.fiverr_delivery_btn.setEnabled(False)
         self.fiverr_gig_btn.setEnabled(False)
         self.fiverr_stop_btn.setEnabled(True)
+        self.fiverr_stop_btn.show()
         self.fiverr_tabs.setCurrentIndex(2)
         if not self.authorize_request("fiverr", provider, model, messages[-1]["content"] if messages else ""):
             return
@@ -4331,6 +4370,7 @@ class GodAI(QWidget):
         self.fiverr_delivery_btn.setEnabled(True)
         self.fiverr_gig_btn.setEnabled(True)
         self.fiverr_stop_btn.setEnabled(False)
+        self.fiverr_stop_btn.hide()
 
     def fiverr_stop(self):
         if self.fiverr_image_worker is not None and self.fiverr_image_worker.isRunning():
@@ -4342,6 +4382,7 @@ class GodAI(QWidget):
         self.fiverr_delivery_btn.setEnabled(True)
         self.fiverr_gig_btn.setEnabled(True)
         self.fiverr_stop_btn.setEnabled(False)
+        self.fiverr_stop_btn.hide()
 
     def fiverr_save_images(self):
         if not self._fiverr_image_paths:
@@ -4359,7 +4400,7 @@ class GodAI(QWidget):
         self.fiverr_delivery_box.clear()
         self.fiverr_gig_box.clear()
         self.fiverr_status_label.setText("Idle")
-        self.fiverr_cost_label.setText("—")
+        self._fiverr_update_estimate()
         self.fiverr_preview_status.setText("No logos generated yet.")
         self.fiverr_save_images_btn.setEnabled(False)
         self._fiverr_image_paths = []
