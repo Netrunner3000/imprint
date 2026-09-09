@@ -25,7 +25,7 @@ Five tabs mirroring the plan: **Artist Profile** (short+long bio, genre tags, si
 | Location | Role |
 |---|---|
 | `agents/music_agent.py` | `MusicAgent` — five-section consultant prompt. |
-| `main.py: build_music_panel()` | Form, five tabs, sidebar. |
+| `main.py: build_music_panel()` | Setup form, model row, five tabs. |
 | `main.py: music_analyse()/music_stop()/music_save()/music_clear()` | Lifecycle. |
 
 ## Extend it
