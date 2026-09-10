@@ -226,7 +226,7 @@ PORT    STATE SERVICE VERSION
 ---
 
 ## 10. Fiverr Agent
-> **What it does:** Three modes — delivery message, gig description, DALL-E logo prompt.
+> **What it does:** Delivery message, gig description, and GPT Image logo concepts.
 
 **Brief to use for all three tests:**
 ```
@@ -252,12 +252,12 @@ Notes: Premium artisan feel, not corporate. Target audience: 25–40 urban profe
 - [ ] Ends with a call to action
 - [ ] Under 400 words
 
-**Test C — Logo Prompt (DALL-E)**
-- Use the image prompt button/mode
-- [ ] Output is a single ready-to-paste prompt (no explanation text around it)
+**Test C — Logo Concepts (GPT Image)**
+- Choose a current GPT Image model and use Generate Logos
+- [ ] One or more PNG concepts appear in Logo Preview
 - [ ] Includes "vector logo, transparent background" or similar
 - [ ] Describes navy and gold colour palette
-- [ ] 1–3 sentences max
+- [ ] The run appears in Orders and Save All Images is enabled
 
 ---
 

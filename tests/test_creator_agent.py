@@ -148,7 +148,7 @@ def test_refusal_explains_why():
 
 def test_a_refused_prompt_never_reaches_the_network(monkeypatch):
     """The guard has to run before the request, or it costs money to be told no."""
-    client = HiggsfieldClient(api_key="test-key")
+    client = HiggsfieldClient(key_id="test-id", key_secret="test-secret")
 
     def explode(*args, **kwargs):
         raise AssertionError("a refused prompt must not be sent")
@@ -159,16 +159,21 @@ def test_a_refused_prompt_never_reaches_the_network(monkeypatch):
 
 
 def test_missing_key_is_a_clear_error(monkeypatch):
-    monkeypatch.delenv("HIGGSFIELD_API_KEY", raising=False)
+    monkeypatch.delenv("HF_API_KEY_ID", raising=False)
+    monkeypatch.delenv("HF_API_KEY_SECRET", raising=False)
+    monkeypatch.delenv("HIGGSFIELD_API_KEY_ID", raising=False)
+    monkeypatch.delenv("HIGGSFIELD_API_KEY_SECRET", raising=False)
     client = HiggsfieldClient()
     assert not client.configured
-    with pytest.raises(RuntimeError, match="HIGGSFIELD_API_KEY"):
+    with pytest.raises(RuntimeError, match="HF_API_KEY_ID"):
         client.generate_video("a perfectly ordinary teaser")
 
 
 def test_video_job_done_states():
     assert VideoJob("1", status="completed").done
     assert VideoJob("1", status="failed").done
+    assert VideoJob("1", status="nsfw").done
+    assert VideoJob("1", status="canceled").done
     assert not VideoJob("1", status="queued").done
 
 

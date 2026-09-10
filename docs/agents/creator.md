@@ -1,14 +1,20 @@
-# CREATOR — subscription account planning & drafting
+# CREATOR — shared content production
 
 `key: creator` · class: `agents/creator_agent.py → CreatorAgent` · panel: `build_creator_panel()` · handler: `creator_generate()`
 
 ## What it does
-Plans and drafts for subscription creator accounts (OnlyFans and similar):
-content calendar, feed captions, pay-per-view copy, welcome messages,
-off-platform promos, profile bios, and earnings tracking.
+Creates concepts, captions, campaigns, posting plans, promotional asset briefs,
+and calendars for every Imprint venture. A profile records its platform or
+venture, so books and publishing, music, AltMerch, OnlyFans, and future work can
+share one production tool without sharing business-specific assumptions.
+
+OnlyFans trends, monetization, market context, and strategy live in the
+top-level OnlyFans workspace. Its **Create Campaign in Creator** action fills a
+structured Creator brief while retaining source, freshness, confidence, risk,
+format, pricing hypothesis, and requested deliverables.
 
 ## What it deliberately does not do
-**It does not post, and it has no send path.**
+**It does not publish unattended, and it has no direct send path.**
 
 OnlyFans has no public API — the limited access introduced in 2024 is for
 verified business partners only. Every third-party "OnlyFans API" is browser
@@ -39,10 +45,10 @@ just in the dialog — a rule enforced only by a UI prompt is not enforced.
 ## Inputs (panel controls)
 | Control | Purpose |
 |---|---|
-| Account / Handle / Type | Which account, and under what basis. |
+| Profile / Handle or project / Platform or venture | What is being created for and where it will be used. |
 | Authorised by | Managed accounts only. Who consented. |
 | Disclosure | Personas only. How the account discloses itself. |
-| Draft | post · ppv · welcome · promo · bio · campaign. |
+| Draft | post · caption · campaign · posting plan · promo assets · hooks · bio · PPV · welcome · promo. |
 | Price (USD) | PPV only — shapes the value argument in the copy. |
 | Promo channel | Promo only — X, Reddit, TikTok, Instagram, Threads. |
 | Brief | What it is about. Concrete briefs give non-generic drafts. |
@@ -57,6 +63,20 @@ by hand — `draft → approved → posted` is a status you set yourself), and
 `Generate Teaser` sends a safe-for-work prompt to the Higgsfield API for a
 promo clip aimed at the off-platform funnels where subscription traffic
 actually originates.
+
+Imprint uses Higgsfield's current request contract: a key ID + secret pair,
+model-specific endpoints, presigned reference-image uploads, and the returned
+status/cancel URLs. Add `HF_API_KEY_ID` and `HF_API_KEY_SECRET` to the private
+`.env`, then enable **Higgsfield** in the API permissions row. The Creator panel
+asks the official estimate endpoint for the exact request, shows that quote in
+the normal budget approval, and only then submits the paid render.
+
+Renders can be canceled while queued. Once processing begins Higgsfield cannot
+cancel them, so Imprint keeps watching and saves the finished file. Job state,
+price, policy outcome and correlation ID are stored in `creator_video_jobs`, and
+the output is copied into the Media library because hosted output URLs are not
+permanent. Select a Calendar row before clicking `Generate Teaser` to attach the
+finished video directly to that item.
 
 Higgsfield's Terms of Use prohibit **sexually explicit material** and
 **unauthorised images of other people**, and moderate prompts, reference images
@@ -83,7 +103,7 @@ header substrings and stores the raw rows alongside the totals.
 | Location | Role |
 |---|---|
 | `agents/creator_agent.py` | `CreatorAgent`, `require_ready()`, prompt construction. |
-| `services/higgsfield_client.py` | Video API client and the content-policy guard. |
+| `services/higgsfield_client.py` | Official video API lifecycle, upload, estimate, cancellation and content-policy guard. |
 | `services/creator_csv.py` | Earnings statement parsing and ingest. |
 | `main.py: build_creator_panel()` | Account section, compose section, seven tabs. |
 | `main.py: creator_generate()/creator_schedule()/creator_import_earnings()` | Lifecycle. |

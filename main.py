@@ -80,7 +80,7 @@ from services.higgsfield_client import (
 )
 from services.creator_csv import ingest_creator_csv
 from services.creator_profile import (
-    SEGMENTS, load_persona, load_voice, persona_seed, reference_images,
+    SEGMENTS, load_persona, load_voice, reference_images,
     save_persona, save_voice,
 )
 from services.creator_insights import (
@@ -114,12 +114,13 @@ WORKSPACES = {
     "Web": ("webdesign",),
     "Gigs": ("fiverr",),
     "Creator": ("creator",),
+    "OnlyFans": ("onlyfans",),
 }
 
 # Agents that own a dedicated `<name>_panel` rather than sharing `normal_panel`.
 # update_agent_ui walks this instead of a chain of `is_x` booleans.
 CUSTOM_PANELS = ("audiobook", "author", "manuscript", "music", "video",
-                 "social", "fiverr", "webdesign", "creator")
+                 "social", "fiverr", "webdesign", "creator", "onlyfans")
 WORKSPACE_LABELS = {
     "author": "Draft",
     "manuscript": "Publish",
@@ -130,6 +131,7 @@ WORKSPACE_LABELS = {
     "social": "Social",
     "fiverr": "Client Gigs",
     "creator": "Creator",
+    "onlyfans": "OnlyFans",
 }
 
 SETTINGS_FILE = CONFIG_DIR / "settings.json"
@@ -162,7 +164,7 @@ AGENT_RECOMMENDATIONS = {
     },
     "fiverr": {
         "provider": "openai", "model": "gpt-4o-mini",
-        "reason": "Gig copy sits next to DALL·E logo generation — staying on OpenAI "
+        "reason": "Gig copy sits next to GPT Image logo generation — staying on OpenAI "
                   "keeps prompt style and image calls on one provider, cheaply.",
     },
     "author": {
@@ -218,6 +220,7 @@ AGENT_PRETTY_NAMES = {
     "chat": "Studio Assistant",
     "fiverr": "Client Gigs",
     "creator": "Creator",
+    "onlyfans": "OnlyFans",
     "author": "Draft",
     "manuscript": "Publish",
     "music": "Music",
@@ -237,7 +240,7 @@ from ui.audio_player import AudiobookPlayer
 from ui.workers import (
     VideoWorker,
     ChatWorker, SubprocessWorker, ModelPullWorker, FiverrImageWorker, ShortsWorker,
-    HiggsfieldWorker,
+    HiggsfieldEstimateWorker, HiggsfieldWorker, OpenAIVideoWorker,
 )
 from ui.forms import (
     CONTENT_MAX_WIDTH, HEADER_HEIGHT, LG, MD, RAIL_LEFT_WIDTH,
@@ -247,6 +250,8 @@ from ui.forms import (
 from ui.widgets import (
     FlowLayout, CollapsibleSection, scrollable, let_combos_shrink,
 )
+from services.creator_trends import format_creator_brief
+from ui.creator_trends import OnlyFansDashboard
 from agents.social_agent import (
     ANGLES, SUBJECT_KINDS, build_clip_brief_messages,
     build_post_messages, over_limit, split_variants,
@@ -1561,6 +1566,12 @@ class GodAI(QWidget):
         self.allow_qwen_checkbox = QCheckBox("Qwen")
         self.allow_qwen_checkbox.setChecked(False)
         top_row_3.addWidget(self.allow_qwen_checkbox)
+
+        self.allow_higgsfield_checkbox = QCheckBox("Higgsfield")
+        self.allow_higgsfield_checkbox.setChecked(False)
+        self.allow_higgsfield_checkbox.setToolTip(
+            "Allow paid promo-video requests from the Creator workspace.")
+        top_row_3.addWidget(self.allow_higgsfield_checkbox)
 
         normal_layout.addWidget(top_row_3_container)
 
@@ -2903,7 +2914,7 @@ class GodAI(QWidget):
           on this page that spends money per click, and until now the model it
           used was hardcoded and invisible — the one visible model box drives
           the *text* outputs only, which is why nothing appeared to recommend
-          DALL-E for the graphics work it was already doing.
+          GPT Image for the graphics work it was already doing.
         * The Status / Est. Cost / Order Log sidebar is gone. Status is a line
           under the buttons, the cost estimate sits beside the button that
           incurs it, and the order log is a tab rather than a 190px column
@@ -3855,6 +3866,7 @@ class GodAI(QWidget):
         a video pipeline of its own.
         """
         from services import video_studio
+        from services.media_catalog import MEDIA_PROVIDERS
 
         self.video_panel = QWidget()
         self.video_panel.setObjectName("VideoPanel")
@@ -3902,6 +3914,13 @@ class GodAI(QWidget):
                                       "30s")
         self.video_length_box.currentTextChanged.connect(self._video_update_estimate)
 
+        self.video_visual_provider_box = combo(list(MEDIA_PROVIDERS), "OpenAI")
+        self.video_visual_model_box = QComboBox()
+        self.video_visual_provider_box.currentTextChanged.connect(
+            self._video_visual_provider_changed)
+        self.video_visual_model_box.currentIndexChanged.connect(
+            self._video_visual_model_changed)
+
         self.video_aspect_field = field("Aspect", self.video_aspect_box)
         self.video_length_field = field("Clip length", self.video_length_box)
 
@@ -3910,11 +3929,20 @@ class GodAI(QWidget):
         brief.setVerticalSpacing(MD)
         brief.addWidget(field("Topic", self.video_topic_input), 0, 0, 1, 2, Qt.AlignTop)
         brief.addWidget(field("Format", self.video_format_box), 0, 2, Qt.AlignTop)
-        brief.addWidget(self.video_aspect_field, 1, 0, Qt.AlignTop)
-        brief.addWidget(self.video_length_field, 1, 1, Qt.AlignTop)
+        brief.addWidget(field("Visual provider", self.video_visual_provider_box),
+                        1, 0, Qt.AlignTop)
+        brief.addWidget(field("Visual model", self.video_visual_model_box),
+                        1, 1, 1, 2, Qt.AlignTop)
+        brief.addWidget(self.video_aspect_field, 2, 0, Qt.AlignTop)
+        brief.addWidget(self.video_length_field, 2, 1, Qt.AlignTop)
         for column in range(3):
             brief.setColumnStretch(column, 1)
         render.addLayout(brief)
+
+        self.video_visual_note = QLabel("")
+        self.video_visual_note.setObjectName("EstimateLine")
+        self.video_visual_note.setWordWrap(True)
+        render.addWidget(self.video_visual_note)
 
         # ── Actions ─────────────────────────────────────────────────────
         actions = QHBoxLayout()
@@ -4003,10 +4031,74 @@ class GodAI(QWidget):
         layout.addWidget(self.video_tabs, 1)
 
         self.video_worker = None
+        self.video_estimate_worker = None
+        self._video_request_token = None
+        self._video_external_context = {}
+        self._video_active_kind = ""
+        self._video_visual_provider_changed(
+            self.video_visual_provider_box.currentText())
         self._video_format_changed(self.video_format_box.currentText())
         self.video_panel.hide()
 
     # ── Video handlers ───────────────────────────────────────────────────────
+    def _video_visual_provider_changed(self, provider: str):
+        """List only media models that have a real execution path."""
+        from services.media_catalog import MODELS
+
+        self.video_visual_model_box.blockSignals(True)
+        self.video_visual_model_box.clear()
+        for option in MODELS:
+            if option.provider == provider:
+                self.video_visual_model_box.addItem(option.label, option)
+        self.video_visual_model_box.blockSignals(False)
+        self._video_visual_model_changed()
+
+    def _video_media_selection(self):
+        return self.video_visual_model_box.currentData()
+
+    def _video_set_lengths(self, values: tuple[int, ...], preferred: int) -> None:
+        current = self.video_length_box.currentText()
+        wanted = current if current in {f"{n}s" for n in values} else f"{preferred}s"
+        self.video_length_box.blockSignals(True)
+        self.video_length_box.clear()
+        self.video_length_box.addItems([f"{n}s" for n in values])
+        self.video_length_box.setCurrentText(wanted)
+        self.video_length_box.blockSignals(False)
+
+    def _video_visual_model_changed(self, *_args):
+        from services import video_studio
+        from services.media_catalog import SORA_SHUTDOWN_DATE
+
+        selection = self._video_media_selection()
+        if selection is None:
+            return
+        direct = selection.kind == "direct_video"
+        if direct:
+            self.video_format_box.setCurrentText("Social clip")
+            self.video_format_box.setEnabled(False)
+            self._video_set_lengths((4, 8, 12), 8)
+            if (selection.provider == "OpenAI"
+                    and self.video_aspect_box.currentText() == "Square 1:1"):
+                self.video_aspect_box.setCurrentText("Vertical 9:16")
+        else:
+            self.video_format_box.setEnabled(True)
+            self._video_set_lengths(video_studio.CLIP_SECONDS, 30)
+
+        if selection.provider == "OpenAI" and selection.kind == "scene_images":
+            note = (
+                f"{selection.note} One image is generated for each scene. "
+                "DALL·E 2 and 3 are not listed because OpenAI retired and "
+                "removed both APIs; GPT Image is their supported replacement.")
+        elif selection.provider == "OpenAI":
+            note = (
+                f"{selection.note} Sora's API is deprecated and scheduled to "
+                f"shut down on {SORA_SHUTDOWN_DATE.strftime('%d %B %Y')}. "
+                "It is suitable only for a direct 4, 8 or 12 second clip.")
+        else:
+            note = selection.note
+        self.video_visual_note.setText(note)
+        self._video_format_changed(self.video_format_box.currentText())
+
     def _video_format_changed(self, fmt: str):
         """Clip controls only apply to a clip."""
         is_clip = fmt == "Social clip"
@@ -4018,14 +4110,40 @@ class GodAI(QWidget):
 
     def _video_overrides(self) -> dict:
         from services import video_studio
-        if self.video_format_box.currentText() != "Social clip":
-            return {}
-        seconds = int(self.video_length_box.currentText().rstrip("s") or 30)
-        return video_studio.clip_overrides(
-            self.video_aspect_box.currentText(), seconds)
+        selection = self._video_media_selection()
+        overrides = {}
+        if self.video_format_box.currentText() == "Social clip":
+            seconds = int(self.video_length_box.currentText().rstrip("s") or 30)
+            overrides.update(video_studio.clip_overrides(
+                self.video_aspect_box.currentText(), seconds))
+        if selection is not None:
+            if selection.kind == "scene_images":
+                overrides.update({
+                    "visuals.source": "ai",
+                    "visuals.image_model": selection.model_id,
+                })
+            elif selection.kind == "stock":
+                overrides["visuals.source"] = "pexels"
+            elif selection.kind == "local":
+                overrides["visuals.source"] = "gradient"
+        return overrides
 
     def _video_estimate(self) -> dict:
         from services import video_studio
+        from services.media_catalog import SORA_USD_PER_SECOND
+
+        selection = self._video_media_selection()
+        if (selection is not None and selection.provider == "OpenAI"
+                and selection.kind == "direct_video"):
+            seconds = int(self.video_length_box.currentText().rstrip("s") or 4)
+            return {
+                "scenes": 1, "words": 0,
+                "total": round(SORA_USD_PER_SECOND[selection.model_id] * seconds, 2),
+                "direct": True,
+            }
+        if (selection is not None and selection.provider == "Higgsfield"
+                and selection.kind == "direct_video"):
+            return {"provider_estimate": True, "direct": True}
         try:
             cfg = video_studio.load_config(self._video_overrides())
         except Exception:
@@ -4046,16 +4164,27 @@ class GodAI(QWidget):
         if not estimate:
             self.video_cost_label.setText("")
             return
+        if estimate.get("provider_estimate"):
+            self.video_cost_label.setText("Exact provider quote before approval")
+            return
         eur = estimate["total"] * eur_per_usd()
-        self.video_cost_label.setText(
-            f"{estimate['scenes']} scenes · ~{estimate['words']} words · "
-            f"≈ €{eur:.2f}")
+        if estimate.get("direct"):
+            self.video_cost_label.setText(
+                f"Direct clip · ${estimate['total']:.2f} · ≈ €{eur:.2f}")
+        else:
+            self.video_cost_label.setText(
+                f"{estimate['scenes']} scenes · ~{estimate['words']} words · "
+                f"budget reserve ≈ €{eur:.2f}")
 
     def video_render(self):
         from services import video_studio
         from services.per_unit_pricing import eur_per_usd
 
         if self.video_worker is not None and self.video_worker.isRunning():
+            return
+        selection = self._video_media_selection()
+        if selection is not None and selection.kind == "direct_video":
+            self._video_render_direct(selection)
             return
         estimate = self._video_estimate()
         if not estimate:
@@ -4065,19 +4194,16 @@ class GodAI(QWidget):
 
         topic = self.video_topic_input.text().strip()
         cost_eur = round(estimate["total"] * eur_per_usd(), 4)
-        if not self.authorize_request(
+        token = self.authorize_request(
                 "video", "openai", "vidforge-pipeline",
                 topic or "next topic from topics.txt",
                 label=self.video_format_box.currentText().lower(),
-                flat_cost_eur=cost_eur):
+                flat_cost_eur=cost_eur)
+        if not token:
             return
+        self._video_request_token = token
 
-        self.video_log.clear()
-        self.video_progress.setValue(0)
-        self.video_status_label.setText("Starting…")
-        self.video_render_btn.setEnabled(False)
-        self.video_stop_btn.show()
-        self.video_stop_btn.setEnabled(True)
+        self._video_begin("pipeline", can_cancel=True)
 
         self.video_worker = VideoWorker(topic=topic,
                                         overrides=self._video_overrides())
@@ -4089,32 +4215,238 @@ class GodAI(QWidget):
         self.video_worker.error_signal.connect(self._video_on_error)
         self.video_worker.start()
 
+    def _video_begin(self, kind: str, *, can_cancel: bool) -> None:
+        self._video_active_kind = kind
+        self.video_log.clear()
+        self.video_progress.setValue(0)
+        self.video_status_label.setText("Starting…")
+        self.video_render_btn.setEnabled(False)
+        self.video_stop_btn.setText(
+            "Stop" if kind == "pipeline"
+            else "Cancel" if can_cancel else "Cannot Cancel")
+        self.video_stop_btn.setEnabled(can_cancel)
+        self.video_stop_btn.show()
+
+    def _video_direct_parameters(self) -> tuple[int, str, str]:
+        seconds = int(self.video_length_box.currentText().rstrip("s") or 4)
+        aspect = self.video_aspect_box.currentText()
+        sora_size = ("1280x720" if aspect == "Landscape 16:9"
+                     else "720x1280")
+        higgsfield_aspect = {
+            "Landscape 16:9": "16:9",
+            "Vertical 9:16": "9:16",
+            "Square 1:1": "1:1",
+        }.get(aspect, "16:9")
+        return seconds, sora_size, higgsfield_aspect
+
+    def _video_render_direct(self, selection) -> None:
+        from services import video_studio
+
+        topic = self.video_topic_input.text().strip()
+        if not topic:
+            QMessageBox.warning(
+                self, "Topic Needed",
+                "Direct video models need a prompt in the Topic field.")
+            return
+        seconds, sora_size, higgsfield_aspect = self._video_direct_parameters()
+        self._video_external_context = {
+            "slug": "", "path": "", "topic": topic,
+            "provider": selection.provider.lower(), "model": selection.model_id,
+            "seconds": seconds, "job_id": "", "provider_completed": False,
+            "cancel_requested": False,
+        }
+
+        if selection.provider == "OpenAI":
+            from services.media_catalog import sora_cost_usd, sora_is_retired
+            from services.per_unit_pricing import eur_per_usd
+
+            if sora_is_retired():
+                QMessageBox.warning(
+                    self, "Sora API Retired",
+                    "OpenAI scheduled the Sora API to shut down on "
+                    "24 September 2026. Choose Higgsfield or a scene-image "
+                    "pipeline model instead.")
+                return
+            if not self.openai.key_available():
+                QMessageBox.information(
+                    self, "OpenAI Key Needed",
+                    "Set OPENAI_API_KEY in Imprint's private .env file.")
+                return
+            if not self.allow_openai_checkbox.isChecked():
+                QMessageBox.warning(
+                    self, "OpenAI Not Enabled",
+                    "Enable OpenAI in the API permissions row first.")
+                return
+            cost_usd = sora_cost_usd(selection.model_id, seconds)
+            token = self.authorize_request(
+                "video", "openai", selection.model_id, topic,
+                label="direct video", flat_cost_eur=round(
+                    cost_usd * eur_per_usd(), 6))
+            if not token:
+                return
+            self._video_request_token = token
+            try:
+                slug, output_path = video_studio.external_output_path(
+                    topic, selection.model_id)
+            except Exception as exc:
+                self._video_on_error(str(exc))
+                return
+            self._video_external_context.update({
+                "slug": slug, "path": str(output_path),
+            })
+            self._video_begin("sora", can_cancel=False)
+            self.video_status_label.setText(
+                "Submitting to Sora… This legacy API cannot cancel a job "
+                "after submission.")
+            self.video_worker = OpenAIVideoWorker(
+                self.openai, topic, output_path, model=selection.model_id,
+                seconds=seconds, size=sora_size)
+            self.video_worker.status_signal.connect(
+                self.video_status_label.setText)
+            self.video_worker.progress_signal.connect(self._video_on_progress)
+            self.video_worker.job_signal.connect(self._video_external_job)
+            self.video_worker.done_signal.connect(self._video_external_done)
+            self.video_worker.error_signal.connect(self._video_on_error)
+            self.video_worker.start()
+            return
+
+        if selection.provider == "Higgsfield":
+            client = HiggsfieldClient()
+            if not client.configured:
+                QMessageBox.information(
+                    self, "Higgsfield Key Needed",
+                    "Set HF_API_KEY_ID and HF_API_KEY_SECRET in Imprint's "
+                    "private .env file.")
+                return
+            if not self.allow_higgsfield_checkbox.isChecked():
+                QMessageBox.warning(
+                    self, "Higgsfield Not Enabled",
+                    "Enable Higgsfield in the API permissions row first.")
+                return
+            self._video_begin("higgsfield-estimate", can_cancel=True)
+            self.video_status_label.setText("Preparing Higgsfield estimate…")
+            self.video_estimate_worker = HiggsfieldEstimateWorker(
+                client, topic, duration=seconds,
+                aspect_ratio=higgsfield_aspect, resolution="720")
+            self.video_worker = self.video_estimate_worker
+            self.video_estimate_worker.status_signal.connect(
+                self.video_status_label.setText)
+            self.video_estimate_worker.done_signal.connect(
+                lambda request, estimate, c=client:
+                self._video_higgsfield_estimated(c, request, estimate))
+            self.video_estimate_worker.error_signal.connect(self._video_on_error)
+            self.video_estimate_worker.start()
+
+    def _video_higgsfield_estimated(self, client, request, estimate) -> None:
+        from services.per_unit_pricing import eur_per_usd
+
+        context = self._video_external_context
+        if context.get("cancel_requested"):
+            self._video_reset("Estimate cancelled.")
+            return
+        token = self.authorize_request(
+            "video", "higgsfield", request.endpoint, context["topic"],
+            label="direct video", flat_cost_eur=round(
+                estimate.usd * eur_per_usd(), 6))
+        if not token:
+            self._video_reset("Render not approved.")
+            return
+        self._video_request_token = token
+        from services import video_studio
+        try:
+            slug, output_path = video_studio.external_output_path(
+                context["topic"], context["model"])
+        except Exception as exc:
+            self._video_on_error(str(exc))
+            return
+        context.update({
+            "slug": slug, "path": str(output_path),
+            "model": request.endpoint,
+        })
+        self._video_begin("higgsfield", can_cancel=True)
+        self.video_worker = HiggsfieldWorker(
+            client, context["topic"], context["path"],
+            prepared_request=request)
+        self.video_worker.status_signal.connect(self.video_status_label.setText)
+        self.video_worker.job_signal.connect(self._video_external_job)
+        self.video_worker.done_signal.connect(self._video_external_done)
+        self.video_worker.error_signal.connect(self._video_on_error)
+        self.video_worker.start()
+
+    def _video_external_job(self, job) -> None:
+        self._video_external_context["job_id"] = getattr(
+            job, "job_id", "")
+        if getattr(job, "status", "") == "completed":
+            # The provider has already produced the billable asset. Preserve
+            # that fact even if saving it to disk or indexing it later fails.
+            self._video_external_context["provider_completed"] = True
+
+    def _video_external_done(self, path: str) -> None:
+        from services import video_studio
+
+        context = self._video_external_context
+        try:
+            video_studio.record_external(
+                slug=context["slug"], path=Path(path), topic=context["topic"],
+                provider=context["provider"], model=context["model"],
+                seconds=context["seconds"], job_id=context.get("job_id", ""))
+        except Exception as exc:
+            self._video_on_error(
+                f"The provider completed the clip, but Imprint could not add "
+                f"it to the library: {exc}")
+            return
+        self._video_on_done(context["slug"], path)
+
     def _video_on_progress(self, percent: int, detail: str):
         self.video_progress.setValue(percent)
         if detail:
             self.video_status_label.setText(detail)
 
     def _video_on_done(self, slug: str, path: str):
-        self.record_request("video", f"rendered {slug}")
-        self.video_status_label.setText(f"Done — {Path(path).name}")
-        self.video_render_btn.setEnabled(True)
-        self.video_stop_btn.hide()
+        self.record_request(self._video_request_token or "video",
+                            f"rendered {slug}")
+        self._video_request_token = None
+        self._video_reset(f"Done — {Path(path).name}")
         self.refresh_video_library()
 
     def _video_on_error(self, error: str):
-        # A cancelled or failed render still spent whatever it got through, but
-        # the authorised amount was for a whole video. Release it rather than
-        # bill for a video that does not exist.
-        self.abandon_request("video")
-        self.video_status_label.setText(f"[Error] {error}")
+        provider_completed = (
+            self._video_active_kind in {"sora", "higgsfield"}
+            and self._video_external_context.get("provider_completed", False)
+        )
+        if provider_completed:
+            self.record_request(
+                self._video_request_token or "video",
+                "provider completed render; local save/index failed")
+        else:
+            # A failed or cancelled render releases the whole-video reserve.
+            self.abandon_request(self._video_request_token or "video")
+        self._video_request_token = None
         self.video_log.append(error)
+        self._video_reset(f"[Error] {error}")
+
+    def _video_reset(self, status: str) -> None:
+        self.video_status_label.setText(status)
         self.video_render_btn.setEnabled(True)
+        self.video_stop_btn.setEnabled(False)
         self.video_stop_btn.hide()
+        self._video_active_kind = ""
+        self._video_visual_model_changed()
 
     def video_stop(self):
+        if self._video_active_kind == "sora":
+            self.video_status_label.setText(
+                "Sora has no cancel operation. Imprint will keep watching and "
+                "save the paid result.")
+            return
         if self.video_worker is not None:
+            if self._video_active_kind == "higgsfield-estimate":
+                self._video_external_context["cancel_requested"] = True
             self.video_worker.cancel()
-            self.video_status_label.setText("Cancelling after this stage…")
+            if self._video_active_kind.startswith("higgsfield"):
+                self.video_status_label.setText("Requesting cancellation…")
+            else:
+                self.video_status_label.setText("Cancelling after this stage…")
 
     def refresh_video_library(self):
         from services import video_studio
@@ -4167,9 +4499,33 @@ class GodAI(QWidget):
         if target and target.exists():
             QDesktopServices.openUrl(QUrl.fromLocalFile(str(target)))
 
-    # ── Creator (subscription accounts) ──────────────────────────────────────
+    # ── OnlyFans venture intelligence ────────────────────────────────────────
+    def build_onlyfans_panel(self):
+        """Business intelligence stays with the venture, not the making tool."""
+        self.onlyfans_panel = QWidget()
+        self.onlyfans_panel.setObjectName("OnlyFansPanel")
+        layout = QVBoxLayout(self.onlyfans_panel)
+        layout.setContentsMargins(0, 0, 0, 0)
+        self.onlyfans_dashboard = OnlyFansDashboard()
+        self.onlyfans_dashboard.campaign_requested.connect(
+            self._onlyfans_create_campaign)
+        layout.addWidget(self.onlyfans_dashboard)
+        self.onlyfans_panel.hide()
+
+    def _onlyfans_create_campaign(self, context: dict) -> None:
+        """Carry a selected business signal into the shared Creator tool."""
+        self.select_agent("creator")
+        self.creator_platform_box.setCurrentText("OnlyFans")
+        self.creator_kind_box.setCurrentText("campaign")
+        self.creator_brief_input.setPlainText(format_creator_brief(context))
+        self.creator_tabs.setCurrentIndex(0)
+        self.creator_status_label.setText(
+            "OnlyFans opportunity loaded — choose an account, review the brief, then Draft.")
+        self.creator_brief_input.setFocus()
+
+    # ── Creator (shared content production) ──────────────────────────────────
     def build_creator_panel(self):
-        """Plan and draft for subscription creator accounts.
+        """Plan and draft content for any Imprint venture or platform.
 
         Deliberately has no send path. There is no OnlyFans API to post
         through, and the automation their terms allow is the kind that assists
@@ -4195,11 +4551,16 @@ class GodAI(QWidget):
         layout.setSpacing(LG)
 
         # ── Account ─────────────────────────────────────────────────────
-        layout.addWidget(section("Account"))
+        layout.addWidget(section("Content profile"))
 
         self.creator_account_box = QComboBox()
         self.creator_account_box.currentIndexChanged.connect(self._creator_account_changed)
         self.creator_handle_input = line_edit("@handle")
+        self.creator_platform_box = combo([
+            "General", "OnlyFans", "Writing / Publishing", "Music",
+            "AltMerch", "Instagram", "TikTok", "X / Twitter", "Reddit",
+            "YouTube", "Other",
+        ], "General")
         self.creator_type_box = combo(["own", "managed", "persona"])
         self.creator_type_box.currentTextChanged.connect(self._creator_type_changed)
         self.creator_consent_input = line_edit("Who authorised this, and when")
@@ -4215,10 +4576,11 @@ class GodAI(QWidget):
         account = QGridLayout()
         account.setHorizontalSpacing(MD)
         account.setVerticalSpacing(MD)
-        account.addWidget(field("Account", self.creator_account_box), 0, 0, Qt.AlignTop)
-        account.addWidget(field("Handle", self.creator_handle_input), 0, 1, Qt.AlignTop)
-        account.addWidget(field("Type", self.creator_type_box), 0, 2, Qt.AlignTop)
-        account.addWidget(self.creator_consent_field, 1, 0, 1, 2, Qt.AlignTop)
+        account.addWidget(field("Profile", self.creator_account_box), 0, 0, Qt.AlignTop)
+        account.addWidget(field("Handle / project", self.creator_handle_input), 0, 1, Qt.AlignTop)
+        account.addWidget(field("Platform / venture", self.creator_platform_box), 0, 2, Qt.AlignTop)
+        account.addWidget(field("Ownership", self.creator_type_box), 1, 0, Qt.AlignTop)
+        account.addWidget(self.creator_consent_field, 1, 1, Qt.AlignTop)
         account.addWidget(self.creator_disclosure_field, 1, 2, Qt.AlignTop)
         for column in range(3):
             account.setColumnStretch(column, 1)
@@ -4226,10 +4588,10 @@ class GodAI(QWidget):
 
         account_actions = QHBoxLayout()
         account_actions.setSpacing(SM)
-        self.creator_save_account_btn = QPushButton("Save Account")
+        self.creator_save_account_btn = QPushButton("Save Profile")
         self.creator_save_account_btn.clicked.connect(self.creator_save_account)
         account_actions.addWidget(self.creator_save_account_btn)
-        self.creator_delete_account_btn = quiet("Remove account")
+        self.creator_delete_account_btn = quiet("Remove profile")
         self.creator_delete_account_btn.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
         self.creator_delete_account_btn.clicked.connect(self.creator_delete_account)
         account_actions.addWidget(self.creator_delete_account_btn)
@@ -4240,7 +4602,8 @@ class GodAI(QWidget):
         layout.addWidget(section("Compose"))
 
         self.creator_kind_box = combo(
-            ["post", "ppv", "welcome", "promo", "bio", "campaign", "hooks"])
+            ["post", "caption", "campaign", "posting_plan", "promo_assets",
+             "hooks", "bio", "ppv", "welcome", "promo"])
         self.creator_kind_box.currentTextChanged.connect(self._creator_kind_changed)
         self.creator_price_input = line_edit("12.00")
         self.creator_segment_box = combo(
@@ -4304,6 +4667,12 @@ class GodAI(QWidget):
         self.creator_video_btn.clicked.connect(self.creator_generate_video)
         actions.addWidget(self.creator_video_btn)
 
+        self.creator_video_cancel_btn = QPushButton("Cancel Teaser")
+        self.creator_video_cancel_btn.setObjectName("DangerAction")
+        self.creator_video_cancel_btn.clicked.connect(self.creator_cancel_video)
+        self.creator_video_cancel_btn.hide()
+        actions.addWidget(self.creator_video_cancel_btn)
+
         self.creator_stop_btn = QPushButton("Stop")
         self.creator_stop_btn.setObjectName("DangerAction")
         self.creator_stop_btn.clicked.connect(self.creator_stop)
@@ -4340,8 +4709,8 @@ class GodAI(QWidget):
         self.creator_earnings_output = QTextEdit()
         self.creator_earnings_output.setReadOnly(True)
         self.creator_earnings_output.setPlaceholderText(
-            "No earnings imported yet. There is no OnlyFans API, so export the "
-            "statement from the site and import the CSV here.")
+            "No performance imported yet. When a platform has no supported "
+            "analytics API, export its statement and import the CSV here.")
         self.creator_revenue_btn = QPushButton("Record Revenue")
         self.creator_revenue_btn.clicked.connect(self.creator_record_revenue)
         self.creator_import_btn = QPushButton("Import Earnings CSV")
@@ -4389,6 +4758,9 @@ class GodAI(QWidget):
         layout.addWidget(self.creator_tabs, 1)
 
         self.creator_worker = None
+        self.creator_video_estimate_worker = None
+        self.creator_video_worker = None
+        self._creator_video_context = {}
         self.creator_panel.hide()
         self._creator_type_changed(self.creator_type_box.currentText())
         self._creator_kind_changed(self.creator_kind_box.currentText())
@@ -4430,7 +4802,7 @@ class GodAI(QWidget):
             (self.creator_kind_field, True),
             (self.creator_price_field, kind == "ppv"),
             # Audience only shapes a message aimed at someone.
-            (self.creator_segment_field, kind in ("welcome", "ppv", "post")),
+            (self.creator_segment_field, kind in ("welcome", "ppv", "post", "caption")),
             (self.creator_channel_field, kind == "promo"),
         ]
         self._creator_reflow_compose(wanted)
@@ -4458,11 +4830,12 @@ class GodAI(QWidget):
         try:
             with get_connection() as conn:
                 rows = conn.execute(
-                    "SELECT id, handle, account_type FROM creator_accounts "
+                    "SELECT id, handle, platform, account_type FROM creator_accounts "
                     "ORDER BY handle").fetchall()
             for row in rows:
                 self.creator_account_box.addItem(
-                    f"{row['handle']}  ({row['account_type']})", row["id"])
+                    f"{row['handle']}  ({row['platform']} · {row['account_type']})",
+                    row["id"])
         except Exception as exc:
             self._note_failure("creator: load accounts", exc)
         self.creator_account_box.blockSignals(False)
@@ -4474,6 +4847,12 @@ class GodAI(QWidget):
         if not account:
             return
         self.creator_handle_input.setText(account.get("handle", ""))
+        platform = account.get("platform", "General") or "General"
+        platform_index = self.creator_platform_box.findText(
+            platform, Qt.MatchFixedString)
+        if platform_index < 0 and platform.lower() == "onlyfans":
+            platform_index = self.creator_platform_box.findText("OnlyFans")
+        self.creator_platform_box.setCurrentIndex(max(0, platform_index))
         self.creator_type_box.setCurrentText(account.get("account_type", "own"))
         self.creator_consent_input.setText(account.get("consent_holder", ""))
         self.creator_disclosure_input.setText(account.get("disclosure", ""))
@@ -4501,9 +4880,12 @@ class GodAI(QWidget):
     def creator_save_account(self):
         handle = self.creator_handle_input.text().strip()
         if not handle:
-            QMessageBox.warning(self, "No Handle", "Enter the account handle first.")
+            QMessageBox.warning(
+                self, "No Profile", "Enter a handle or project name first.")
             return
         account_type = self.creator_type_box.currentText()
+        platform = self.creator_platform_box.currentText().strip() or "General"
+        stored_platform = "onlyfans" if platform == "OnlyFans" else platform
         consent = self.creator_consent_input.text().strip()
         if account_type == "managed" and not consent:
             QMessageBox.warning(
@@ -4520,10 +4902,11 @@ class GodAI(QWidget):
                        consent_date, disclosure, created_at)
                     VALUES (?,?,?,?,?,?,?)
                     ON CONFLICT(handle) DO UPDATE SET
+                      platform=excluded.platform,
                       account_type=excluded.account_type,
                       consent_holder=excluded.consent_holder,
                       disclosure=excluded.disclosure
-                """, (handle, "onlyfans", account_type, consent,
+                """, (handle, stored_platform, account_type, consent,
                       datetime.now().isoformat(timespec="seconds") if consent else "",
                       self.creator_disclosure_input.text().strip(),
                       datetime.now().isoformat(timespec="seconds")))
@@ -4539,15 +4922,22 @@ class GodAI(QWidget):
         if not account:
             return
         confirm = QMessageBox.question(
-            self, "Remove Account",
-            f"Remove {account['handle']} and its drafts and earnings from "
+            self, "Remove Profile",
+            f"Remove {account['handle']} and its drafts and performance from "
             "Imprint?\n\nThis only affects this app — nothing on the platform "
             "is touched.")
         if confirm != QMessageBox.Yes:
             return
         try:
             with get_connection() as conn:
-                for table in ("creator_content", "creator_earnings"):
+                conn.execute(
+                    "DELETE FROM creator_variants WHERE content_id IN "
+                    "(SELECT id FROM creator_content WHERE account_id = ?)",
+                    (account["id"],))
+                for table in (
+                        "creator_video_jobs", "creator_media", "creator_voice",
+                        "creator_persona", "creator_performers",
+                        "creator_content", "creator_earnings"):
                     conn.execute(f"DELETE FROM {table} WHERE account_id = ?",
                                  (account["id"],))
                 conn.execute("DELETE FROM creator_accounts WHERE id = ?",
@@ -4562,8 +4952,8 @@ class GodAI(QWidget):
     def creator_generate(self):
         account = self.creator_current_account()
         if not account:
-            QMessageBox.warning(self, "No Account",
-                                "Add an account before drafting.")
+            QMessageBox.warning(self, "No Profile",
+                                "Add a content profile before drafting.")
             return
 
         agent = self.agent_instances["creator"]
@@ -4714,8 +5104,14 @@ class GodAI(QWidget):
         if not client.configured:
             QMessageBox.information(
                 self, "Higgsfield Key Needed",
-                "Set HIGGSFIELD_API_KEY in the .env under Application Support "
-                "to generate promo video.")
+                "Set both HF_API_KEY_ID and HF_API_KEY_SECRET in Imprint's "
+                "private .env file to generate promo video.")
+            return
+        if not self.allow_higgsfield_checkbox.isChecked():
+            QMessageBox.warning(
+                self, "Higgsfield Not Enabled",
+                "Enable Higgsfield in the API permissions row before sending "
+                "a prompt or reference image to the service.")
             return
         try:
             check_prompt(prompt)
@@ -4723,65 +5119,216 @@ class GodAI(QWidget):
             QMessageBox.warning(self, "Higgsfield Content Policy", str(exc))
             return
 
-        # A Higgsfield render is real money and, until the guard learned
-        # per-unit costs, went out with no budget check, no confirmation and no
-        # entry in the spend counters — the same class of bug as the 19
-        # unguarded ChatWorker sites, reintroduced by adding a second paid
-        # provider. It is priced per render, which the token model cannot say.
-        from services.per_unit_pricing import render_cost_eur
-        render_cost = render_cost_eur()
-        if render_cost is None:
-            proceed = QMessageBox.question(
-                self, "Render cost is not priced",
-                "Higgsfield bills per render and no rate is set, so this "
-                "render cannot be counted against your budget caps.\n\n"
-                'Set "higgsfield_render" under "per_unit_usd" in '
-                "config/pricing.json to have it billed.\n\nRender anyway?",
-                QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
-            if proceed != QMessageBox.Yes:
-                return
-        if not self.authorize_request(
-                "creator", "higgsfield", "higgsfield-video", prompt,
-                label="promo teaser",
-                flat_cost_eur=render_cost if render_cost is not None else 0.0):
-            return
-
-        # Personas reuse their locked seed and reference image so successive
-        # renders are the same character rather than a new one each time.
-        seed = persona_seed(account["id"])
+        # Reference media is uploaded during preparation because Higgsfield's
+        # estimate endpoint accepts the exact generation payload, including its
+        # public image URL. No paid generation starts until the estimate is
+        # shown and the normal budget/approval guard accepts it.
         references = reference_images(account["id"])
 
         output_dir = Path(BASE_DIR) / "output" / "creator" / str(account["id"])
         stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
         output_path = output_dir / f"teaser-{stamp}.mp4"
 
+        row = self.creator_calendar_table.currentRow()
+        content_id = None
+        if row >= 0 and row < len(getattr(self, "_creator_calendar_ids", [])):
+            content_id = self._creator_calendar_ids[row]
+
+        self._creator_video_context = {
+            "account_id": account["id"],
+            "content_id": content_id,
+            "prompt": prompt,
+            "output_path": str(output_path),
+            "request_token": None,
+            "job_id": "",
+            "provider_completed": False,
+            "cancel_requested": False,
+        }
+
         self.creator_video_btn.setEnabled(False)
-        self.creator_video_status.setText("Submitting to Higgsfield…")
+        self.creator_video_cancel_btn.setEnabled(True)
+        self.creator_video_cancel_btn.show()
+        self.creator_video_status.setText("Preparing Higgsfield estimate…")
+
+        self.creator_video_estimate_worker = HiggsfieldEstimateWorker(
+            client, prompt, reference_image=references[0] if references else None)
+        self.creator_video_estimate_worker.status_signal.connect(
+            self.creator_video_status.setText)
+        self.creator_video_estimate_worker.done_signal.connect(
+            lambda request, estimate, c=client:
+            self._creator_video_estimated(c, request, estimate))
+        self.creator_video_estimate_worker.error_signal.connect(
+            self._creator_video_error)
+        self.creator_video_estimate_worker.start()
+
+    def _creator_video_estimated(self, client, request, estimate):
+        """Show the provider's exact price before authorising generation."""
+        context = self._creator_video_context
+        if not context:
+            return
+        if context.get("cancel_requested"):
+            self._creator_video_reset("Cancelled.")
+            return
+        from services.per_unit_pricing import eur_per_usd
+        cost_eur = round(estimate.usd * eur_per_usd(), 6)
+        context.update({
+            "endpoint": request.endpoint,
+            "estimated_credits": estimate.credits,
+            "estimated_usd": estimate.usd,
+            "estimated_eur": cost_eur,
+        })
+        self.creator_video_status.setText(
+            f"Estimated by Higgsfield: ${estimate.usd:.2f} "
+            f"({estimate.credits:g} credits). Awaiting approval…")
+
+        token = self.authorize_request(
+            "creator", "higgsfield", request.endpoint,
+            context["prompt"], label="promo teaser", flat_cost_eur=cost_eur)
+        if not token:
+            self._creator_video_reset("Render not approved.")
+            return
+        context["request_token"] = token
 
         self.creator_video_worker = HiggsfieldWorker(
-            client, prompt, output_path, seed=seed,
-            reference_image=references[0] if references else None)
+            client, context["prompt"], context["output_path"],
+            prepared_request=request)
         self.creator_video_worker.status_signal.connect(
             self.creator_video_status.setText)
+        self.creator_video_worker.job_signal.connect(
+            self._creator_video_job_update)
         self.creator_video_worker.done_signal.connect(
-            lambda path, aid=account["id"]: self._creator_video_done(aid, path))
+            lambda path, aid=context["account_id"]:
+            self._creator_video_done(aid, path))
         self.creator_video_worker.error_signal.connect(
             self._creator_video_error)
         self.creator_video_worker.start()
 
+    def creator_cancel_video(self):
+        """Cancel preparation, or ask Higgsfield to cancel a queued render."""
+        if self._creator_video_context:
+            self._creator_video_context["cancel_requested"] = True
+        estimate_worker = self.creator_video_estimate_worker
+        render_worker = self.creator_video_worker
+        if estimate_worker is not None and estimate_worker.isRunning():
+            estimate_worker.cancel()
+            self.creator_video_status.setText("Cancelling estimate…")
+        elif render_worker is not None and render_worker.isRunning():
+            render_worker.cancel()
+            self.creator_video_status.setText(
+                "Cancellation requested. If rendering already began, "
+                "Higgsfield will finish and Imprint will save the result.")
+        self.creator_video_cancel_btn.setEnabled(False)
+
+    def _creator_video_job_update(self, job):
+        """Persist every provider state transition for recovery and support."""
+        context = self._creator_video_context
+        if not context:
+            return
+        context["job_id"] = job.job_id
+        if job.status == "completed":
+            context["provider_completed"] = True
+        now = datetime.now().isoformat(timespec="seconds")
+        policy_result = ("provider-rejected" if job.status == "nsfw"
+                         else "local-approved")
+        actual_usd = (context.get("estimated_usd")
+                      if job.status == "completed" else None)
+        cost_basis = ("provider preflight estimate; render completed"
+                      if actual_usd is not None else "")
+        try:
+            with get_connection() as conn:
+                conn.execute("""
+                    INSERT INTO creator_video_jobs
+                      (request_id, account_id, content_id, created_at, updated_at,
+                       endpoint, prompt, prompt_version, estimated_credits,
+                       estimated_usd, actual_usd, cost_basis, status,
+                       policy_result, error, correlation_id)
+                    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                    ON CONFLICT(request_id) DO UPDATE SET
+                      updated_at=excluded.updated_at,
+                      actual_usd=COALESCE(excluded.actual_usd,
+                                          creator_video_jobs.actual_usd),
+                      cost_basis=CASE WHEN excluded.cost_basis != ''
+                                      THEN excluded.cost_basis
+                                      ELSE creator_video_jobs.cost_basis END,
+                      status=excluded.status,
+                      policy_result=excluded.policy_result,
+                      error=excluded.error,
+                      correlation_id=CASE WHEN excluded.correlation_id != ''
+                                          THEN excluded.correlation_id
+                                          ELSE creator_video_jobs.correlation_id END
+                """, (
+                    job.job_id, context["account_id"], context.get("content_id"),
+                    now, now, job.endpoint or context.get("endpoint", ""),
+                    context["prompt"], "creator-video-v1",
+                    context.get("estimated_credits", 0.0),
+                    context.get("estimated_usd", 0.0), actual_usd, cost_basis,
+                    job.status, policy_result, job.error, job.correlation_id,
+                ))
+                conn.commit()
+        except Exception as exc:
+            self._note_failure("creator: track Higgsfield job", exc,
+                               self.creator_video_status)
+
     def _creator_video_done(self, account_id: int, path: str):
         """Store the render in the media library rather than leaving it on disk."""
-        self.record_request("creator", f"teaser: {Path(path).name}")
+        context = self._creator_video_context
+        self.record_request(context.get("request_token") or "creator",
+                            f"teaser: {Path(path).name}")
         self._creator_store_media(account_id, path, source="higgsfield",
+                                  job_id=context.get("job_id", ""),
                                   caption="Higgsfield teaser")
-        self.creator_video_btn.setEnabled(True)
-        self.creator_video_status.setText(f"Saved: {Path(path).name}")
+        attached = False
+        if context.get("content_id"):
+            try:
+                with get_connection() as conn:
+                    conn.execute(
+                        "UPDATE creator_content SET media_path = ? WHERE id = ?",
+                        (path, context["content_id"]))
+                    conn.execute(
+                        "UPDATE creator_video_jobs SET local_path = ? "
+                        "WHERE request_id = ?",
+                        (path, context.get("job_id", "")))
+                    conn.commit()
+                attached = True
+            except Exception as exc:
+                self._note_failure("creator: attach teaser", exc,
+                                   self.creator_video_status)
+        elif context.get("job_id"):
+            try:
+                with get_connection() as conn:
+                    conn.execute(
+                        "UPDATE creator_video_jobs SET local_path = ? "
+                        "WHERE request_id = ?",
+                        (path, context["job_id"]))
+                    conn.commit()
+            except Exception as exc:
+                self._note_failure("creator: save teaser path", exc,
+                                   self.creator_video_status)
+        note = f"Saved: {Path(path).name}"
+        if attached:
+            note += " · attached to the selected calendar item"
+        self._creator_video_reset(note)
         self.creator_refresh_media()
+        if attached:
+            self.creator_refresh_calendar()
 
     def _creator_video_error(self, error: str):
-        self.abandon_request("creator")
+        context = self._creator_video_context
+        token = context.get("request_token") if context else None
+        if token:
+            if context.get("provider_completed"):
+                # A completed render is charged even if the local download
+                # later fails; keep spend accounting honest.
+                self.record_request(token, f"render completed; local error: {error}")
+            else:
+                self.abandon_request(token)
+        self._creator_video_reset(f"[Error] {error}")
+
+    def _creator_video_reset(self, status: str):
         self.creator_video_btn.setEnabled(True)
-        self.creator_video_status.setText(f"[Error] {error}")
+        self.creator_video_cancel_btn.setEnabled(False)
+        self.creator_video_cancel_btn.hide()
+        self.creator_video_status.setText(status)
 
     # ── Earnings ─────────────────────────────────────────────────────────────
     def creator_import_earnings(self):
@@ -5025,7 +5572,9 @@ class GodAI(QWidget):
                       (account_id, path, kind, caption, source, job_id, added_at)
                     VALUES (?,?,?,?,?,?,?)
                     ON CONFLICT(account_id, path) DO UPDATE SET
-                      caption=excluded.caption, source=excluded.source
+                      caption=excluded.caption, source=excluded.source,
+                      job_id=CASE WHEN excluded.job_id != '' THEN excluded.job_id
+                                  ELSE creator_media.job_id END
                 """, (account_id, path, kind, caption, source, job_id,
                       datetime.now().isoformat(timespec="seconds")))
                 conn.commit()
@@ -7555,7 +8104,7 @@ class GodAI(QWidget):
             "author": "Draft", "manuscript": "Publish", "music": "Music",
             "webdesign": "Site Builder", "audiobook": "Audiobooks",
             "creator": "Creator", "video": "Video",
-            "social": "Social", }
+            "social": "Social", "onlyfans": "OnlyFans", }
         agent_subtitles = {
             "chat":        "General-purpose conversation. Pick a tool, pick a model, talk.",
             "fiverr":      "Create client-ready logo concepts, gig listings, and polished delivery messages.",
@@ -7564,7 +8113,8 @@ class GodAI(QWidget):
             "music":       "Plan releases, distribution, promotion, and sustainable artist income.",
             "webdesign":   "Modern HTML, CSS, and JavaScript generation with responsive layout and design advice.",
             "audiobook":   "Turn PDF, EPUB, TXT, and MOBI books into production-ready MP3 audiobooks.",
-            "creator":     "Plan, draft, and schedule subscription content across accounts you hold consent for.",
+            "creator":     "Create reusable concepts, captions, posting plans, and promotional assets for any venture or platform.",
+            "onlyfans":    "Run the OnlyFans venture: trends, opportunities, monetization, owned analytics, market context, and strategy.",
             "video":       "Script, narrate, illustrate and cut a video — long-form for YouTube or a vertical clip for social.",
             "social":      "Promote a book, release, product or gig: write per platform, schedule it, and post where the API allows.",
             }
@@ -7609,6 +8159,8 @@ class GodAI(QWidget):
             self._refresh_next_step_tip()
         elif agent_name == "video":
             self.refresh_video_library()
+        elif agent_name == "onlyfans":
+            self.onlyfans_dashboard.refresh()
         elif not is_custom:
             self.output_label.setText("Output")
 
@@ -8013,6 +8565,7 @@ class GodAI(QWidget):
             "kimi": self.allow_kimi_checkbox.isChecked(),
             "gemini": self.allow_gemini_checkbox.isChecked(),
             "anthropic": self.allow_anthropic_checkbox.isChecked(),
+            "higgsfield": self.allow_higgsfield_checkbox.isChecked(),
         }
 
         if execution_mode == "Local only":
@@ -8073,6 +8626,7 @@ class GodAI(QWidget):
             "allow_gemini": self.allow_gemini_checkbox.isChecked(),
             "allow_anthropic": self.allow_anthropic_checkbox.isChecked(),
             "allow_qwen": self.allow_qwen_checkbox.isChecked(),
+            "allow_higgsfield": self.allow_higgsfield_checkbox.isChecked(),
         }
 
         validation = self.validator.validate(
@@ -8212,6 +8766,7 @@ class GodAI(QWidget):
             "allow_gemini": self.allow_gemini_checkbox.isChecked(),
             "allow_anthropic": self.allow_anthropic_checkbox.isChecked(),
             "allow_qwen": self.allow_qwen_checkbox.isChecked(),
+            "allow_higgsfield": self.allow_higgsfield_checkbox.isChecked(),
         }
 
     def authorize_request(self, agent, provider, model, prompt, tool=None,
@@ -9064,6 +9619,10 @@ def _selftest() -> int:
     # 2. Database opens and carries the agents the shell switches between.
     try:
         from services.registry import Registry
+        # The normal window initializes/migrates the database in GodAI.__init__.
+        # --selftest deliberately never constructs that window, so run the same
+        # idempotent initialization here before checking a newly added panel.
+        init_db()
         registry = Registry()
         missing = [a for a in CUSTOM_PANELS if not registry.is_agent_enabled(a)]
         check("every panel agent is registered", not missing, ", ".join(missing))

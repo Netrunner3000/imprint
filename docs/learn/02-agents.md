@@ -125,11 +125,10 @@ and its default taste is generic.
 Logo concepts, gig descriptions, and client delivery messages.
 
 **Generate Logos** is the paid, headline action — it bills per image, and that
-now counts against your budget caps. Pick the **Image model**: `dall-e-3` is
-the long-standing default, `gpt-image-1` is newer and noticeably better at text
-inside an image, which is most of what a logo is. **Delivery Message** and
-**Gig Description** are text-only and cheap. The Orders tab tracks what you
-produced for whom.
+now counts against your budget caps. Pick a current **GPT Image model** for the
+quality/speed tradeoff. DALL·E 2 and 3 are not shown because their APIs were
+removed. **Delivery Message** and **Gig Description** are text-only and cheap.
+The Orders tab tracks what you produced for whom.
 
 ---
 
@@ -142,21 +141,27 @@ visuals, Ken Burns motion, music and a thumbnail. This is the `vidforge`
 pipeline running inside Imprint — the same code as the standalone app, not a
 copy, so a render started in either shows up in both libraries.
 
-**Format** is the only decision that changes the shape of the run:
+Choose the visual route as well as the format:
 
-| | |
+| Choice | Result |
 |---|---|
-| **Long-form** | Whatever `config.yaml` says — 1920×1080, aimed at ~8 minutes. For YouTube. |
-| **Social clip** | Vertical or square, 15–90 seconds, cut roughly every 6 seconds. For TikTok, Reels, Shorts. |
+| **GPT Image 2.5 / GPT Image 2** | Generates scene images, then assembles the full narrated pipeline. Long-form or 15–90-second social clip. |
+| **Sora 2 / Sora 2 Pro** | One direct 4, 8 or 12-second clip with audio. Retiring 24 September 2026. |
+| **Higgsfield Seedance** | One direct clip after Imprint shows the exact provider quote. |
+| **Pexels** | Stock scene visuals; needs a Pexels key. |
+| **Local** | Local gradient scene cards; no image-generation charge. |
 
-The estimate beside the button is real: it comes from the pipeline's own
-per-stage arithmetic (images, narration characters, caption alignment) and is
-charged against your session and daily caps before the run starts. A long-form
-video is typically €1–2; a 30-second clip about €0.25. Most of that is images.
+DALL·E does not appear because OpenAI removed the DALL·E 2 and 3 APIs. Choose a
+current GPT Image model for the same scene-image role.
 
-**Stop** cancels at the next stage boundary rather than mid-ffmpeg, so you are
-never left with a half-written file. A cancelled run stays in the Library and
-can be resumed.
+The estimate beside the button is checked against your session and daily caps
+before the run starts: a conservative reserve for GPT Image, exact per-second
+Sora pricing, or Higgsfield's exact quote. Pexels and Local remove the image
+generation portion; script and narration can still cost money.
+
+**Stop** cancels a pipeline render at the next stage boundary or requests
+Higgsfield cancellation. Sora cannot be cancelled after submission, so Imprint
+keeps watching it and saves the paid result.
 
 ![Video library](img/agent-video-library.png)
 
@@ -244,7 +249,10 @@ one character instead of becoming a new one each session.
 `Generate Teaser` renders promo video through Higgsfield. It is safe-for-work
 by construction: Higgsfield prohibits explicit material and moderates prompts,
 reference images and outputs, so explicit content has to come from elsewhere.
-Its role is the teaser that lives on X or Reddit.
+Its role is the teaser that lives on X or Reddit. Imprint shows Higgsfield's
+estimate before asking permission to spend, lets you cancel while the request
+is queued, saves the completed file locally, and attaches it to the selected
+Calendar row.
 
 ---
 

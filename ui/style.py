@@ -75,6 +75,12 @@ GLOBAL_STYLESHEET = f"""
             font-size: 13px;
         }}
 
+        QFrame#TrendChartCard {{
+            background-color: {SURFACE};
+            border: 1px solid {BORDER};
+            border-radius: {RADIUS_LG};
+        }}
+
         /* ── Inputs ────────────────────────────────────────────────── */
         QTextEdit, QTextBrowser, QListWidget {{
             background-color: {SUNKEN};
