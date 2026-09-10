@@ -26,7 +26,7 @@ import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-AGENTS = ["author", "manuscript", "music", "webdesign", "fiverr"]
+AGENTS = ["author", "manuscript", "music", "webdesign", "fiverr", "video"]
 
 # Agents whose panel holds more than one page. Testing only the page that
 # happens to be showing is how the Publish column's overlapping Generate button
@@ -230,6 +230,39 @@ def test_creator_compose_grid_has_no_empty_cells(app, window, kind, expected):
     # Packed from (0,0) rightwards with no gaps.
     assert positions == [(i // 3, i % 3) for i in range(expected)], (
         f"[{kind}] fields are not packed contiguously: {positions}")
+
+
+def test_video_provider_model_controls_only_offer_working_routes(app, window):
+    """Every visible provider/model pair must change to its real constraints."""
+    from services.media_catalog import RETIRED_DALLE_MODELS
+
+    window.select_agent("video")
+    offered = set()
+    for provider in ("OpenAI", "Higgsfield", "Pexels", "Local"):
+        window.video_visual_provider_box.setCurrentText(provider)
+        app.processEvents()
+        assert window.video_visual_model_box.count() > 0
+        offered.update(
+            window.video_visual_model_box.itemData(i).model_id
+            for i in range(window.video_visual_model_box.count()))
+
+    assert offered.isdisjoint(RETIRED_DALLE_MODELS)
+    window.video_visual_provider_box.setCurrentText("OpenAI")
+    sora_index = next(
+        i for i in range(window.video_visual_model_box.count())
+        if window.video_visual_model_box.itemData(i).model_id == "sora-2")
+    window.video_visual_model_box.setCurrentIndex(sora_index)
+    app.processEvents()
+    assert not window.video_format_box.isEnabled()
+    assert [window.video_length_box.itemText(i)
+            for i in range(window.video_length_box.count())] == ["4s", "8s", "12s"]
+
+    image_index = next(
+        i for i in range(window.video_visual_model_box.count())
+        if window.video_visual_model_box.itemData(i).kind == "scene_images")
+    window.video_visual_model_box.setCurrentIndex(image_index)
+    app.processEvents()
+    assert window.video_format_box.isEnabled()
 
 
 def test_no_control_label_carries_an_emoji(app, window):

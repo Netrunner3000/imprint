@@ -421,13 +421,13 @@ class TestPerUnitPricing:
 
     An image, a video render and a minute of speech are all priced per unit,
     and the token cost model returns 0.00 for every one of them. That is how
-    DALL-E generation, Higgsfield renders and TTS all ran outside the session
+    Image generation, Higgsfield renders and TTS all ran outside the session
     and daily caps regardless of what they actually cost.
     """
 
     def test_a_flat_cost_wins_over_the_token_arithmetic(self, tracker):
         entry = tracker.log_request(
-            agent="fiverr", backend="openai", model="dall-e-3",
+            agent="fiverr", backend="openai", model="gpt-image-2.5-flare",
             prompt_text="two logo concepts", response_text="",
             flat_cost_eur=0.0736)
         assert entry["cost_eur"] == 0.0736
@@ -436,15 +436,15 @@ class TestPerUnitPricing:
     def test_without_it_an_image_request_bills_effectively_nothing(self, tracker):
         """The bug this exists to prevent, pinned so it cannot come back.
 
-        dall-e-3 has no row of its own, so the token path falls through to
-        OpenAI's default text rates and prices a $0.04 image as the handful of
+        The image model has no text-pricing row, so the token path falls through
+        to OpenAI's default text rates and prices a media request as the handful of
         tokens in its prompt — €0.000001 here. Not literally zero, which is
         worse: it looks like a real number.
         """
         entry = tracker.log_request(
-            agent="fiverr", backend="openai", model="dall-e-3",
+            agent="fiverr", backend="openai", model="gpt-image-2.5-flare",
             prompt_text="two logo concepts", response_text="")
-        real_cost = 0.04 * per_unit_eur_per_usd()
+        real_cost = 0.06 * per_unit_eur_per_usd()
         assert entry["cost_eur"] < real_cost / 1000, (
             "the token path should badly under-price an image; if this now "
             "prices it correctly the per-unit path may be redundant")
@@ -472,8 +472,8 @@ def per_unit_eur_per_usd() -> float:
 
     def test_a_known_rate_converts_to_euros(self):
         from services import per_unit_pricing
-        cost = per_unit_pricing.image_cost_eur("dall-e-3", 2)
-        assert cost == pytest.approx(0.04 * 2 * per_unit_pricing.eur_per_usd())
+        cost = per_unit_pricing.image_cost_eur("gpt-image-2.5-flare", 2)
+        assert cost == pytest.approx(0.06 * 2 * per_unit_pricing.eur_per_usd())
 
     def test_an_unpriced_model_is_unknown_rather_than_zero(self):
         from services import per_unit_pricing

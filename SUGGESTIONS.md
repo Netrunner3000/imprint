@@ -40,7 +40,7 @@ consequences of what just landed rather than new ideas.
 
 | # | Suggestion | Category | Effort | Status |
 |---|---|---|---|---|
-| 40 | **Price the second provider.** The budget guard is denominated in tokens, so it cannot express "one video render". Higgsfield bills per render, Fiverr's logo path bills per image, and TTS bills per character — three paid paths the cost model cannot see. A per-unit cost type alongside the token one would let all three count against the same caps instead of each needing its own exemption. | security | M | IDEA |
+| 40 | DONE — **Price the second provider.** Per-unit billing now covers Fiverr images and TTS; Creator renders use Higgsfield's authenticated estimate for the exact prepared payload and pass that amount through the same budget guard. | security | M | DONE |
 | 41 | **A doc test that fails when an agent has no guide.** The Learning Centre silently fell a full agent behind twice. `WORKSPACES` is the list of what exists; a test asserting every agent in it appears in `docs/learn/02-agents.md` and has a `docs/agents/*.md` sheet would make that impossible rather than merely noticed. | testing | S | IDEA |
 | 42 | **Project as the object everything hangs off.** A book, a release and a product are each worked on across Write, Audio, Video and Creator, but each mode keeps its own state and the projects rail is decorative. Making Project real — one record the modes read from — is what would turn five tools that share a window into a studio. | design | L | IDEA |
 | 43 | DONE — **Video mode.** vidforge imported from the nested repo (not vendored), long-form and clips as one pipeline, cost estimated per stage and charged against the caps. | feature | L | DONE |
@@ -50,6 +50,8 @@ consequences of what just landed rather than new ideas.
 | 47 | **Retire or rehome the chat agent.** It is still constructed and still owns `normal_panel`, but the tabbed shell reaches no part of it. Either it becomes a real mode or it goes, and with it a meaningful amount of machinery. | infra | M | IDEA |
 | 48 | **Back up the writable directory.** Everything that matters — database, keys, chats, logs — lives in one Application Support folder that nothing in this workspace backs up, while `_Admin/backup/` exists and is good at exactly this. One line in `backup_folders.txt`. | infra | XS | IDEA |
 | 49 | **Sleep timer and keyboard control for the player.** Resume was the ask and it works; space-to-pause and a sleep timer are what make it something you would actually listen to a novel on. | feature | S | IDEA |
+| 50 | DONE — **Make Video's visual provider/model choice real.** Current GPT Image models run through the scene pipeline; Sora and Higgsfield create direct clips; Pexels and Local select their actual visual sources. Retired DALL·E IDs are not offered. | feature | M | DONE |
+| 51 | **Migrate Sora before its provider shutdown.** The route is useful for the remaining compatibility window, but the API closes on 24 September 2026. Keep the direct-video adapter boundary and swap in OpenAI's successor when one is published. | maintenance | M | IDEA |
 
 ## v3 — bigger swings
 
@@ -69,7 +71,7 @@ consequences of what just landed rather than new ideas.
 | Per-unit billing — images, renders and TTS count against the budget caps instead of pricing a $0.04 image at €0.000001 | Sep 2026 |
 | `main.py --selftest` — the packaging traps AGENTS.md names, plus proof that vidforge shipped in the bundle | Sep 2026 |
 | GUI overhaul — header bar plus two fixed rails instead of a splitter; every panel rebuilt on `ui/forms.py`; one control height enforced in the stylesheet; 58 emoji and 36 colon captions removed; spend as stat blocks and budget bars | Sep 2026 |
-| The Gigs image model is a control (`dall-e-3` / `gpt-image-1`) rather than a hardcoded call, and `generate_image()` returns bytes so both models have one caller | Sep 2026 |
+| The Gigs and Video image model is a control using the current GPT Image catalog rather than a hardcoded retired DALL·E call; `generate_image()` returns bytes so every model has one caller | Sep 2026 |
 | Refactor Phase 3 — `ui/host.py`'s `AgentHost` protocol and `ui/panels/base.py`'s `AgentPanel`, absorbing the five `*_load_models` methods | Sep 2026 |
 | `_pending_requests` keyed by request token instead of agent name — two concurrent runs of one agent no longer clobber each other's context | Sep 2026 |
 | Kimi prompt caching — `cached_input_per_1m_usd` on the pricing table, captured from the response and billed at the cached rate. Uncovered a bigger bug while wiring it up: the pricing table had no reconciliation path against `config/pricing.json` outside first-run migration, so Kimi/OpenAI/DeepSeek/Gemini were all silently billing €0.00 on this project's own database. `_seed_pricing_from_json()` now reconciles on every launch. | Sep 2026 |

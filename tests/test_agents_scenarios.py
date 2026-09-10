@@ -173,7 +173,7 @@ class TestAuthorAgent:
 
 
 # 10. FiverrAgent
-# Scenario: delivery message  |  gig description  |  DALL-E logo prompt
+# Scenario: delivery message  |  gig description  |  GPT Image logo prompt
 # ─────────────────────────────────────────────────────────────────────────────
 
 class TestFiverrAgent:
@@ -216,9 +216,9 @@ class TestFiverrAgent:
         msgs = self.agent.build_image_prompt_request(self.BRIEF)
         assert _roles(msgs) == ["system", "user"]
 
-    def test_image_prompt_request_mentions_dalle(self):
+    def test_image_prompt_request_mentions_current_image_model(self):
         msgs = self.agent.build_image_prompt_request(self.BRIEF)
-        assert "DALL-E" in _user(msgs) or "dall-e" in _user(msgs).lower()
+        assert "GPT Image" in _user(msgs)
 
     def test_image_prompt_request_includes_brief(self):
         msgs = self.agent.build_image_prompt_request(self.BRIEF)

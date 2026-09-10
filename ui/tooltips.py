@@ -50,7 +50,7 @@ def seed_tooltips(app):
         "wifi":        "Wireless recon, signal analysis, Kali command generation.",
         "bug_bounty":  "Vulnerability triage + HackerOne-ready submission drafts.",
         "nfl_bet":     "NFL prop bet analysis with EV and projection modelling.",
-        "fiverr":      "Logo gigs — DALL·E prompts, gig descriptions, delivery messages.",
+        "fiverr":      "Logo gigs — GPT Image concepts, gig descriptions, delivery messages.",
         "health":      "Nutrition, fitness, mental wellness guidance.",
         "author":      "Long-form fiction drafting and book writing.",
         "music":       "Spotify artist setup, distribution, income roadmap.",
@@ -180,7 +180,7 @@ def seed_tooltips(app):
     app._set_tooltips({
         "fiverr_provider_box":     "Provider for text generation (delivery / gig description / prompts).",
         "fiverr_model_box":        "Specific model for text.",
-        "fiverr_generate_btn":     "Build a DALL·E logo prompt from the brief, then generate the logos.",
+        "fiverr_generate_btn":     "Build an image prompt from the brief, then generate the GPT Image logos.",
         "fiverr_delivery_btn":     "Write a Fiverr delivery message based on the brief.",
         "fiverr_gig_btn":          "Write a full Fiverr gig description.",
         "fiverr_stop_btn":         "Cancel the running generation.",

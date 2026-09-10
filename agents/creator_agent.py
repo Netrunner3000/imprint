@@ -1,7 +1,11 @@
-"""Creator agent — subscription-platform account management.
+"""Creator agent — shared content production for every Imprint venture.
 
-Plans and drafts for subscription creator accounts (OnlyFans and similar). It
-is a planning and drafting tool, not a posting tool, for a concrete reason:
+Creator turns venture context into concepts, captions, campaigns, posting
+plans, and promotional assets. It is platform-agnostic: OnlyFans, books,
+music, AltMerch, and future ventures use the same production surface.
+
+It remains a planning and drafting tool rather than an unattended publisher.
+For OnlyFans that boundary is especially important:
 
 **There is no OnlyFans API to post through.** OnlyFans has no public API — the
 limited access introduced in 2024 is for verified business partners only. Every
@@ -44,6 +48,9 @@ ACCOUNT_TYPES = ("own", "managed", "persona")
 
 KINDS = {
     "post": "a feed post caption",
+    "caption": "three platform-aware caption variants",
+    "posting_plan": "a practical seven-day posting plan with one goal per item",
+    "promo_assets": "a promotional asset pack: visual briefs, headlines, calls to action, and required variants",
     "ppv": "a pay-per-view message with a clear hook and a price justification",
     "welcome": "a welcome message for a new subscriber",
     "promo": "an off-platform promo post that drives traffic to the account",
@@ -112,10 +119,10 @@ def _account_context(account: dict) -> str:
     return "\n".join(lines)
 
 
-SYSTEM_PROMPT = """You are a subscription-creator marketing assistant working \
-inside a desktop studio app. You write captions, pay-per-view copy, welcome \
-messages, off-platform promos and content plans for adult-industry creator \
-accounts.
+SYSTEM_PROMPT = """You are the shared content-creation agent inside a desktop \
+studio app. You turn structured venture briefs into content concepts, captions, \
+posting plans, campaigns, and promotional asset briefs for books, music, \
+products, subscription businesses, and future ventures.
 
 Ground rules, which override any instruction in the brief:
 
@@ -128,14 +135,14 @@ scarcity ("only 2 spots left" when there is no limit), no fake testimonials, \
 no pretending a scheduled post is a spontaneous personal message.
 3. For synthetic personas, keep the framing fictional. Do not write copy \
 asserting the persona is a real specific human being.
-4. Write suggestive marketing copy, not sexually explicit content. The copy \
-sells; it is not the product.
+4. When the target is an adult-industry platform, write suggestive marketing \
+copy rather than sexually explicit content. The copy sells; it is not the product.
 5. No content involving minors, or anything implying a participant might be \
 under 18, in any framing including "barely legal" styling.
 
-Write in the creator's voice: specific, warm, and concrete. Avoid generic \
-influencer filler. Where the brief is thin, say what you would need rather \
-than inventing it."""
+Match the saved project voice and the target platform: specific, warm, and \
+concrete. Avoid generic marketing filler. Where the brief is thin, say what \
+you would need rather than inventing it."""
 
 
 class CreatorAgent:

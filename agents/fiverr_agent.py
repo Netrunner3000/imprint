@@ -31,7 +31,7 @@ LOGO PROMPT
 When asked to build an image generation prompt for a logo, return ONLY the prompt text — no preamble, no explanation. The prompt must:
 - Describe the logo style, colours, and mood precisely
 - Include "vector logo, transparent background, no text" unless the business name was explicitly requested in the logo
-- Be 1–3 sentences max and immediately usable by DALL-E 3
+- Be 1–3 sentences max and immediately usable by the selected GPT Image model
 """
 
 
@@ -64,5 +64,5 @@ class FiverrAgent:
         )
         return [
             {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": f"Brief:\n{context}\n\nTask: Build an image generation prompt for DALL-E 3 to create a logo for this business."},
+            {"role": "user", "content": f"Brief:\n{context}\n\nTask: Build an image-generation prompt for the selected GPT Image model to create a logo for this business."},
         ]

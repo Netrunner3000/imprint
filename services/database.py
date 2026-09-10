@@ -271,6 +271,31 @@ CREATE TABLE IF NOT EXISTS creator_media (
     FOREIGN KEY (account_id) REFERENCES creator_accounts(id)
 );
 
+-- Every paid Higgsfield request remains inspectable after the worker exits.
+-- Outputs are copied into creator_media because provider URLs are temporary;
+-- this row preserves the request lifecycle, price and support correlation id.
+CREATE TABLE IF NOT EXISTS creator_video_jobs (
+    request_id       TEXT PRIMARY KEY,
+    account_id       INTEGER NOT NULL,
+    content_id       INTEGER,
+    created_at       TEXT NOT NULL,
+    updated_at       TEXT NOT NULL,
+    endpoint         TEXT NOT NULL DEFAULT '',
+    prompt           TEXT NOT NULL DEFAULT '',
+    prompt_version   TEXT NOT NULL DEFAULT 'creator-video-v1',
+    estimated_credits REAL NOT NULL DEFAULT 0.0,
+    estimated_usd    REAL NOT NULL DEFAULT 0.0,
+    actual_usd       REAL,
+    cost_basis       TEXT NOT NULL DEFAULT '',
+    status           TEXT NOT NULL DEFAULT 'queued',
+    policy_result    TEXT NOT NULL DEFAULT 'local-approved',
+    local_path       TEXT NOT NULL DEFAULT '',
+    error            TEXT NOT NULL DEFAULT '',
+    correlation_id   TEXT NOT NULL DEFAULT '',
+    FOREIGN KEY (account_id) REFERENCES creator_accounts(id),
+    FOREIGN KEY (content_id) REFERENCES creator_content(id)
+);
+
 -- Hook variants. Creators test openers; recording which one shipped is what
 -- turns the earnings table into a feedback loop instead of a report.
 CREATE TABLE IF NOT EXISTS creator_variants (
@@ -305,6 +330,7 @@ CREATE TABLE IF NOT EXISTS creator_performers (
 
 CREATE INDEX IF NOT EXISTS idx_creator_content_account ON creator_content(account_id);
 CREATE INDEX IF NOT EXISTS idx_creator_media_account   ON creator_media(account_id);
+CREATE INDEX IF NOT EXISTS idx_creator_video_jobs_account ON creator_video_jobs(account_id);
 
 CREATE INDEX IF NOT EXISTS idx_usage_timestamp ON usage(timestamp);
 CREATE INDEX IF NOT EXISTS idx_runs_timestamp  ON runs(timestamp);
@@ -495,6 +521,8 @@ def _sync_agent_labels(conn: sqlite3.Connection) -> None:
         "music":       "Music",
         "webdesign":   "Site Builder",
         "audiobook":   "Audiobooks",
+        "creator":     "Creator",
+        "onlyfans":    "OnlyFans",
     }
     for name, label in rename_map.items():
         conn.execute("UPDATE agents SET label = ? WHERE name = ?", (label, name))
@@ -620,7 +648,7 @@ def _seed_default_agents(conn: sqlite3.Connection) -> None:
         {
             "name": "fiverr",
             "label": "Fiverr",
-            "description": "Fiverr freelancer agent — generates logo concepts via DALL-E 3, writes professional delivery messages, and creates Fiverr gig descriptions.",
+            "description": "Fiverr freelancer agent — generates logo concepts via current OpenAI GPT Image models, writes professional delivery messages, and creates Fiverr gig descriptions.",
             "allowed_providers": json.dumps([]),
             "allowed_tools": None,
             "budget_limit_eur": None,
@@ -664,11 +692,22 @@ def _seed_default_agents(conn: sqlite3.Connection) -> None:
         {
             "name": "creator",
             "label": "Creator",
-            "description": "Subscription-platform account management — content calendar, captions, PPV and promo drafting, and earnings import. Drafts only; it has no posting path.",
+            "description": "Shared content production for every venture — concepts, captions, campaigns, posting plans, promotional assets, calendars, and performance feedback.",
             # higgsfield is the video renderer, not a chat provider, but it is a paid
             # backend the guard authorises against and so has to be permitted here.
             "allowed_providers": json.dumps(["anthropic", "openai", "deepseek",
                                              "gemini", "kimi", "qwen", "higgsfield"]),
+            "allowed_tools": None,
+            "budget_limit_eur": None,
+            "requires_approval": 0,
+            "log_path": "data/logs/runs.jsonl",
+            "auto_generated": 0,
+        },
+        {
+            "name": "onlyfans",
+            "label": "OnlyFans",
+            "description": "OnlyFans venture intelligence — trends, opportunities, monetization hypotheses, owned analytics, market context, and strategy. No automated posting.",
+            "allowed_providers": json.dumps([]),
             "allowed_tools": None,
             "budget_limit_eur": None,
             "requires_approval": 0,

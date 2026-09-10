@@ -44,6 +44,14 @@ def test_every_workspace_agent_has_a_panel():
     assert not labelled, f"workspace agents with no stage label: {labelled}"
 
 
+def test_onlyfans_is_a_venture_and_creator_stays_shared():
+    import main
+
+    assert main.WORKSPACES["OnlyFans"] == ("onlyfans",)
+    assert main.WORKSPACES["Creator"] == ("creator",)
+    assert "onlyfans" not in main.WORKSPACES["Creator"]
+
+
 def test_registry_exposes_only_focused_agents():
     registry_path = Path(__file__).parents[1] / "config" / "registry.json"
     registry = json.loads(registry_path.read_text(encoding="utf-8"))

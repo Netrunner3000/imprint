@@ -176,8 +176,8 @@ class FiverrImageWorker(QThread):
                 return
             try:
                 self.status_signal.emit(f"Generating concept {i + 1} of {self.count}...")
-                # The client returns bytes for both image models; only dall-e-3
-                # has a URL to download from, and it expires.
+                # The adapter normalises every supported GPT Image response to
+                # bytes before the worker writes it to the local order folder.
                 data = self.openai_client.generate_image(
                     self.image_prompt, model=self.image_model)
                 local_path = self.save_dir / f"logo_{i + 1}.png"
@@ -218,6 +218,107 @@ class ShortsWorker(QThread):
             self.error_signal.emit(str(e))
 
 
+class HiggsfieldEstimateWorker(QThread):
+    """Upload any reference image and price the exact request off the UI thread."""
+
+    status_signal = Signal(str)
+    done_signal = Signal(object, object)  # PreparedVideoRequest, VideoEstimate
+    error_signal = Signal(str)
+
+    def __init__(self, client, prompt: str, *, duration: int = 5,
+                 reference_image: str | None = None,
+                 aspect_ratio: str | None = None,
+                 resolution: str | None = None):
+        super().__init__()
+        self.client = client
+        self.prompt = prompt
+        self.duration = duration
+        self.reference_image = reference_image
+        self.aspect_ratio = aspect_ratio
+        self.resolution = resolution
+        self._cancel_requested = False
+
+    def cancel(self):
+        # Preparation contains short network operations rather than a remote
+        # render, so cancellation is observed between upload and estimate.
+        self._cancel_requested = True
+
+    def run(self):
+        try:
+            self.status_signal.emit(
+                "Uploading reference image…" if self.reference_image
+                else "Preparing render estimate…")
+            request = self.client.prepare_video(
+                self.prompt, duration=self.duration,
+                reference_image=self.reference_image,
+                aspect_ratio=self.aspect_ratio, resolution=self.resolution)
+            if self._cancel_requested:
+                self.error_signal.emit("Cancelled.")
+                return
+            self.status_signal.emit("Checking Higgsfield price…")
+            estimate = self.client.estimate(request)
+            if self._cancel_requested:
+                self.error_signal.emit("Cancelled.")
+                return
+            self.done_signal.emit(request, estimate)
+        except Exception as exc:
+            self.error_signal.emit(str(exc))
+
+
+class OpenAIVideoWorker(QThread):
+    """Run a short Sora job and preserve its paid output locally.
+
+    The legacy Sora endpoint has no cancel operation. A stop request therefore
+    cannot safely abandon the result: the provider keeps rendering and billing,
+    so this worker continues polling and downloads the asset.
+    """
+
+    status_signal = Signal(str)
+    progress_signal = Signal(int, str)
+    job_signal = Signal(object)
+    done_signal = Signal(str)
+    error_signal = Signal(str)
+
+    def __init__(self, client, prompt: str, output_path, *, model: str,
+                 seconds: int, size: str, timeout: int = 900):
+        super().__init__()
+        self.client = client
+        self.prompt = prompt
+        self.output_path = Path(output_path)
+        self.model = model
+        self.seconds = seconds
+        self.size = size
+        self.timeout = timeout
+
+    def run(self):
+        try:
+            self.status_signal.emit("Submitting to OpenAI Sora…")
+            job = self.client.create_video(
+                self.prompt, model=self.model, seconds=self.seconds,
+                size=self.size)
+            self.job_signal.emit(job)
+
+            def progress(current):
+                self.job_signal.emit(current)
+                self.progress_signal.emit(
+                    current.progress,
+                    f"Sora rendering… {current.progress}% ({current.status})")
+
+            job = self.client.wait_video(
+                job, timeout=self.timeout, on_progress=progress)
+            self.job_signal.emit(job)
+            if job.status != "completed":
+                self.error_signal.emit(job.error or f"Sora render {job.status}")
+                return
+
+            self.status_signal.emit("Downloading Sora video…")
+            self.output_path.parent.mkdir(parents=True, exist_ok=True)
+            self.output_path.write_bytes(self.client.download_video(job.job_id))
+            self.done_signal.emit(str(self.output_path))
+        except Exception as exc:
+            self.error_signal.emit(str(exc))
+
+
 class HiggsfieldWorker(QThread):
     """Submits a Higgsfield render, waits for it, and downloads the result.
 
@@ -229,12 +330,14 @@ class HiggsfieldWorker(QThread):
     frozen button.
     """
     status_signal = Signal(str)
+    job_signal = Signal(object)   # latest VideoJob, for durable tracking
     done_signal = Signal(str)     # local path of the downloaded video
     error_signal = Signal(str)
 
     def __init__(self, client, prompt: str, output_path,
                  *, duration: int = 5, reference_image: str | None = None,
-                 seed: int | None = None, timeout: int = 900):
+                 seed: int | None = None, timeout: int = 900,
+                 prepared_request=None):
         super().__init__()
         self.client = client
         self.prompt = prompt
@@ -243,19 +346,31 @@ class HiggsfieldWorker(QThread):
         self.reference_image = reference_image
         self.seed = seed
         self.timeout = timeout
+        self.prepared_request = prepared_request
+        self._cancel_requested = False
+
+    def cancel(self):
+        self._cancel_requested = True
 
     def run(self):
         try:
             self.status_signal.emit("Submitting to Higgsfield…")
-            job = self.client.generate_video(
-                self.prompt, duration=self.duration,
-                reference_image=self.reference_image, seed=self.seed)
+            if self.prepared_request is not None:
+                job = self.client.generate_prepared(self.prepared_request)
+            else:
+                job = self.client.generate_video(
+                    self.prompt, duration=self.duration,
+                    reference_image=self.reference_image, seed=self.seed)
+            self.job_signal.emit(job)
 
             def progress(current):
+                self.job_signal.emit(current)
                 self.status_signal.emit(f"Rendering… ({current.status})")
 
             job = self.client.wait(job, timeout=self.timeout,
-                                   on_progress=progress)
+                                   on_progress=progress,
+                                   should_cancel=lambda: self._cancel_requested)
+            self.job_signal.emit(job)
             if job.status != "completed" or not job.video_url:
                 self.error_signal.emit(job.error or f"Render {job.status}")
                 return

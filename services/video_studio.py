@@ -33,6 +33,7 @@ per caller.
 from __future__ import annotations
 
 import sys
+import json
 from pathlib import Path
 from typing import Any
 
@@ -208,6 +209,50 @@ def library() -> list[dict]:
     return entries
 
 
+def external_output_path(topic: str, model: str) -> tuple[str, Path]:
+    """Reserve a vidforge-library path for a provider-rendered direct clip."""
+    if not _load():
+        raise RuntimeError(unavailable_reason())
+    from vidforge import history  # type: ignore
+
+    slug = history.new_slug(topic.strip() or model)
+    root = output_root() / slug
+    root.mkdir(parents=True, exist_ok=True)
+    return slug, root / f"{slug}.mp4"
+
+
+def record_external(*, slug: str, path: Path, topic: str, provider: str,
+                    model: str, seconds: int, job_id: str = "") -> None:
+    """Put a direct Sora/Higgsfield clip in the shared Video library."""
+    if not _load():
+        raise RuntimeError(unavailable_reason())
+    from vidforge import history  # type: ignore
+
+    root = path.parent
+    (root / "manifest.json").write_text(json.dumps({
+        "slug": slug,
+        "topic": topic,
+        "title": topic or f"{provider} clip",
+        "created_at": history.utcnow(),
+        "external_render": {
+            "provider": provider, "model": model, "job_id": job_id,
+        },
+        "stages": {"external_render": {"done_at": history.utcnow()}},
+    }, indent=2, ensure_ascii=False), encoding="utf-8")
+    history.record({
+        "slug": slug,
+        "topic": topic,
+        "title": topic or f"{provider} clip",
+        "created": history.utcnow(),
+        "duration_seconds": int(seconds),
+        "path": str(path),
+        "complete": True,
+        "provider": provider,
+        "model": model,
+        "job_id": job_id,
+    })
+
+
 def pre_estimate(cfg) -> dict[str, float]:
     """Per-stage cost estimate **before** the script exists.
 
@@ -236,7 +281,12 @@ def pre_estimate(cfg) -> dict[str, float]:
     chars = words * 6
 
     tts = chars / 4 / 1_000_000 * 0.60
-    images = (scenes + 1) * 0.04 if cfg.get("visuals.source") == "ai" else 0.0
+    if cfg.get("visuals.source") == "ai":
+        from services.media_catalog import openai_image_reserve_usd
+        image_model = str(cfg.get("visuals.image_model", "gpt-image-2"))
+        images = (scenes + 1) * openai_image_reserve_usd(image_model)
+    else:
+        images = 0.0
     whisper = ((words / wpm) * 0.006
                if cfg.get("captions.enabled")
                and cfg.get("captions.align") == "whisper" else 0.0)

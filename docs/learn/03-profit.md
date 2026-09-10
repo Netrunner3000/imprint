@@ -90,8 +90,8 @@ platform changing its rules cannot end you.
 
 Your costs are real. Before committing to a path, check the ratio:
 
-- A DALL·E logo concept costs about **$0.04**; the gig sells for **$10–$75**.
-  Comfortable.
+- A GPT Image logo concept uses a conservative budget reserve in Imprint; the
+  gig sells for **$10–$75**. Check the live estimate before generating a batch.
 - A full audiobook conversion runs to **dollars** in TTS, against **$20–$100** a
   month early on. Fine, but not free — check the estimate first.
 - A long drafting session on a frontier model is the easiest way to spend

@@ -271,6 +271,51 @@ def test_creator_panel_has_every_tab(window):
     for expected in ("Draft", "Calendar", "Earnings", "Voice", "Media",
                      "Agency", "Records"):
         assert any(expected in t for t in titles), f"missing {expected} tab"
+    assert "Trends" not in titles
+
+
+def test_higgsfield_has_an_explicit_api_permission(window):
+    window.allow_higgsfield_checkbox.setChecked(False)
+    assert not window.current_api_permissions()["allow_higgsfield"]
+    window.allow_higgsfield_checkbox.setChecked(True)
+    assert window.current_api_permissions()["allow_higgsfield"]
+    window.allow_higgsfield_checkbox.setChecked(False)
+
+
+def test_video_job_schema_preserves_cost_and_lifecycle(db):
+    database, _ = db
+    columns = {
+        row["name"] for row in database.get_connection().execute(
+            "PRAGMA table_info(creator_video_jobs)")
+    }
+    assert {
+        "request_id", "endpoint", "prompt_version", "estimated_credits",
+        "estimated_usd", "actual_usd", "status", "policy_result",
+        "local_path", "correlation_id",
+    } <= columns
+
+
+def test_onlyfans_handoff_loads_a_structured_creator_campaign(window):
+    context = {
+        "venture": "OnlyFans", "platform": "OnlyFans",
+        "signal": "POV mini-series", "category": "Story-led",
+        "geography": "Global", "window": "30 days",
+        "opportunity_index": 77, "momentum_index": 82,
+        "demand_index": 76, "saturation_index": 54,
+        "monetization_index": 84, "suggested_format": "3-part vertical video",
+        "pricing_experiment": "$12–18 bundle", "risk": "Low",
+        "source": "Demonstration dataset", "observed_at": "2026-09-09",
+        "confidence": "sample",
+        "deliverables": ("three concepts", "captions", "posting plan", "assets"),
+    }
+    window._onlyfans_create_campaign(context)
+    assert window._current_agent == "creator"
+    assert window.creator_platform_box.currentText() == "OnlyFans"
+    assert window.creator_kind_box.currentText() == "campaign"
+    brief = window.creator_brief_input.toPlainText()
+    assert "POV mini-series" in brief
+    assert "Demonstration dataset" in brief
+    assert "posting plan" in brief
 
 
 def test_consent_fields_appear_only_for_managed_accounts(window):
@@ -349,6 +394,56 @@ def test_worker_reports_a_failed_render_rather_than_hanging(app, tmp_path):
     worker.error_signal.connect(errors.append)
     worker.run()                      # synchronous: exercise the body directly
     assert errors and "render failed" in errors[0]
+
+
+def test_estimate_worker_prepares_before_pricing(app):
+    from services.higgsfield_client import PreparedVideoRequest, VideoEstimate
+    from ui.workers import HiggsfieldEstimateWorker
+
+    events = []
+
+    class Client:
+        def prepare_video(self, prompt, **kwargs):
+            events.append(("prepare", prompt, kwargs))
+            return PreparedVideoRequest("/model/video", {"prompt": prompt})
+
+        def estimate(self, request):
+            events.append(("estimate", request))
+            return VideoEstimate(credits=2, usd=1)
+
+    worker = HiggsfieldEstimateWorker(Client(), "safe teaser", duration=6)
+    results = []
+    worker.done_signal.connect(lambda request, estimate: results.append(
+        (request, estimate)))
+    worker.run()
+
+    assert [event[0] for event in events] == ["prepare", "estimate"]
+    assert results[0][1].usd == pytest.approx(1)
+
+
+def test_worker_cancels_a_queued_remote_render(app, tmp_path):
+    from services.higgsfield_client import VideoJob
+    from ui.workers import HiggsfieldWorker
+
+    cancelled = []
+
+    class Client:
+        def generate_video(self, prompt, **kwargs):
+            return VideoJob("job-cancel", status="queued")
+
+        def wait(self, job, *, should_cancel, **kwargs):
+            assert should_cancel()
+            cancelled.append(job.job_id)
+            return VideoJob(job.job_id, status="canceled")
+
+    worker = HiggsfieldWorker(Client(), "teaser", tmp_path / "out.mp4")
+    errors = []
+    worker.error_signal.connect(errors.append)
+    worker.cancel()
+    worker.run()
+
+    assert cancelled == ["job-cancel"]
+    assert errors == ["Render canceled"]
 
 
 def test_worker_passes_the_seed_through(app, tmp_path):

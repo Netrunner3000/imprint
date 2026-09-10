@@ -12,7 +12,7 @@ correct rather than constants buried in a client.
 
 **Zero means unknown, not free.** A provider whose rate has never been filled
 in returns `None` from `rate()`, and the callers say "cost unknown" and warn
-rather than billing nothing — the failure mode that let Gemini, DALL·E and
+rather than billing nothing — the failure mode that let Gemini, image models and
 Higgsfield all silently bill zero for months.
 """
 

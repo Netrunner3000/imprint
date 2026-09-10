@@ -87,6 +87,12 @@ local (Ollama) and cloud (Anthropic, OpenAI, DeepSeek, Gemini). It provides:
 - A **Narrator** agent that converts ebooks to MP3 using OpenAI TTS, with progress tracking and quota-failure detection.
 - A standalone, GUI-less **Course Generator** (`run_course.py`) that turns a topic into a packaged mini-course — slides, narration, and an avatar-presented video (see §5.8).
 - A full Settings panel for configuring pricing, budgets, agents, and tools without touching any file.
+- A top-level **OnlyFans** venture dashboard for content-level demand,
+  opportunity, saturation, monetization hypotheses, owned analytics, and
+  compliance review, with a structured campaign handoff to the shared Creator.
+  Connector setup and
+  data limitations are documented in
+  [`docs/creator_trend_intelligence.md`](docs/creator_trend_intelligence.md).
 
 The application is entirely self-contained: no server, no web interface, no external database. All data is stored in a local SQLite database (`data/imprint.db`).
 
@@ -419,7 +425,7 @@ Chat uses the **standard `normal_panel`** described in Chapter 4 (no custom GUI)
 
 **Left-panel button:** Client Gigs  (category: **Gigs**)
 
-A logo-design freelancer assistant. The Fiverr agent generates **DALL-E 3 logo concepts**, a polished **delivery message** for the client, and a complete **Fiverr gig description** — all from a single client brief form. Image generation runs through OpenAI's DALL-E 3 API; the text deliverables can use any provider.
+A logo-design freelancer assistant. The Fiverr agent generates **GPT Image logo concepts**, a polished **delivery message** for the client, and a complete **Fiverr gig description** — all from a single client brief form. Image generation runs through OpenAI's current Images API; the text deliverables can use any provider.
 
 ---
 
@@ -427,7 +433,7 @@ A logo-design freelancer assistant. The Fiverr agent generates **DALL-E 3 logo c
 
 Three distinct outputs, generated independently:
 
-1. **Logo concepts** — The agent first asks the text LLM to write a 1–3 sentence DALL-E-ready prompt from the brief, then sends that prompt to **DALL-E 3** (`dall-e-3`, standard quality, $0.04 per image) to render 1–4 logo concepts. Outputs are PNGs saved under `data/fiverr_output/<timestamp>/`.
+1. **Logo concepts** — The agent first asks the text LLM to write a focused image prompt from the brief, then sends it to the selected **GPT Image** model to render 1–4 concepts. Outputs are PNGs saved under `data/fiverr_output/<timestamp>/`.
 2. **Delivery message** — A friendly, professional, under-200-word note from freelancer to client. Structure: warm opening → what was delivered and why → revision offer → sign-off.
 3. **Gig description** — A complete Fiverr listing under 400 words: hook headline, what the buyer gets (bullets), why choose this gig, Basic/Standard/Premium package overview, call to action.
 
@@ -451,20 +457,14 @@ Three distinct outputs, generated independently:
 | Field | Description |
 |-------|-------------|
 | **Text provider / Text model** | Default Anthropic. Drives the delivery message and the gig listing, and builds the image prompt. |
-| **Image model** | `dall-e-3` (default) or `gpt-image-1`. This is what "Generate Logos" actually runs. |
+| **Image model** | `gpt-image-2.5-sunburst`, `gpt-image-2.5-flare` (default), or `gpt-image-2`. This is what "Generate Logos" actually runs. |
 
 Until September 2026 the image model was hardcoded in
 `services/openai_client.py` and had no control at all, while the one model box
 on screen was labelled "Text Provider" because it only drove the text outputs.
-That is why nothing in the app appeared to recommend DALL·E for the graphics
-work it was already doing. `dall-e-3` remains the default because it is what
-every previously saved order was generated with; `gpt-image-1` is newer and
-markedly better at text inside an image, which is most of what a logo is.
-
-The two models differ in ways the client handles rather than exposes: dall-e-3
-returns a short-lived URL and takes `quality: standard|hd`, gpt-image-1 always
-returns base64 and takes `low|medium|high|auto`. `generate_image()` returns PNG
-bytes either way.
+That is why the image-model choice used to be invisible. It now follows the
+current GPT Image catalog and `generate_image()` returns PNG bytes consistently.
+DALL·E 2 and 3 are absent because OpenAI retired and removed both APIs.
 
 ##### Actions
 
@@ -476,9 +476,8 @@ bytes either way.
 | **Stop** | Appears only while a job is running. |
 
 The per-image estimate sits at the right-hand end of this row, beside the
-control that incurs it. It is a **display estimate only** — the budget guard is
-denominated in tokens and cannot express "one image", so image spend does not
-count against the session or daily cap. See `SUGGESTIONS.md`.
+control that incurs it. It is a conservative per-image reserve and is checked
+against the session and daily caps before the image request starts.
 
 ##### Results tabs
 
@@ -509,7 +508,7 @@ Live status appears as a line under the action row.
 
 #### External Requirements
 
-- **OpenAI API key** with billing enabled — DALL-E 3 image generation is OpenAI-only. Cost is approximately **$0.04 per standard-quality 1024×1024 image**.
+- **OpenAI API key** with billing enabled — GPT Image generation is OpenAI-only. Imprint shows and guards a conservative reserve because billing varies with image tokens.
 - Optional: account on **Fiverr** (https://fiverr.com) to publish the gig and deliver to clients. No Fiverr API integration — copy/paste the generated content.
 - Optional: a vector tool (Illustrator, Affinity Designer, Vectorizer.AI) to convert the raster PNG concepts into final vector logos before delivery.
 
@@ -517,7 +516,7 @@ Live status appears as a line under the action row.
 
 #### Tips & Limitations
 
-> The DALL-E-3 prompt is built to force "vector logo, transparent background, no text" — but the result is still a raster PNG. Vectorise before final client delivery.
+> The image prompt asks for a vector-like logo, transparent background and no text — but the result is still a raster PNG. Vectorise before final client delivery.
 
 > The text LLM is used twice per logo run: once to build the image prompt, once for whatever copy task you trigger.
 
@@ -533,9 +532,9 @@ Live status appears as a line under the action row.
 | Agent name (DB) | `fiverr` |
 | Label | Atelier |
 | Default text provider | Anthropic |
-| Image provider | OpenAI (DALL-E 3) — hard-coded |
+| Image provider | OpenAI GPT Image — selectable current model |
 | External worker | `FiverrImageWorker` (in `main.py`) — threaded image generation |
-| System prompt | Three modes: delivery message, gig description, DALL-E prompt builder |
+| System prompt | Three modes: delivery message, gig description, image-prompt builder |
 
 ---
 
@@ -1369,17 +1368,29 @@ keeping a copy — one checkout, one pipeline, two front doors. `docs/agents/vid
 covers the trade and what it costs (a clone of `imprint` alone has no Video tab,
 which the panel explains rather than crashing on).
 
-**Format** is the only decision that changes the run. `Long-form` uses
-`config.yaml` as-is. `Social clip` overrides width, height, image shape, target
-length and scene cadence — the same `produce()` call, not a second code path,
-which is what lets Social ask for a clip without owning a video pipeline.
+Choose a **Visual provider** and **Visual model** as well as the format. OpenAI
+offers the current GPT Image models for scene-by-scene assembly and Sora 2 / 2
+Pro for a direct 4, 8 or 12-second clip. Higgsfield's Seedance route also makes
+a direct clip after an exact provider quote. Pexels supplies stock visuals and
+Local makes gradient cards. Every visible model has an implemented route.
 
-The cost estimate is real: the pipeline's own per-stage arithmetic (images,
-narration characters, caption alignment), charged against the session and daily
-caps before the run starts. Roughly €1–2 long-form, €0.25 for a 30-second clip.
+DALL·E 2 and 3 are not selectable because OpenAI retired and removed both APIs;
+GPT Image is their supported replacement. Sora remains callable but is
+deprecated and scheduled to shut down on **24 September 2026**, so Imprint
+labels it as retiring and blocks new submissions from that date.
 
-**Stop** cancels at the next stage boundary rather than mid-ffmpeg, so a
-cancelled render is resumable rather than a half-written file.
+For scene visuals, `Long-form` uses `config.yaml` as-is and `Social clip`
+overrides width, height, image shape, target length and scene cadence — the same
+`produce()` call, not a second code path.
+
+The cost estimate is guarded before the run: a conservative reserve for the
+GPT Image pipeline, exact per-second pricing for Sora, and Higgsfield's exact
+request quote. Pexels and Local remove the image-generation portion, though the
+script and narration providers can still cost money.
+
+**Stop** cancels the pipeline at the next stage boundary; Higgsfield uses its
+provider cancellation endpoint. Sora has no cancel operation, so Imprint keeps
+watching and saves the paid result once it has been submitted.
 
 The **Library** tab reads vidforge's own history, so a render started in the
 standalone app appears here and vice versa. Frozen, both share
@@ -1438,9 +1449,12 @@ engagement bait, as a rule rather than a hope.
 `key: creator` · `agents/creator_agent.py` · panel `build_creator_panel()` ·
 full sheet in `docs/agents/creator.md`
 
-Plans and drafts for subscription creator accounts (OnlyFans and similar):
-content calendar, feed captions, PPV copy, welcome messages, off-platform
-promos, bios, and earnings tracking.
+The shared content-production workspace for every venture: books and
+publishing, music, AltMerch, OnlyFans, and future projects. It turns a saved
+voice plus platform context into concepts, captions, campaigns, posting plans,
+promotional asset briefs, and a reviewable calendar. OnlyFans-specific business
+intelligence lives in its own top-level workspace and hands selected
+opportunities into Creator as structured campaign briefs.
 
 **It has no posting path, by design.** OnlyFans has no public API — the limited
 access introduced in 2024 is for verified business partners only, and every
@@ -1450,8 +1464,8 @@ earnings as the documented outcome. Their terms draw the line themselves:
 automation that *assists* a human is acceptable, automation that *replaces* one
 is not. So the agent drafts, and the user posts.
 
-It will not write a message posing as a specific real person in a live
-conversation with a paying subscriber.
+For adult subscription work it will not write a message posing as a specific
+real person in a live conversation with a paying subscriber.
 
 #### Account types
 
@@ -1476,9 +1490,12 @@ session.
 
 #### Higgsfield promo video
 
-`services/higgsfield_client.py` wraps the Higgsfield video API;
+`services/higgsfield_client.py` wraps Higgsfield's current asynchronous API:
+key ID + secret authentication, model-specific endpoints, presigned media
+uploads, official estimates, returned status/cancel URLs and bounded polling.
 `ui/workers.HiggsfieldWorker` submits, polls, downloads the mp4 and files it in
-the media library.
+the media library. Add `HF_API_KEY_ID` and `HF_API_KEY_SECRET` to the private
+`.env` and enable **Higgsfield** in the API permissions row.
 
 Higgsfield's Terms of Use prohibit sexually explicit material and unauthorised
 images of other people, moderate prompts, reference images *and* outputs, and
@@ -1488,8 +1505,11 @@ because a filter that rejects "no nudity" is one people route around rather than
 trust. The practical consequence: **explicit content cannot come from
 Higgsfield**; its role is the safe-for-work teaser for off-platform funnels.
 
-> ⚠️ Higgsfield renders currently bypass `authorize_request`, so they do not
-> count against the budget caps. Tracked as a `P1` in `TODO.md`.
+The exact provider estimate is shown before approval and counted against the
+budget caps. Every remote state is retained in `creator_video_jobs`; completed
+files keep their job ID, and selecting a Calendar row before generation attaches
+the result to that item. Queued requests can be canceled; processing requests
+are watched through completion so their paid output is not lost.
 
 #### Earnings and attribution
 
@@ -1697,8 +1717,8 @@ Token pricing is correct for chat and wrong for everything else the app does. An
 image is priced per image, a video render per image and per audio-minute, speech
 per thousand characters. None of those can be expressed as an input/output token
 pair, so all of them used to count as nothing against the caps — not literally
-zero, which was worse: `dall-e-3` has no row of its own, so the token path fell
-through to OpenAI's default *text* rates and priced a $0.04 image at €0.000001.
+zero, which was worse: an image-model ID with no text-pricing row fell through
+to OpenAI's default text rates and produced a meaningless near-zero estimate.
 
 Any caller that knows the real price passes it:
 
@@ -1717,9 +1737,9 @@ constants buried in a client.
 > yet" next to the button and, where it is about to spend, asks first.
 
 Currently priced this way: Gigs logo images, video renders, audiobook TTS.
-**Higgsfield renders are deliberately left at `0`** — the rate is not known, so
-the Creator panel warns before rendering rather than billing zero silently. Set
-`per_unit_usd.higgsfield_render` from an actual invoice to have it counted.
+Creator's Higgsfield path does not use the static placeholder: it asks the
+provider's authenticated estimate endpoint for the exact render and hands that
+USD quote to the same budget guard.
 
 
 ### Confirmation Dialog (Pre-Request)
@@ -2295,8 +2315,8 @@ Service income is the **fastest path to revenue**: you sell a deliverable, you g
 
 1. Buyer places an order — read their brief carefully.
 2. Fill in the Fiverr panel: business name, industry, style, colours, notes.
-3. Click **Generate Image Prompt**. Copy the DALL-E 3 prompt.
-4. Generate 2–3 logo variants in ChatGPT (DALL-E) or via the OpenAI API.
+3. Choose a GPT Image model and click **Generate Logos**.
+4. Review the 2–3 logo variants Imprint saves locally.
 5. Refine in Figma / Illustrator / Photopea (free).
 6. Click **Generate Delivery Message**. Paste into the Fiverr order chat.
 7. Deliver the files. Wait for buyer approval.
@@ -2307,7 +2327,7 @@ Service income is the **fastest path to revenue**: you sell a deliverable, you g
 - Month 3 (10+ five-star reviews): 15–30 orders/month at $25–$45 = **$375–$1,350**.
 - Top sellers: $3k–$10k/month doing volume logo work.
 
-**External costs:** Fiverr commission **20%** of gross. OpenAI DALL-E ≈ $0.04 per image. Figma free tier sufficient.
+**External costs:** Fiverr commission **20%** of gross. OpenAI GPT Image cost varies with image tokens; use Imprint's guarded estimate. Figma free tier sufficient.
 
 ---
 
@@ -2434,7 +2454,7 @@ Recurring revenue compounds — once published, content keeps earning. These age
 - 100k monthly listeners: **$500–$3,000/month**.
 - 1M+ streams over a track's lifetime: **$3,000–$5,000 single-track lifetime**.
 
-**External costs:** DistroKid $22.99/year. PRO registration $0–$50 one-time. Cover art $0–$100 (DALL-E or Fiverr). Mixing/mastering — DIY in Logic/Reaper, or hire ($50–$500/track).
+**External costs:** DistroKid $22.99/year. PRO registration $0–$50 one-time. Cover art $0–$100 (GPT Image or Fiverr). Mixing/mastering — DIY in Logic/Reaper, or hire ($50–$500/track).
 
 ---
 
