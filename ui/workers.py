@@ -319,6 +319,58 @@ class OpenAIVideoWorker(QThread):
             self.error_signal.emit(str(exc))
 
 
+class VideoGenerationWorker(QThread):
+    """Run a non-cancellable Gemini or Wan video task and save it locally."""
+
+    status_signal = Signal(str)
+    progress_signal = Signal(int, str)
+    job_signal = Signal(object)
+    done_signal = Signal(str)
+    error_signal = Signal(str)
+
+    def __init__(self, client, prompt: str, output_path, *, provider: str,
+                 model: str, seconds: int, aspect_ratio: str,
+                 timeout: int = 900):
+        super().__init__()
+        self.client = client
+        self.prompt = prompt
+        self.output_path = Path(output_path)
+        self.provider = provider
+        self.model = model
+        self.seconds = seconds
+        self.aspect_ratio = aspect_ratio
+        self.timeout = timeout
+
+    def run(self):
+        try:
+            self.status_signal.emit(f"Submitting to {self.provider}…")
+            job = self.client.create_video(
+                self.prompt, model=self.model, seconds=self.seconds,
+                aspect_ratio=self.aspect_ratio)
+            self.job_signal.emit(job)
+
+            def progress(current):
+                self.job_signal.emit(current)
+                self.progress_signal.emit(
+                    int(getattr(current, "progress", 0) or 0),
+                    f"{self.provider} rendering… ({current.status})")
+
+            job = self.client.wait_video(
+                job, timeout=self.timeout, on_progress=progress)
+            self.job_signal.emit(job)
+            if job.status != "completed":
+                self.error_signal.emit(
+                    job.error or f"{self.provider} render {job.status}")
+                return
+
+            self.status_signal.emit(f"Downloading {self.provider} video…")
+            self.output_path.parent.mkdir(parents=True, exist_ok=True)
+            self.output_path.write_bytes(self.client.download_video(job))
+            self.done_signal.emit(str(self.output_path))
+        except Exception as exc:
+            self.error_signal.emit(str(exc))
+
+
 class HiggsfieldWorker(QThread):
     """Submits a Higgsfield render, waits for it, and downloads the result.
 

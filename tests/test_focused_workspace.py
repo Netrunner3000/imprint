@@ -109,6 +109,8 @@ def test_paid_backends_are_permitted_for_the_agents_that_use_them():
     registry = Registry()
     pairs = [
         ("video", "openai"),          # the vidforge pipeline
+        ("video", "gemini"),          # Gemini Omni and Veo direct clips
+        ("video", "qwen"),            # Alibaba Wan direct clips
         ("creator", "higgsfield"),    # promo teasers
         ("fiverr", "openai"),         # logo images
     ]

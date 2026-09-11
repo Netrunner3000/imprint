@@ -147,21 +147,28 @@ Choose the visual route as well as the format:
 |---|---|
 | **GPT Image 2.5 / GPT Image 2** | Generates scene images, then assembles the full narrated pipeline. Long-form or 15–90-second social clip. |
 | **Sora 2 / Sora 2 Pro** | One direct 4, 8 or 12-second clip with audio. Retiring 24 September 2026. |
+| **Gemini Omni 1.1 Flash** | One direct 3–10-second 720p clip with audio. |
+| **Veo 3.1 / Fast / Lite** | One direct 4, 6 or 8-second 720p clip with audio. |
+| **Wan 3.0 / Prime / 2.7** | One direct 2–30-second 720p clip through Qwen/Alibaba Model Studio. |
 | **Higgsfield Seedance** | One direct clip after Imprint shows the exact provider quote. |
 | **Pexels** | Stock scene visuals; needs a Pexels key. |
 | **Local** | Local gradient scene cards; no image-generation charge. |
 
 DALL·E does not appear because OpenAI removed the DALL·E 2 and 3 APIs. Choose a
-current GPT Image model for the same scene-image role.
+current GPT Image model for the same scene-image role. DeepSeek, Anthropic,
+Kimi and Ollama can still write the prompt or script, but they are not in the
+visual menu because their APIs do not generate video.
 
 The estimate beside the button is checked against your session and daily caps
-before the run starts: a conservative reserve for GPT Image, exact per-second
-Sora pricing, or Higgsfield's exact quote. Pexels and Local remove the image
-generation portion; script and narration can still cost money.
+before the run starts: a conservative reserve for GPT Image, selected 720p
+per-second rates for Sora/Veo/Wan, a token-based reserve for Gemini Omni, or
+Higgsfield's exact quote. Pexels and Local remove the image generation portion;
+script and narration can still cost money.
 
 **Stop** cancels a pipeline render at the next stage boundary or requests
-Higgsfield cancellation. Sora cannot be cancelled after submission, so Imprint
-keeps watching it and saves the paid result.
+Higgsfield cancellation. Sora, Gemini and Wan direct jobs cannot be safely
+cancelled after submission here, so Imprint keeps watching and saves the paid
+result.
 
 ![Video library](img/agent-video-library.png)
 

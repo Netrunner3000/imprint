@@ -1370,9 +1370,13 @@ which the panel explains rather than crashing on).
 
 Choose a **Visual provider** and **Visual model** as well as the format. OpenAI
 offers the current GPT Image models for scene-by-scene assembly and Sora 2 / 2
-Pro for a direct 4, 8 or 12-second clip. Higgsfield's Seedance route also makes
-a direct clip after an exact provider quote. Pexels supplies stock visuals and
-Local makes gradient cards. Every visible model has an implemented route.
+Pro for a direct 4, 8 or 12-second clip. Gemini adds Omni 1.1 Flash and the
+Veo 3.1 quality, Fast and Lite tiers. Qwen adds Wan 3.0, Wan 3.0 Prime and Wan
+2.7 text-to-video. Higgsfield's Seedance route also makes a direct clip after
+an exact provider quote. Pexels supplies stock visuals and Local makes gradient
+cards. Every visible model has an implemented route; DeepSeek, Anthropic, Kimi
+and Ollama stay available for writing but are not shown as video renderers
+because their APIs do not return generated video.
 
 DALL·E 2 and 3 are not selectable because OpenAI retired and removed both APIs;
 GPT Image is their supported replacement. Sora remains callable but is
@@ -1384,13 +1388,15 @@ overrides width, height, image shape, target length and scene cadence — the sa
 `produce()` call, not a second code path.
 
 The cost estimate is guarded before the run: a conservative reserve for the
-GPT Image pipeline, exact per-second pricing for Sora, and Higgsfield's exact
+GPT Image pipeline, selected 720p per-second pricing for Sora, Veo and Wan,
+a clearly labelled token-based reserve for Gemini Omni, and Higgsfield's exact
 request quote. Pexels and Local remove the image-generation portion, though the
 script and narration providers can still cost money.
 
 **Stop** cancels the pipeline at the next stage boundary; Higgsfield uses its
-provider cancellation endpoint. Sora has no cancel operation, so Imprint keeps
-watching and saves the paid result once it has been submitted.
+provider cancellation endpoint. Sora, Gemini and Wan jobs have no safe cancel
+route in these integrations, so Imprint keeps watching and saves the paid
+result once it has been submitted.
 
 The **Library** tab reads vidforge's own history, so a render started in the
 standalone app appears here and vice versa. Frozen, both share
@@ -1882,7 +1888,8 @@ All business logic is separated from the GUI into dedicated service classes in `
 | `ollama_client.py` | `OllamaClient` | Ollama API wrapper: `list_models()`, `chat()`, `generate()`, streaming |
 | `openai_client.py` | `OpenAIClientWrapper` | OpenAI API wrapper: `chat()`, `stream_chat()` |
 | `deepseek_client.py` | `DeepSeekClientWrapper` | DeepSeek API wrapper (OpenAI-compatible): `chat()`, `stream_chat()` |
-| `gemini_client.py` | `GeminiClientWrapper` | Gemini API wrapper: `chat()`, `stream_chat()` |
+| `gemini_client.py` | `GeminiClientWrapper` | Gemini chat plus Omni/Veo video create, poll and download |
+| `qwen_client.py` | `QwenClientWrapper` | Qwen chat plus Wan video create, poll and download |
 | `history_store.py` | `HistoryStore` | Save and load conversation JSON files in `data/chats/` |
 | `report_exporter.py` | `ReportExporter` | Write output content to timestamped text files in `data/reports/` |
 | `resource_monitor.py` | `ResourceMonitor` | `snapshot()` returns CPU, RAM, swap, and battery stats via `psutil` |
@@ -2200,6 +2207,11 @@ this app doesn't build, so it can't touch one a user has since added.
 | `OPENAI_API_KEY` | OpenAI | platform.openai.com → API Keys |
 | `DEEPSEEK_API_KEY` | DeepSeek | platform.deepseek.com → API Keys |
 | `GOOGLE_API_KEY` | Gemini | console.cloud.google.com |
+| `DASHSCOPE_API_KEY` | Qwen / Wan | bailian.console.alibabacloud.com |
+
+Wan video optionally uses `DASHSCOPE_VIDEO_BASE_URL` for a workspace-scoped
+regional `/api/v1` endpoint. This is separate from `DASHSCOPE_BASE_URL`, which
+points at the OpenAI-compatible chat endpoint.
 
 Keys are stored in `~/.zshrc` (or a `.env` file in the project root) and loaded at startup. Never commit them to version control.
 
