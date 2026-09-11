@@ -241,6 +241,7 @@ from ui.workers import (
     VideoWorker,
     ChatWorker, SubprocessWorker, ModelPullWorker, FiverrImageWorker, ShortsWorker,
     HiggsfieldEstimateWorker, HiggsfieldWorker, OpenAIVideoWorker,
+    VideoGenerationWorker,
 )
 from ui.forms import (
     CONTENT_MAX_WIDTH, HEADER_HEIGHT, LG, MD, RAIL_LEFT_WIDTH,
@@ -4076,10 +4077,13 @@ class GodAI(QWidget):
         if direct:
             self.video_format_box.setCurrentText("Social clip")
             self.video_format_box.setEnabled(False)
-            self._video_set_lengths((4, 8, 12), 8)
-            if (selection.provider == "OpenAI"
-                    and self.video_aspect_box.currentText() == "Square 1:1"):
-                self.video_aspect_box.setCurrentText("Vertical 9:16")
+            durations = selection.durations or (4, 8, 12)
+            preferred = 8 if 8 in durations else durations[0]
+            self._video_set_lengths(durations, preferred)
+            if self.video_aspect_box.currentText() not in selection.aspects:
+                wanted = ("Vertical 9:16" if "Vertical 9:16" in selection.aspects
+                          else selection.aspects[0])
+                self.video_aspect_box.setCurrentText(wanted)
         else:
             self.video_format_box.setEnabled(True)
             self._video_set_lengths(video_studio.CLIP_SECONDS, 30)
@@ -4130,16 +4134,17 @@ class GodAI(QWidget):
 
     def _video_estimate(self) -> dict:
         from services import video_studio
-        from services.media_catalog import SORA_USD_PER_SECOND
+        from services.media_catalog import direct_video_cost_usd
 
         selection = self._video_media_selection()
-        if (selection is not None and selection.provider == "OpenAI"
-                and selection.kind == "direct_video"):
+        if (selection is not None and selection.kind == "direct_video"
+                and selection.provider in {"OpenAI", "Gemini", "Qwen"}):
             seconds = int(self.video_length_box.currentText().rstrip("s") or 4)
             return {
                 "scenes": 1, "words": 0,
-                "total": round(SORA_USD_PER_SECOND[selection.model_id] * seconds, 2),
+                "total": direct_video_cost_usd(selection.model_id, seconds),
                 "direct": True,
+                "reserve": selection.model_id == "gemini-omni-1.1-flash",
             }
         if (selection is not None and selection.provider == "Higgsfield"
                 and selection.kind == "direct_video"):
@@ -4169,8 +4174,9 @@ class GodAI(QWidget):
             return
         eur = estimate["total"] * eur_per_usd()
         if estimate.get("direct"):
+            prefix = "Budget reserve" if estimate.get("reserve") else "Direct clip"
             self.video_cost_label.setText(
-                f"Direct clip · ${estimate['total']:.2f} · ≈ €{eur:.2f}")
+                f"{prefix} · ${estimate['total']:.2f} · ≈ €{eur:.2f}")
         else:
             self.video_cost_label.setText(
                 f"{estimate['scenes']} scenes · ~{estimate['words']} words · "
@@ -4232,12 +4238,12 @@ class GodAI(QWidget):
         aspect = self.video_aspect_box.currentText()
         sora_size = ("1280x720" if aspect == "Landscape 16:9"
                      else "720x1280")
-        higgsfield_aspect = {
+        provider_aspect = {
             "Landscape 16:9": "16:9",
             "Vertical 9:16": "9:16",
             "Square 1:1": "1:1",
         }.get(aspect, "16:9")
-        return seconds, sora_size, higgsfield_aspect
+        return seconds, sora_size, provider_aspect
 
     def _video_render_direct(self, selection) -> None:
         from services import video_studio
@@ -4248,7 +4254,7 @@ class GodAI(QWidget):
                 self, "Topic Needed",
                 "Direct video models need a prompt in the Topic field.")
             return
-        seconds, sora_size, higgsfield_aspect = self._video_direct_parameters()
+        seconds, sora_size, provider_aspect = self._video_direct_parameters()
         self._video_external_context = {
             "slug": "", "path": "", "topic": topic,
             "provider": selection.provider.lower(), "model": selection.model_id,
@@ -4310,6 +4316,62 @@ class GodAI(QWidget):
             self.video_worker.start()
             return
 
+        if selection.provider in {"Gemini", "Qwen"}:
+            from services.media_catalog import direct_video_cost_usd
+            from services.per_unit_pricing import eur_per_usd
+
+            provider_key = selection.provider.lower()
+            client = self.gemini if selection.provider == "Gemini" else self.qwen
+            checkbox = (self.allow_gemini_checkbox if selection.provider == "Gemini"
+                        else self.allow_qwen_checkbox)
+            env_name = ("GOOGLE_API_KEY (or GEMINI_API_KEY)"
+                        if selection.provider == "Gemini" else "DASHSCOPE_API_KEY")
+            if not client.key_available():
+                QMessageBox.information(
+                    self, f"{selection.provider} Key Needed",
+                    f"Set {env_name} in Imprint's private .env file.")
+                return
+            if not checkbox.isChecked():
+                QMessageBox.warning(
+                    self, f"{selection.provider} Not Enabled",
+                    f"Enable {selection.provider} in the API permissions row first.")
+                return
+            cost_usd = direct_video_cost_usd(selection.model_id, seconds)
+            token = self.authorize_request(
+                "video", provider_key, selection.model_id, topic,
+                label="direct video", flat_cost_eur=round(
+                    cost_usd * eur_per_usd(), 6))
+            if not token:
+                return
+            self._video_request_token = token
+            try:
+                slug, output_path = video_studio.external_output_path(
+                    topic, selection.model_id)
+            except Exception as exc:
+                self._video_on_error(str(exc))
+                return
+            self._video_external_context.update({
+                "slug": slug, "path": str(output_path),
+            })
+            active_kind = f"{provider_key}-video"
+            self._video_begin(active_kind, can_cancel=False)
+            self.video_status_label.setText(
+                f"Submitting to {selection.provider}… The provider has no safe "
+                "cancel operation after submission, so Imprint will preserve "
+                "the result locally.")
+            self.video_worker = VideoGenerationWorker(
+                client, topic, output_path, provider=selection.provider,
+                model=selection.model_id, seconds=seconds,
+                aspect_ratio=provider_aspect)
+            self.video_worker.status_signal.connect(
+                self.video_status_label.setText)
+            self.video_worker.progress_signal.connect(self._video_on_progress)
+            self.video_worker.job_signal.connect(self._video_external_job)
+            self.video_worker.done_signal.connect(self._video_external_done)
+            self.video_worker.error_signal.connect(self._video_on_error)
+            self.video_worker.start()
+            return
+
         if selection.provider == "Higgsfield":
             client = HiggsfieldClient()
             if not client.configured:
@@ -4327,7 +4389,7 @@ class GodAI(QWidget):
             self.video_status_label.setText("Preparing Higgsfield estimate…")
             self.video_estimate_worker = HiggsfieldEstimateWorker(
                 client, topic, duration=seconds,
-                aspect_ratio=higgsfield_aspect, resolution="720")
+                aspect_ratio=provider_aspect, resolution="720")
             self.video_worker = self.video_estimate_worker
             self.video_estimate_worker.status_signal.connect(
                 self.video_status_label.setText)
@@ -4411,7 +4473,8 @@ class GodAI(QWidget):
 
     def _video_on_error(self, error: str):
         provider_completed = (
-            self._video_active_kind in {"sora", "higgsfield"}
+            self._video_active_kind in {
+                "sora", "higgsfield", "gemini-video", "qwen-video"}
             and self._video_external_context.get("provider_completed", False)
         )
         if provider_completed:
@@ -4434,9 +4497,14 @@ class GodAI(QWidget):
         self._video_visual_model_changed()
 
     def video_stop(self):
-        if self._video_active_kind == "sora":
+        if self._video_active_kind in {"sora", "gemini-video", "qwen-video"}:
+            provider = {
+                "sora": "Sora", "gemini-video": "Gemini",
+                "qwen-video": "Wan",
+            }[self._video_active_kind]
             self.video_status_label.setText(
-                "Sora has no cancel operation. Imprint will keep watching and "
+                f"{provider} has no safe cancel operation here. Imprint will "
+                "keep watching and "
                 "save the paid result.")
             return
         if self.video_worker is not None:

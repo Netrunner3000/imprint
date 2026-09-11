@@ -50,7 +50,7 @@ consequences of what just landed rather than new ideas.
 | 47 | **Retire or rehome the chat agent.** It is still constructed and still owns `normal_panel`, but the tabbed shell reaches no part of it. Either it becomes a real mode or it goes, and with it a meaningful amount of machinery. | infra | M | IDEA |
 | 48 | **Back up the writable directory.** Everything that matters — database, keys, chats, logs — lives in one Application Support folder that nothing in this workspace backs up, while `_Admin/backup/` exists and is good at exactly this. One line in `backup_folders.txt`. | infra | XS | IDEA |
 | 49 | **Sleep timer and keyboard control for the player.** Resume was the ask and it works; space-to-pause and a sleep timer are what make it something you would actually listen to a novel on. | feature | S | IDEA |
-| 50 | DONE — **Make Video's visual provider/model choice real.** Current GPT Image models run through the scene pipeline; Sora and Higgsfield create direct clips; Pexels and Local select their actual visual sources. Retired DALL·E IDs are not offered. | feature | M | DONE |
+| 50 | DONE — **Make Video's visual provider/model choice real.** Current GPT Image models run through the scene pipeline; Sora, Gemini Omni/Veo, Qwen/Wan and Higgsfield create direct clips; Pexels and Local select their actual visual sources. Retired DALL·E IDs and providers without a video-output API are not offered. | feature | M | DONE |
 | 51 | **Migrate Sora before its provider shutdown.** The route is useful for the remaining compatibility window, but the API closes on 24 September 2026. Keep the direct-video adapter boundary and swap in OpenAI's successor when one is published. | maintenance | M | IDEA |
 
 ## v3 — bigger swings
