@@ -1,150 +1,160 @@
-# 5 · Best practices
+# 5 · Operate safely
 
-Working habits that hold up, and the traps this app has in particular.
+> The best automation is bounded: known input, known cost, observable output,
+> explicit approval, and a failure state that does not silently publish.
+
+## Quality before volume
+
+Define acceptance before you generate. A useful checklist contains observable
+criteria: required sections exist, names and numbers match the source, links
+work, the page responds at phone width, quoted text is exact, audio pronunciation
+is approved, or the asset meets the buyer's dimensions.
+
+Generate the smallest unit you can judge. Approve one scene before a chapter,
+one voice sample before a novel, one clip before a campaign, and one client
+delivery before a batch. Cheap rejection is a feature.
+
+Keep the human review close to the risk:
+
+| Risk | Required review |
+|---|---|
+| Factual or financial claim | Check against a named, current source. |
+| Quote or testimonial | Match the original exactly and confirm permission. |
+| Client asset | Test against the written brief and acceptance criteria. |
+| Public post | Check platform/community fit, disclosure, links, and claims. |
+| Identity or persona | Confirm authorisation, consent, records, and disclosure. |
+| Code | Run it, inspect dependencies, test keyboard/mobile/error states. |
+
+## Prompt with constraints, not adjectives
+
+A strong brief answers: **who is this for, what must happen, what inputs are
+authoritative, what must be included, what must be avoided, and how will it be
+judged?** “Premium and engaging” answers none of those.
+
+Use one main change per run. In Draft, describe the next event or argument. In
+Web, state page sections and behaviours. In Gigs, include required wording and
+competitors to avoid. In Social, set one goal and one angle. In Creator, name
+the account, segment, offer, and actual event.
+
+Edit good output in place. Re-running an entire asset to fix one sentence costs
+more, takes longer, and can damage the parts already approved.
+
+## Choose providers and models deliberately
+
+Start with **Use Recommended**. Change the route only when you have a measurable
+need: better adherence, larger context, lower latency, lower cost, local privacy,
+or a media capability the current route lacks.
+
+Compare routes on the same small input and acceptance checklist. Record:
+
+- pass/fail and the reason;
+- human correction minutes;
+- request cost and latency;
+- policy or format failures;
+- whether the output remained usable downstream.
+
+The cheapest request is not cheapest if correction time doubles. The strongest
+model is wasteful if a smaller model passes the same checklist.
+
+Text providers can prepare scripts and prompts but cannot automatically become
+video providers. Imprint shows a media model only when it has a real output
+adapter, key requirement, duration/aspect rules, pricing treatment, polling,
+download, and failure path.
+
+## Money and budget controls
+
+- Set session and daily caps before beginning work.
+- Estimate before every batch, image set, narration, or video.
+- Treat an unpriced action as an unknown liability, not €0.
+- Review Cost History weekly and reconcile material differences with the
+  provider account.
+- Include failed attempts and discarded output in unit economics.
+- Keep acquisition spend and fulfilment cost beside API spend; token cost is
+  often not the largest cost.
+
+An estimate authorises a reserve; it does not guarantee the provider's final
+invoice. Currency conversion, token counting, duration, retries, and provider
+reporting can differ.
+
+## Cancellation and long-running work
+
+**Stop means “request cancellation,” not “reverse the charge.”** Local text
+streaming and the assembled video pipeline can stop cooperatively. A separate
+audiobook process may leave completed chunks. Some direct video providers have
+no safe cancellation path after accepting a job; Imprint continues monitoring
+so the paid result is not lost. Higgsfield cancellation can depend on whether
+the request is still queued or already processing.
+
+Before a long job:
+
+1. verify the input and output folders;
+2. generate a small sample;
+3. inspect the estimate and remaining cap;
+4. keep the computer and connection available when the provider requires
+   polling or temporary-file download;
+5. know where partial files and logs will appear.
+
+Press Stop once and read the status. Repeated clicks cannot cancel a provider
+operation that has no cancellation endpoint.
+
+## Publishing and platform safety
+
+Nothing should leave the machine invisibly. Imprint prepares schedules and can
+post only through explicitly configured integrations; it has no unattended
+“publish all” business loop. Review each destination's current terms and the
+specific community rules immediately before publishing because they change.
+
+Avoid fabricated evidence: reviews, testimonials, awards, rankings, customers,
+sales, scarcity, and performance. Generated marketing language is especially
+likely to turn a desired claim into an asserted fact. Delete or substantiate it.
+
+For AI-assisted books, media, music, ads, and persona content, check current
+disclosure, copyright, likeness, voice, and synthetic-media requirements. An
+API accepting a request does not grant rights to the input or output.
+
+## Creator, managed account, and adult-platform safeguards
+
+- Use `managed` only with recorded authorisation.
+- Use `persona` only with an accurate disclosure.
+- Keep performer identity, age, consent, release, and records location current.
+- Never upload an unauthorised likeness, cloned voice, or private material.
+- Do not use Creator drafts to impersonate a specific real person in a live
+  conversation.
+- Higgsfield teaser generation is subject to its own moderation and is designed
+  here for safe-for-work promotion, not explicit content.
+- Treat the OnlyFans opportunity dashboard as directional unless the source
+  note identifies real configured inputs; sample data is demonstration only.
+
+The app can enforce some missing-field gates. It cannot determine whether a
+record is legally sufficient or whether real-world consent remains valid.
+
+## Data, secrets, and backups
+
+Application data lives under `~/Library/Application Support/Imprint/`, including
+the database, saved content, settings, logs, and private environment file.
+
+- Back up this directory on a tested schedule.
+- Keep API keys only in the private environment/settings flow.
+- Never paste secrets into prompts; providers receive prompt content.
+- Do not commit client briefs, identity records, unreleased work, or earnings
+  exports to a public repository.
+- Confirm an export's destination before sharing it.
+- Removing the app does not necessarily remove Application Support data; treat
+  deletion and migration as separate operations.
+
+## A preflight for paid or public actions
+
+```text
+[ ] Correct project, account, and destination
+[ ] Authoritative inputs and rights confirmed
+[ ] Provider/model capability is real
+[ ] Estimate understood; cap has room
+[ ] Acceptance checklist written
+[ ] Human approval before publish/delivery
+[ ] Output and partial-output location known
+[ ] Primary metric, denominator, window, and stop rule recorded
+```
 
 ---
 
-## Money
-
-**Set the daily cap before the first long session, not after.** `SPEND (€)` →
-`Daily`. The validator refuses a request that would exceed it *before* sending,
-so the cap is a real stop, not a warning.
-
-**Match the model to the job.** The recommendation marked in accent on the
-provider and model boxes is per-agent and worth following. A drafting pass wants
-a strong model; sales-metric questions and todo tracking do not — that is why
-Publish recommends Haiku and Draft recommends Fable.
-
-**Check `Cost History` weekly.** Estimates are token-count guesses; the billed
-figure is what lands there.
-
-<a id="money"></a>
-**If a paid provider shows €0.00, something is wrong.** It means that provider
-has no pricing row, so its spend counts against no budget at all. The app
-reconciles `config/pricing.json` into the database on every launch, but a rate
-that is `0.0` *in the file* stays zero — Gemini currently is, and is tracked as
-an open item in `TODO.md`.
-
----
-
-## Prompting these agents
-
-**One instruction per run.** `Direction:` works best with a single concrete
-next step. "The argument in the kitchen, she leaves angry" produces a scene;
-"write chapter 3" produces filler.
-
-**Use Continue, not Write.** Write starts fresh. Continue extends what is there
-and keeps voice consistent. Most of a drafting session should be Continue.
-
-**Fill the fields you are tempted to skip.** `Comp Titles`, `Colour Palette`,
-`Framework`, `Target Audience`. Blank fields do not mean "no preference" to a
-model — they mean it picks, and its default choices are generic.
-
-**Edit in place.** Every output pane is a real editor. Fixing a paragraph by
-hand is faster than re-running and cheaper.
-
----
-
-## Projects
-
-**Fill the Project Bar and save the Book Profile first.** Title, Author, Type,
-hook and target reader are injected into every downstream prompt. Doing it once
-is the difference between one coherent book and six disconnected sessions.
-
-**One project per sellable thing.** Not per session, not per chapter.
-
----
-
-## Publishing
-
-**Ingest KDP reports on a schedule.** Amazon has no API — the numbers only exist
-in the app once you download the CSV and press **Ingest KDP CSV**. Monthly is
-enough; the metrics view is only as current as the last import.
-
-**Do the Publishing Todos in order.** They are seeded per platform because the
-order matters: covers before pricing, categories before launch.
-
-**Keep the generated copy, edit the claims.** Marketing output is a strong first
-draft that will happily invent a review quote or an award. Read every factual
-claim before it goes on a store page.
-
----
-
-## Costs, quotas and failure
-
-**Long jobs fail late.** Audiobook conversion and video render run for minutes.
-Check the estimate and the input folder before starting, not after.
-
-**A stopped run is not billed.** Stop closes the request out properly; the
-budget is not charged for what was abandoned.
-
-**Watch for quota errors mid-job.** A TTS quota failure part-way through a book
-leaves a partial output. The run log records where it stopped.
-
----
-
-## Keeping the app healthy
-
-**Back up `~/Library/Application Support/Imprint/`.** Your database,
-saved chats, logs and `.env` live there — not in the app bundle. Reinstalling
-does not touch it; deleting it loses everything.
-
-**Rebuild after changes.** The installed `.app` is a frozen snapshot
-(`./scripts/build_app.sh`). While iterating, `./scripts/install_app.sh` installs
-a launcher that runs the project live instead, so edits apply on next launch.
-
-**Never put API keys in the project folder.** They belong in the `.env` under
-Application Support. The project directory is a git repository.
-
----
-
-## Posting
-
-Four rules, in order of how much they cost to break.
-
-**One post per platform, not one post.** The same text everywhere reads as
-automation to every audience that sees it twice. The drafter already writes to
-each platform's rules; use it.
-
-**Reddit once a week, maximum.** More than that on a promotional account is how
-the account goes, not the post. The cadence table already enforces this when
-you press `Schedule Drafts` — do not work around it by hand.
-
-**Read the subreddit's rules before posting.** Most communities remove
-self-promotion outright, and that judgement is not something the app can make
-for you. It automates the mechanics, not the question of where a post belongs.
-
-**Nothing posts unattended, on purpose.** There is no background scheduler and
-no "publish all". If you want that, you want a service that accepts the ban
-risk on your behalf — and none of them do, in practice.
-
----
-
-## Video
-
-**Set `Format` first.** Long-form and Social clip are the same pipeline with
-different numbers, and the difference between them is €1.50.
-
-**Check the estimate before rendering, every time.** It is mostly images, so it
-scales with length: a ten-minute video is thirty-odd images.
-
-**Stop is safe.** It cancels at the next stage boundary, so you never get a
-half-written file, and the build stays resumable in the Library.
-
-**One library, two apps.** Renders from `vidforge.app` and from Imprint's Video
-tab are the same files in the same place. Do not keep two sets of topics.
-
----
-
-## What not to expect
-
-- **Not a one-click business.** Every path in [Making money](03-profit.md) needs
-  taste, follow-through and months.
-- **Not a fact-checker.** Everything factual in generated copy needs verifying.
-- **Not a substitute for the platforms' own rules.** KDP, ACX and Fiverr each
-  have content policies about AI-assisted work, and they change. Read them.
-
----
-
-Back to: [Getting started](01-getting-started.md) · [The agents](02-agents.md) ·
-[Making money](03-profit.md)
+Next: [Measure & improve](06-measure-and-improve.md) · If a control fails, use [Troubleshooting](07-troubleshooting.md)

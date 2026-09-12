@@ -132,10 +132,16 @@ GLOBAL_STYLESHEET = f"""
         }}
         QComboBox:hover {{ border: 1px solid {BORDER_STRONG}; }}
         QComboBox:focus {{ border: 1px solid {ACCENT_LINE}; }}
-        /* Qt's native arrow is left alone. A CSS border-triangle needs the
-           exact right box model on every platform and rendered here as a small
-           filled square instead of a chevron, so it is not worth the trade. */
-        QComboBox::drop-down {{ border: none; width: 20px; }}
+        /* Give selection controls a recognisable trailing affordance. The
+           native arrow remains platform-correct; the separated surface makes
+           a combo visually distinct from a text field even when its value is
+           long and elided. */
+        QComboBox::drop-down {{
+            border: none;
+            border-left: 1px solid {BORDER};
+            width: 28px;
+            background-color: {ELEVATED};
+        }}
         QComboBox QAbstractItemView {{
             background-color: {SURFACE};
             color: {TEXT};
@@ -373,6 +379,29 @@ GLOBAL_STYLESHEET = f"""
             color: {ACCENT};
             font-size: 12px;
         }}
+
+        /* Write uses a command deck above the document. These surfaces group
+           related controls without introducing another scrolling column. */
+        QFrame#AuthorComposeCard, QFrame#AuthorPubCtrl, QFrame#AuthorMktCtrl {{
+            background-color: {SURFACE};
+            border: 1px solid {BORDER};
+            border-radius: {RADIUS_LG};
+        }}
+        QFrame#AuthorDocumentBar {{
+            background-color: {SURFACE};
+            border: 1px solid {BORDER};
+            border-radius: {RADIUS};
+        }}
+        QWidget#CompactMetric {{
+            background-color: {ELEVATED};
+            border: 1px solid {BORDER};
+            border-radius: {RADIUS_SM};
+        }}
+        QLabel#CompactMetricValue {{
+            color: {TEXT};
+            font-size: 14px;
+            font-weight: 650;
+        }}
         QLabel#EstimateLine {{ color: {TEXT_MUTE}; font-size: 11px; }}
         QLabel#ResourceLabel {{ color: {TEXT_DIM}; font-size: 12px; }}
 
@@ -469,25 +498,25 @@ GLOBAL_STYLESHEET = f"""
         /* ── Scrollbars ────────────────────────────────────────────── */
         QScrollArea {{ background: transparent; border: none; }}
         QScrollBar:vertical {{
-            background: transparent;
-            width: 10px;
-            margin: 2px;
+            background: rgba(255, 255, 255, 0.025);
+            width: 12px;
+            margin: 2px 1px;
         }}
         QScrollBar::handle:vertical {{
             background-color: {BORDER_STRONG};
             border-radius: 5px;
-            min-height: 28px;
+            min-height: 44px;
         }}
         QScrollBar::handle:vertical:hover {{ background-color: {TEXT_MUTE}; }}
         QScrollBar:horizontal {{
-            background: transparent;
-            height: 10px;
-            margin: 2px;
+            background: rgba(255, 255, 255, 0.025);
+            height: 12px;
+            margin: 1px 2px;
         }}
         QScrollBar::handle:horizontal {{
             background-color: {BORDER_STRONG};
             border-radius: 5px;
-            min-width: 28px;
+            min-width: 44px;
         }}
         QScrollBar::handle:horizontal:hover {{ background-color: {TEXT_MUTE}; }}
         QScrollBar::add-line, QScrollBar::sub-line {{ height: 0; width: 0; }}

@@ -20,7 +20,7 @@ def seed_tooltips(app):
         "model_guide_btn":         "Open the in-app Model Guide with current models, pricing, and recommendations.",
         "docs_btn":                "Open the full Imprint documentation.",
         "agent_docs_btn":          "Open the documentation for the currently active agent.",
-        "learn_btn":               "Open the Learning Centre — how to use each agent and how to make money with it.",
+        "learn_btn":               "Open the Learning Centre — controls, income experiments, automation playbooks, measurement, and fixes.",
         "execution_mode_box":      "Local-only: only Ollama. Hybrid: pick best of local/cloud. Cloud-only: only paid providers.",
         "allow_openai_checkbox":   "Allow this request to use the OpenAI API (paid).",
         "allow_deepseek_checkbox": "Allow this request to use the DeepSeek API (paid, cheap).",
