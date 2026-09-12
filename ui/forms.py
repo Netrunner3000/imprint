@@ -204,8 +204,8 @@ def form_stylesheet(text: str, muted: str) -> str:
 # can.
 
 HEADER_HEIGHT = 56
-RAIL_LEFT_WIDTH = 236
-RAIL_RIGHT_WIDTH = 268
+RAIL_LEFT_WIDTH = 216
+RAIL_RIGHT_WIDTH = 244
 # A form field wider than this stops being readable, so the centre column caps
 # out rather than stretching a text input across a 27" display.
 CONTENT_MAX_WIDTH = 1080

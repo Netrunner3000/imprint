@@ -410,10 +410,71 @@ class GodAI(QWidget):
         )
 
     def eventFilter(self, obj, event):
-        """Swallow QEvent.ToolTip when tooltips are toggled off."""
+        """Handle global tooltip policy and the responsive writing footer."""
+        if (event.type() == QEvent.Resize
+                and obj is getattr(self, "author_panel", None)):
+            # Defer until Qt has finished the resize pass.  Changing visibility
+            # while a layout is calculating its geometry can otherwise leave
+            # controls at their previous positions for one frame.
+            width = event.size().width()
+            QTimer.singleShot(0, lambda w=width: self._adapt_author_layout(w))
         if event.type() == QEvent.ToolTip and not self.tooltips_enabled:
             return True
         return super().eventFilter(obj, event)
+
+    def _adapt_author_layout(self, width: int):
+        """Keep the document actions usable when the centre pane is narrow."""
+        if not hasattr(self, "author_document_bar"):
+            return
+
+        compact = width < 660
+        compose_stacked = width < 1000
+        layout_state = (compact, compose_stacked)
+        if layout_state == getattr(self, "_author_layout_state", None):
+            return
+        self._author_layout_state = layout_state
+
+        # At desktop width Compose is one clean command strip.  On narrower
+        # windows the buttons move below the fields instead of crushing model
+        # names or leaving the direction box only a few pixels tall.
+        if compose_stacked:
+            self.author_compose_grid.addWidget(
+                self.author_compose_actions, 1, 0, 1, 5, Qt.AlignLeft)
+        else:
+            self.author_compose_grid.addWidget(
+                self.author_compose_actions, 0, 4, Qt.AlignBottom)
+
+        # Counts and metadata are useful context at normal desktop sizes, but
+        # the primary Save / format / Export path must win when rails leave the
+        # workbench only a few hundred pixels wide.
+        for widget in (
+            self.author_word_metric,
+            self.author_scene_metric,
+            self.author_export_label,
+            self.author_export_author_input,
+            self.author_clear_btn,
+        ):
+            widget.setVisible(not compact)
+
+        layout = self.author_document_bar.layout()
+        if compact:
+            layout.setContentsMargins(XS, SM, XS, SM)
+            layout.setSpacing(XS)
+            self.author_save_btn.setText("Save")
+            self.author_save_btn.setFixedWidth(58)
+            self.author_export_btn.setText("Export")
+            self.author_export_btn.setFixedWidth(68)
+            self.author_export_format_box.setFixedWidth(64)
+        else:
+            layout.setContentsMargins(MD, SM, MD, SM)
+            layout.setSpacing(SM)
+            self.author_save_btn.setText("Save Draft")
+            self.author_save_btn.setMinimumWidth(0)
+            self.author_save_btn.setMaximumWidth(16777215)
+            self.author_export_btn.setText("Export Book")
+            self.author_export_btn.setMinimumWidth(0)
+            self.author_export_btn.setMaximumWidth(16777215)
+            self.author_export_format_box.setFixedWidth(88)
 
     def _set_tooltips(self, mapping: dict):
         """Helper: apply a {widget_attr_name: text} mapping in one call.
@@ -2014,6 +2075,9 @@ class GodAI(QWidget):
             "Third Person Omniscient", "Second Person",
         ])
 
+        # At desktop width these six short identity fields belong on one line.
+        # The old 3×2 grid spent a quarter of the available canvas on empty
+        # input width and pushed the actual manuscript below the fold.
         pb_layout = form_grid([
             ("Title", self.author_title_input),
             ("Author", self.author_name_input),
@@ -2021,8 +2085,8 @@ class GodAI(QWidget):
             ("Genre", self.author_genre_box),
             ("Tone", self.author_tone_box),
             ("Point of view", self.author_pov_box),
-        ], columns=3)
-        pb_layout.setContentsMargins(MD, MD, MD, MD)
+        ], columns=6)
+        pb_layout.setContentsMargins(MD, SM, MD, SM)
         project_bar.setLayout(pb_layout)
 
         layout.addWidget(project_bar)
@@ -2039,54 +2103,119 @@ class GodAI(QWidget):
         layout.addWidget(self.author_next_step_label)
 
         # ── Book Profile (collapsed by default — persisted, injected into every mode) ──
-        profile_section = CollapsibleSection("Book Profile", expanded=False)
+        self.author_profile_section = CollapsibleSection(
+            "Book Profile", expanded=False)
 
-        profile_row1 = QWidget()
-        pr1 = QHBoxLayout(profile_row1)
-        pr1.setContentsMargins(4, 0, 4, 0)
-        pr1.setSpacing(8)
         self.author_profile_hook_input = QLineEdit()
         self.author_profile_hook_input.setPlaceholderText("One-sentence pitch — the core promise of the book…")
-        pr1.addWidget(field("Hook", self.author_profile_hook_input))
-        profile_section.addWidget(profile_row1)
-
-        profile_row2 = QWidget()
-        pr2 = QHBoxLayout(profile_row2)
-        pr2.setContentsMargins(4, 0, 4, 0)
-        pr2.setSpacing(8)
         self.author_profile_reader_input = QLineEdit()
         self.author_profile_reader_input.setPlaceholderText("e.g. Women 25-40 navigating modern dating apps")
-        pr2.addWidget(field("Target reader", self.author_profile_reader_input))
-        profile_section.addWidget(profile_row2)
-
-        profile_row3 = QWidget()
-        pr3 = QHBoxLayout(profile_row3)
-        pr3.setContentsMargins(4, 0, 4, 0)
-        pr3.setSpacing(8)
         self.author_profile_comps_input = QLineEdit()
         self.author_profile_comps_input.setPlaceholderText("e.g. For readers of [Title A] and [Title B]")
-        pr3.addWidget(field("Comp titles", self.author_profile_comps_input))
-        profile_section.addWidget(profile_row3)
-
-        profile_row4 = QWidget()
-        pr4 = QHBoxLayout(profile_row4)
-        pr4.setContentsMargins(4, 0, 4, 0)
-        pr4.setSpacing(8)
         self.author_profile_path_box = QComboBox()
         self.author_profile_path_box.addItems(["Undecided", "Self-Publishing (KDP)", "Traditional"])
-        pr4.addWidget(field("Publishing path", self.author_profile_path_box))
-        pr4.addStretch()
+
+        profile_form = QWidget()
+        profile_form.setObjectName("AuthorProfileForm")
+        profile_grid = QGridLayout(profile_form)
+        profile_grid.setContentsMargins(MD, XS, MD, SM)
+        profile_grid.setHorizontalSpacing(MD)
+        profile_grid.setVerticalSpacing(0)
+        profile_grid.addWidget(field("Hook", self.author_profile_hook_input), 0, 0)
+        profile_grid.addWidget(field("Target reader", self.author_profile_reader_input), 0, 1)
+        profile_grid.addWidget(field("Comp titles", self.author_profile_comps_input), 0, 2)
+        profile_grid.addWidget(field("Publishing path", self.author_profile_path_box), 0, 3)
         self.author_profile_save_btn = QPushButton("Save Profile")
         self.author_profile_save_btn.clicked.connect(self.author_save_profile)
-        pr4.addWidget(self.author_profile_save_btn)
-        profile_section.addWidget(profile_row4)
+        self.author_profile_save_btn.setMinimumWidth(120)
+        profile_grid.addWidget(self.author_profile_save_btn, 0, 4, Qt.AlignBottom)
+        for column in range(4):
+            profile_grid.setColumnStretch(column, 1)
+        self.author_profile_section.addWidget(profile_form)
 
-        layout.addWidget(profile_section)
+        layout.addWidget(self.author_profile_section)
 
         # ── Main workspace ────────────────────────────────────────────────────
-        workspace_splitter = QSplitter(Qt.Horizontal)
+        # Compose is a shallow deck above the document, not a second vertical
+        # application squeezed into a narrow scrolling sidebar. The previous
+        # sidebar made Direction, Task and Model mutually invisible at laptop
+        # height and stole a quarter of the writing canvas.
+        write_page = QWidget()
+        write_page.setObjectName("AuthorWritePage")
+        write_layout = QVBoxLayout(write_page)
+        write_layout.setContentsMargins(0, 0, 0, 0)
+        write_layout.setSpacing(SM)
 
-        # Left: editable manuscript tabs
+        compose_card = QFrame()
+        compose_card.setObjectName("AuthorComposeCard")
+        compose_layout = QVBoxLayout(compose_card)
+        compose_layout.setContentsMargins(MD, SM, MD, SM)
+        compose_layout.setSpacing(SM)
+        compose_layout.addWidget(section("Compose"))
+
+        compose_grid = QGridLayout()
+        compose_grid.setHorizontalSpacing(MD)
+        compose_grid.setVerticalSpacing(0)
+
+        self.author_direction_input = QTextEdit()
+        self.author_direction_input.setPlaceholderText(
+            "What happens next? One concrete instruction beats a paragraph."
+        )
+        self.author_direction_input.setFixedHeight(40)
+        self.author_direction_field = field(
+            "Direction", self.author_direction_input)
+        compose_grid.addWidget(self.author_direction_field, 0, 0)
+
+        self.author_task_box = QComboBox()
+        # Populated by _author_on_content_type_changed() after construction.
+        self.author_task_field = field("Task", self.author_task_box)
+        compose_grid.addWidget(self.author_task_field, 0, 1)
+
+        self.author_panel_base = AgentPanel(
+            self, "author",
+            providers=("ollama", "openai", "deepseek", "kimi", "gemini", "anthropic", "qwen"),
+            default_provider="anthropic")
+        self.author_provider_box = self.author_panel_base.provider_box
+        self.author_model_box = self.author_panel_base.model_box
+        self.author_provider_field = field("Provider", self.author_provider_box)
+        self.author_model_field = field("Model", self.author_model_box)
+        compose_grid.addWidget(self.author_provider_field, 0, 2)
+        compose_grid.addWidget(self.author_model_field, 0, 3)
+
+        self.author_compose_actions = QWidget()
+        compose_actions = QHBoxLayout(self.author_compose_actions)
+        compose_actions.setContentsMargins(0, 0, 0, 0)
+        compose_actions.setSpacing(SM)
+        self.author_write_btn = QPushButton("Write")
+        self.author_write_btn.setObjectName("PrimaryAction")
+        self.author_write_btn.setMinimumWidth(130)
+        self.author_write_btn.clicked.connect(self.author_write)
+        compose_actions.addWidget(self.author_write_btn)
+
+        self.author_continue_btn = QPushButton("Continue")
+        self.author_continue_btn.setObjectName("SecondaryAction")
+        self.author_continue_btn.clicked.connect(self.author_continue)
+        compose_actions.addWidget(self.author_continue_btn)
+
+        self.author_stop_btn = QPushButton("Stop")
+        self.author_stop_btn.setEnabled(False)
+        self.author_stop_btn.setObjectName("DangerAction")
+        self.author_stop_btn.clicked.connect(self.author_stop)
+        compose_actions.addWidget(self.author_stop_btn)
+        compose_actions.addStretch()
+        compose_grid.addWidget(
+            self.author_compose_actions, 0, 4, Qt.AlignBottom)
+
+        compose_grid.setColumnStretch(0, 3)
+        compose_grid.setColumnStretch(1, 1)
+        compose_grid.setColumnStretch(2, 1)
+        compose_grid.setColumnStretch(3, 2)
+        compose_grid.setColumnStretch(4, 0)
+        self.author_compose_grid = compose_grid
+        compose_layout.addLayout(compose_grid)
+        write_layout.addWidget(compose_card)
+
+        # The manuscript is the dominant surface and always remains visible.
         self.author_tabs = QTabWidget()
 
         self.author_draft_box = QTextEdit()
@@ -2128,128 +2257,69 @@ class GodAI(QWidget):
         self.author_tabs.addTab(self.author_chapters_tab, "Chapters")
         self.author_tabs.currentChanged.connect(self._author_on_tab_changed)
 
-        workspace_splitter.addWidget(self.author_tabs)
+        write_layout.addWidget(self.author_tabs, 1)
 
-        # Right: control sidebar
-        sidebar = QWidget()
-        sidebar.setObjectName("AuthorSidebar")
-        sidebar.setMinimumWidth(210)
-        sidebar.setMaximumWidth(270)
-        sb = QVBoxLayout(sidebar)
-        sb.setContentsMargins(8, 4, 4, 4)
-        sb.setSpacing(MD)
+        # Document actions stay in one predictable footer. Counts are compact
+        # status chips; they no longer occupy two stacked group boxes.
+        document_bar = QFrame()
+        document_bar.setObjectName("AuthorDocumentBar")
+        document_actions = QHBoxLayout(document_bar)
+        document_actions.setContentsMargins(MD, SM, MD, SM)
+        document_actions.setSpacing(SM)
 
-        # Sections and micro-labels rather than a run of "Label:" rows — see
-        # ui/forms.py. The labels line up down one column instead of each
-        # sitting wherever its own row started.
-        sb.addWidget(section("Compose"))
-
-        self.author_direction_input = QTextEdit()
-        self.author_direction_input.setPlaceholderText(
-            "What happens next? One concrete instruction beats a paragraph."
-        )
-        self.author_direction_input.setFixedHeight(90)
-        sb.addWidget(field("Direction", self.author_direction_input))
-
-        self.author_task_box = QComboBox()
-        # Populated by _author_on_content_type_changed() once the panel finishes building —
-        # the task list depends on the Type combo (Fiction/Non-Fiction) in the Project Bar.
-        sb.addWidget(field("Task", self.author_task_box))
-
-        sb.addWidget(rule())
-        sb.addWidget(section("Model"))
-
-        self.author_panel_base = AgentPanel(
-            self, "author", providers=tuple(["ollama", "openai", "deepseek", "kimi", "gemini", "anthropic", "qwen"]),
-            default_provider="anthropic")
-        self.author_provider_box = self.author_panel_base.provider_box
-        self.author_model_box = self.author_panel_base.model_box
-        sb.addWidget(field("Provider", self.author_provider_box))
-        sb.addWidget(field("Model", self.author_model_box))
-
-        self.author_write_btn = QPushButton("Write")
-        self.author_write_btn.setMinimumHeight(34)
-        self.author_write_btn.setObjectName("PrimaryAction")
-        self.author_write_btn.clicked.connect(self.author_write)
-        sb.addWidget(self.author_write_btn)
-
-        self.author_continue_btn = QPushButton("Continue")
-        self.author_continue_btn.setMinimumHeight(34)
-        self.author_continue_btn.setObjectName("SecondaryAction")
-        self.author_continue_btn.clicked.connect(self.author_continue)
-        sb.addWidget(self.author_continue_btn)
-
-        self.author_stop_btn = QPushButton("Stop")
-        self.author_stop_btn.setEnabled(False)
-        self.author_stop_btn.setMinimumHeight(34)
-        self.author_stop_btn.setObjectName("DangerAction")
-        self.author_stop_btn.clicked.connect(self.author_stop)
-        sb.addWidget(self.author_stop_btn)
-
-        sep1 = QFrame()
-        sep1.setFrameShape(QFrame.HLine)
-        sep1.setObjectName("CardDivider")
-        sb.addWidget(sep1)
-
-        word_group = QGroupBox("Words")
-        word_group.setObjectName("AuthorWordGroup")
-        wg_layout = QVBoxLayout(word_group)
-        wg_layout.setContentsMargins(4, 4, 4, 4)
+        self.author_word_metric = QWidget()
+        self.author_word_metric.setObjectName("CompactMetric")
+        word_metric_layout = QHBoxLayout(self.author_word_metric)
+        word_metric_layout.setContentsMargins(SM, 0, SM, 0)
+        word_metric_layout.setSpacing(SM)
+        word_metric_layout.addWidget(micro("Words"))
         self.author_word_count_label = QLabel("0")
-        self.author_word_count_label.setAlignment(Qt.AlignCenter)
-        self.author_word_count_label.setStyleSheet(
-            f"font-size: 26px; font-weight: 600; color: {TEXT};"
-        )
-        wg_layout.addWidget(self.author_word_count_label)
-        sb.addWidget(word_group)
+        self.author_word_count_label.setObjectName("CompactMetricValue")
+        word_metric_layout.addWidget(self.author_word_count_label)
+        document_actions.addWidget(self.author_word_metric)
 
-        scene_group = QGroupBox("Scenes / Chapters")
-        scene_group.setObjectName("AuthorSceneGroup")
-        sg_layout = QVBoxLayout(scene_group)
-        sg_layout.setContentsMargins(4, 4, 4, 4)
+        self.author_scene_metric = QWidget()
+        self.author_scene_metric.setObjectName("CompactMetric")
+        scene_metric_layout = QHBoxLayout(self.author_scene_metric)
+        scene_metric_layout.setContentsMargins(SM, 0, SM, 0)
+        scene_metric_layout.setSpacing(SM)
+        scene_metric_layout.addWidget(micro("Scenes"))
         self.author_scene_count_label = QLabel("0")
-        self.author_scene_count_label.setAlignment(Qt.AlignCenter)
-        self.author_scene_count_label.setStyleSheet(
-            f"font-size: 20px; font-weight: 600; color: {TEXT};"
-        )
-        sg_layout.addWidget(self.author_scene_count_label)
-        sb.addWidget(scene_group)
-
-        sb.addStretch()
-
-        sep2 = QFrame()
-        sep2.setFrameShape(QFrame.HLine)
-        sep2.setObjectName("CardDivider")
-        sb.addWidget(sep2)
+        self.author_scene_count_label.setObjectName("CompactMetricValue")
+        scene_metric_layout.addWidget(self.author_scene_count_label)
+        document_actions.addWidget(self.author_scene_metric)
 
         self.author_save_btn = QPushButton("Save Draft")
         self.author_save_btn.setEnabled(False)
         self.author_save_btn.clicked.connect(self.author_save)
-        sb.addWidget(self.author_save_btn)
+        document_actions.addWidget(self.author_save_btn)
+
+        document_actions.addStretch()
+        self.author_export_label = micro("Export")
+        document_actions.addWidget(self.author_export_label)
 
         self.author_export_author_input = QLineEdit()
-        self.author_export_author_input.setPlaceholderText("e.g. Celeste Morgan")
-        sb.addWidget(field("Author name (for export)", self.author_export_author_input))
+        self.author_export_author_input.setPlaceholderText("Author name")
+        self.author_export_author_input.setMinimumWidth(100)
+        self.author_export_author_input.setSizePolicy(
+            QSizePolicy.Expanding, QSizePolicy.Fixed)
+        document_actions.addWidget(self.author_export_author_input, 1)
 
-        # FlowLayout: a QHBoxLayout here reports combo + button as its minimum
-        # width (276px) and pinned the whole sidebar wider than its pane, which
-        # is what clipped the controls down the right-hand edge. These wrap.
-        export_row_container = QWidget()
-        export_row = FlowLayout(export_row_container, spacing=6)
         self.author_export_format_box = QComboBox()
         self.author_export_format_box.addItems(["EPUB", "DOCX", "PDF"])
-        export_row.addWidget(self.author_export_format_box)
+        self.author_export_format_box.setFixedWidth(88)
+        document_actions.addWidget(self.author_export_format_box)
         self.author_export_btn = QPushButton("Export Book")
         self.author_export_btn.clicked.connect(self.author_export_book)
-        export_row.addWidget(self.author_export_btn)
-        sb.addWidget(export_row_container)
+        document_actions.addWidget(self.author_export_btn)
 
-        self.author_clear_btn = QPushButton("Clear All")
+        self.author_clear_btn = quiet("Clear")
+        self.author_clear_btn.setFixedWidth(62)
         self.author_clear_btn.clicked.connect(self.author_clear)
-        sb.addWidget(self.author_clear_btn)
-
-        workspace_splitter.addWidget(scrollable(sidebar))
-        workspace_splitter.setSizes([760, 240])
+        document_actions.addWidget(self.author_clear_btn)
+        self.author_document_bar = document_bar
+        self.author_document_bar.setFixedHeight(58)
+        write_layout.addWidget(document_bar)
 
         # ── Mode toggle row: Write | Publish & Market ────────────────────────
         mode_row = QHBoxLayout()
@@ -2278,7 +2348,7 @@ class GodAI(QWidget):
 
         # ── Content stack (Write / Publish & Market) ─────────────────────────
         self.author_content_stack = QStackedWidget()
-        self.author_content_stack.addWidget(workspace_splitter)   # page 0: write
+        self.author_content_stack.addWidget(write_page)   # page 0: write
 
         # ── Publish & Market composite widget ────────────────────────────────
         pubmkt_widget = QWidget()
@@ -2312,9 +2382,70 @@ class GodAI(QWidget):
 
         # ── Publish page ──────────────────────────────────────────────────────
         publish_page = QWidget()
-        pub_outer = QHBoxLayout(publish_page)
+        pub_outer = QVBoxLayout(publish_page)
         pub_outer.setContentsMargins(0, 0, 0, 0)
-        pub_outer.setSpacing(8)
+        pub_outer.setSpacing(SM)
+
+        pub_ctrl = QFrame()
+        pub_ctrl.setObjectName("AuthorPubCtrl")
+        pc = QVBoxLayout(pub_ctrl)
+        pc.setContentsMargins(MD, SM, MD, SM)
+        pc.setSpacing(SM)
+
+        self.author_pub_type_box = QComboBox()
+        self.author_pub_type_box.addItems([
+            "Synopsis — 1 Page", "Synopsis — 3 Page", "Query Letter",
+            "Book Proposal", "Back-Cover Blurb", "Author Bio", "Chapter Breakdown",
+        ])
+        self.author_pub_wordcount_input = QLineEdit()
+        self.author_pub_wordcount_input.setPlaceholderText("e.g. 80,000")
+        self.author_pub_comps_input = QLineEdit()
+        self.author_pub_comps_input.setPlaceholderText("e.g. Gone Girl meets Dark Places")
+        self.author_pub_pitch_tone_box = QComboBox()
+        self.author_pub_pitch_tone_box.addItems(["Professional", "Conversational", "High-Concept"])
+        self.author_pub_notes_input = QTextEdit()
+        self.author_pub_notes_input.setPlaceholderText("Target audience, themes, hook, extra context…")
+        self.author_pub_notes_input.setFixedHeight(52)
+
+        pub_fields = QGridLayout()
+        pub_fields.setHorizontalSpacing(MD)
+        pub_fields.setVerticalSpacing(0)
+        pub_fields.addWidget(field("Output Type", self.author_pub_type_box), 0, 0)
+        pub_fields.addWidget(field("Word Count Target", self.author_pub_wordcount_input), 0, 1)
+        pub_fields.addWidget(field("Comp Titles", self.author_pub_comps_input), 0, 2)
+        pub_fields.addWidget(field("Pitch Tone", self.author_pub_pitch_tone_box), 0, 3)
+        pub_fields.addWidget(field("Extra Notes", self.author_pub_notes_input), 0, 4, 1, 2)
+        for column in range(6):
+            pub_fields.setColumnStretch(column, 1)
+        pc.addLayout(pub_fields)
+
+        pub_actions = QHBoxLayout()
+        pub_actions.setSpacing(SM)
+
+        self.author_pub_generate_btn = QPushButton("Generate")
+        self.author_pub_generate_btn.setMinimumWidth(130)
+        self.author_pub_generate_btn.setObjectName("PrimaryAction")
+        self.author_pub_generate_btn.clicked.connect(self.author_pub_generate)
+        pub_actions.addWidget(self.author_pub_generate_btn)
+
+        self.author_pub_stop_btn = QPushButton("Stop")
+        self.author_pub_stop_btn.setEnabled(False)
+        self.author_pub_stop_btn.setObjectName("DangerAction")
+        self.author_pub_stop_btn.clicked.connect(self.author_pub_stop)
+        pub_actions.addWidget(self.author_pub_stop_btn)
+
+        self.author_pub_copy_btn = QPushButton("Copy to Clipboard")
+        self.author_pub_copy_btn.clicked.connect(self.author_pub_copy)
+        pub_actions.addWidget(self.author_pub_copy_btn)
+
+        self.author_pub_save_btn = QPushButton("Save as File")
+        self.author_pub_save_btn.setEnabled(False)
+        self.author_pub_save_btn.clicked.connect(self.author_pub_save)
+        pub_actions.addWidget(self.author_pub_save_btn)
+        pub_actions.addStretch()
+        pc.addLayout(pub_actions)
+
+        pub_outer.addWidget(pub_ctrl)
 
         self.author_pub_output = QTextEdit()
         self.author_pub_output.setPlaceholderText(
@@ -2322,83 +2453,19 @@ class GodAI(QWidget):
         )
         pub_outer.addWidget(self.author_pub_output, 1)
 
-        pub_ctrl = QWidget()
-        pub_ctrl.setObjectName("AuthorPubCtrl")
-        pub_ctrl.setMinimumWidth(210)
-        pub_ctrl.setMaximumWidth(270)
-        pc = QVBoxLayout(pub_ctrl)
-        pc.setContentsMargins(6, 0, 0, 0)
-        pc.setSpacing(5)
-
-        self.author_pub_type_box = QComboBox()
-        self.author_pub_type_box.addItems([
-            "Synopsis — 1 Page", "Synopsis — 3 Page", "Query Letter",
-            "Book Proposal", "Back-Cover Blurb", "Author Bio", "Chapter Breakdown",
-        ])
-        pc.addWidget(field("Output Type", self.author_pub_type_box))
-
-        self.author_pub_wordcount_input = QLineEdit()
-        self.author_pub_wordcount_input.setPlaceholderText("e.g. 80,000")
-        pc.addWidget(field("Word Count Target", self.author_pub_wordcount_input))
-
-        self.author_pub_comps_input = QLineEdit()
-        self.author_pub_comps_input.setPlaceholderText("e.g. Gone Girl meets Dark Places")
-        pc.addWidget(field("Comp Titles", self.author_pub_comps_input))
-
-        self.author_pub_pitch_tone_box = QComboBox()
-        self.author_pub_pitch_tone_box.addItems(["Professional", "Conversational", "High-Concept"])
-        pc.addWidget(field("Pitch Tone", self.author_pub_pitch_tone_box))
-
-        self.author_pub_notes_input = QTextEdit()
-        self.author_pub_notes_input.setPlaceholderText("Target audience, themes, hook, extra context…")
-        self.author_pub_notes_input.setFixedHeight(65)
-        pc.addWidget(field("Extra Notes", self.author_pub_notes_input))
-
-        pc.addStretch()
-
-        self.author_pub_generate_btn = QPushButton("Generate")
-        self.author_pub_generate_btn.setMinimumHeight(34)
-        self.author_pub_generate_btn.setObjectName("PrimaryAction")
-        self.author_pub_generate_btn.clicked.connect(self.author_pub_generate)
-        pc.addWidget(self.author_pub_generate_btn)
-
-        self.author_pub_stop_btn = QPushButton("Stop")
-        self.author_pub_stop_btn.setEnabled(False)
-        self.author_pub_stop_btn.setObjectName("DangerAction")
-        self.author_pub_stop_btn.clicked.connect(self.author_pub_stop)
-        pc.addWidget(self.author_pub_stop_btn)
-
-        self.author_pub_copy_btn = QPushButton("Copy to Clipboard")
-        self.author_pub_copy_btn.clicked.connect(self.author_pub_copy)
-        pc.addWidget(self.author_pub_copy_btn)
-
-        self.author_pub_save_btn = QPushButton("Save as File")
-        self.author_pub_save_btn.setEnabled(False)
-        self.author_pub_save_btn.clicked.connect(self.author_pub_save)
-        pc.addWidget(self.author_pub_save_btn)
-
-        pub_outer.addWidget(scrollable(pub_ctrl))
         self.author_sub_stack.addWidget(publish_page)   # sub-page 0
 
         # ── Market page ───────────────────────────────────────────────────────
         market_page = QWidget()
-        mkt_outer = QHBoxLayout(market_page)
+        mkt_outer = QVBoxLayout(market_page)
         mkt_outer.setContentsMargins(0, 0, 0, 0)
-        mkt_outer.setSpacing(8)
+        mkt_outer.setSpacing(SM)
 
-        self.author_mkt_output = QTextEdit()
-        self.author_mkt_output.setPlaceholderText(
-            "Generated marketing copy appears here. Fully editable."
-        )
-        mkt_outer.addWidget(self.author_mkt_output, 1)
-
-        mkt_ctrl = QWidget()
+        mkt_ctrl = QFrame()
         mkt_ctrl.setObjectName("AuthorMktCtrl")
-        mkt_ctrl.setMinimumWidth(210)
-        mkt_ctrl.setMaximumWidth(270)
         mc = QVBoxLayout(mkt_ctrl)
-        mc.setContentsMargins(6, 0, 0, 0)
-        mc.setSpacing(5)
+        mc.setContentsMargins(MD, SM, MD, SM)
+        mc.setSpacing(SM)
 
         self.author_mkt_platform_box = QComboBox()
         self.author_mkt_platform_box.addItems([
@@ -2407,49 +2474,62 @@ class GodAI(QWidget):
             "YouTube Description", "Newsletter", "Press Release", "Book Club Questions",
             "ARC Outreach Email", "Launch Team Email", "Podcast Pitch", "Author Website Bio",
         ])
-        mc.addWidget(field("Platform", self.author_mkt_platform_box))
-
         self.author_mkt_hook_input = QLineEdit()
         self.author_mkt_hook_input.setPlaceholderText("One sentence that sells the book")
-        mc.addWidget(field("Hook / Logline", self.author_mkt_hook_input))
-
         self.author_mkt_comps_input = QLineEdit()
         self.author_mkt_comps_input.setPlaceholderText("e.g. Reaper's Creek meets Harlan Coben")
-        mc.addWidget(field("Comp Titles", self.author_mkt_comps_input))
-
         self.author_mkt_tone_box = QComboBox()
         self.author_mkt_tone_box.addItems(["Punchy", "Literary", "Warm", "Hype", "Mysterious"])
-        mc.addWidget(field("Tone", self.author_mkt_tone_box))
-
         self.author_mkt_notes_input = QTextEdit()
         self.author_mkt_notes_input.setPlaceholderText("Target audience, mood, key themes…")
-        self.author_mkt_notes_input.setFixedHeight(65)
-        mc.addWidget(field("Extra Notes", self.author_mkt_notes_input))
+        self.author_mkt_notes_input.setFixedHeight(52)
 
-        mc.addStretch()
+        mkt_fields = QGridLayout()
+        mkt_fields.setHorizontalSpacing(MD)
+        mkt_fields.setVerticalSpacing(0)
+        mkt_fields.addWidget(field("Platform", self.author_mkt_platform_box), 0, 0)
+        mkt_fields.addWidget(field("Hook / Logline", self.author_mkt_hook_input), 0, 1)
+        mkt_fields.addWidget(field("Comp Titles", self.author_mkt_comps_input), 0, 2)
+        mkt_fields.addWidget(field("Tone", self.author_mkt_tone_box), 0, 3)
+        mkt_fields.addWidget(field("Extra Notes", self.author_mkt_notes_input), 0, 4, 1, 2)
+        for column in range(6):
+            mkt_fields.setColumnStretch(column, 1)
+        mc.addLayout(mkt_fields)
+
+        mkt_actions = QHBoxLayout()
+        mkt_actions.setSpacing(SM)
 
         self.author_mkt_generate_btn = QPushButton("Generate")
-        self.author_mkt_generate_btn.setMinimumHeight(34)
+        self.author_mkt_generate_btn.setMinimumWidth(130)
         self.author_mkt_generate_btn.setObjectName("PrimaryAction")
         self.author_mkt_generate_btn.clicked.connect(self.author_mkt_generate)
-        mc.addWidget(self.author_mkt_generate_btn)
+        mkt_actions.addWidget(self.author_mkt_generate_btn)
 
         self.author_mkt_stop_btn = QPushButton("Stop")
         self.author_mkt_stop_btn.setEnabled(False)
         self.author_mkt_stop_btn.setObjectName("DangerAction")
         self.author_mkt_stop_btn.clicked.connect(self.author_mkt_stop)
-        mc.addWidget(self.author_mkt_stop_btn)
+        mkt_actions.addWidget(self.author_mkt_stop_btn)
 
         self.author_mkt_copy_btn = QPushButton("Copy to Clipboard")
         self.author_mkt_copy_btn.clicked.connect(self.author_mkt_copy)
-        mc.addWidget(self.author_mkt_copy_btn)
+        mkt_actions.addWidget(self.author_mkt_copy_btn)
 
         self.author_mkt_save_btn = QPushButton("Save as File")
         self.author_mkt_save_btn.setEnabled(False)
         self.author_mkt_save_btn.clicked.connect(self.author_mkt_save)
-        mc.addWidget(self.author_mkt_save_btn)
+        mkt_actions.addWidget(self.author_mkt_save_btn)
+        mkt_actions.addStretch()
+        mc.addLayout(mkt_actions)
 
-        mkt_outer.addWidget(scrollable(mkt_ctrl))
+        mkt_outer.addWidget(mkt_ctrl)
+
+        self.author_mkt_output = QTextEdit()
+        self.author_mkt_output.setPlaceholderText(
+            "Generated marketing copy appears here. Fully editable."
+        )
+        mkt_outer.addWidget(self.author_mkt_output, 1)
+
         self.author_sub_stack.addWidget(market_page)   # sub-page 1
 
         pm_layout.addWidget(self.author_sub_stack, 1)
@@ -2462,6 +2542,10 @@ class GodAI(QWidget):
         layout.addWidget(self.author_status_label)
 
         self.author_draft_box.textChanged.connect(self._author_update_counts)
+
+        # Apply the compact state once during construction; subsequent window
+        # changes are handled by eventFilter on the panel itself.
+        self._adapt_author_layout(self.author_panel.width())
 
         self.author_panel.hide()
 
@@ -6368,7 +6452,11 @@ class GodAI(QWidget):
             return
         fmt = self.author_export_format_box.currentText().lower()
         title = self.author_title_input.text().strip() or "Untitled Manuscript"
-        author_name = self.author_export_author_input.text().strip() or "Unknown Author"
+        author_name = (
+            self.author_export_author_input.text().strip()
+            or self.author_name_input.text().strip()
+            or "Unknown Author"
+        )
 
         safe = re.sub(r"[^\w\s-]", "", title).strip().replace(" ", "_")
         filters = {"epub": "EPUB Files (*.epub)", "docx": "DOCX Files (*.docx)", "pdf": "PDF Files (*.pdf)"}
@@ -7883,10 +7971,10 @@ class GodAI(QWidget):
         self.reset_session_budget_btn.clicked.connect(self.reset_session_spend)
         layout.addWidget(self.reset_session_budget_btn)
 
-        layout.addStretch()
-
-        # ── Utilities: open a window, change nothing. Links, not buttons. ──
+        # ── Utilities: open a window, change nothing. Keep them with the
+        # spend controls instead of marooning them below an elastic void. ──
         layout.addWidget(rule())
+        layout.addWidget(section("Activity"))
         links = QVBoxLayout()
         links.setSpacing(0)
         self.cost_history_btn = quiet("Cost History")
@@ -7958,6 +8046,7 @@ class GodAI(QWidget):
         reference.addWidget(keys_card)
 
         layout.addLayout(reference)
+        layout.addStretch()
 
         return right_widget
 

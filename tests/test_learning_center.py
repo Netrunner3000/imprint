@@ -42,18 +42,19 @@ def _pages():
 
 
 def test_every_listed_page_exists():
-    missing = [f for f, _ in _pages() if not (LEARN_DIR / f).exists()]
+    missing = [page.filename for page in _pages()
+               if not (LEARN_DIR / page.filename).exists()]
     assert not missing, f"listed in PAGES but not on disk: {missing}"
 
 
 def test_no_orphan_pages_on_disk():
     """A page nobody can reach is the same as no page."""
-    listed = {f for f, _ in _pages()}
+    listed = {page.filename for page in _pages()}
     on_disk = {p.name for p in LEARN_DIR.glob("*.md")}
     assert not (on_disk - listed), f"not listed in PAGES: {sorted(on_disk - listed)}"
 
 
-@pytest.mark.parametrize("filename", [f for f, _ in _pages()])
+@pytest.mark.parametrize("filename", [page.filename for page in _pages()])
 def test_every_image_reference_resolves(filename):
     """A missing screenshot renders as a broken-image box, not an error."""
     text = (LEARN_DIR / filename).read_text(encoding="utf-8")
@@ -62,7 +63,7 @@ def test_every_image_reference_resolves(filename):
     assert not broken, f"{filename} references missing images: {broken}"
 
 
-@pytest.mark.parametrize("filename", [f for f, _ in _pages()])
+@pytest.mark.parametrize("filename", [page.filename for page in _pages()])
 def test_internal_links_point_at_real_pages(filename):
     """The pages navigate between themselves by filename."""
     text = (LEARN_DIR / filename).read_text(encoding="utf-8")
@@ -71,7 +72,7 @@ def test_internal_links_point_at_real_pages(filename):
     assert not broken, f"{filename} links to missing pages: {broken}"
 
 
-@pytest.mark.parametrize("filename", [f for f, _ in _pages()])
+@pytest.mark.parametrize("filename", [page.filename for page in _pages()])
 def test_pages_render_to_html(filename):
     import markdown
     html = markdown.markdown(
@@ -97,8 +98,8 @@ def test_screenshot_generator_covers_the_referenced_images():
     generator = (PROJECT_ROOT / "scripts" / "make_learning_shots.py").read_text(encoding="utf-8")
     produced = set(re.findall(r'\("([\w\-]+\.png)"', generator))
     referenced = set()
-    for filename, _ in _pages():
-        text = (LEARN_DIR / filename).read_text(encoding="utf-8")
+    for page in _pages():
+        text = (LEARN_DIR / page.filename).read_text(encoding="utf-8")
         for ref in re.findall(r"!\[[^\]]*\]\(img/([^)]+)\)", text):
             referenced.add(ref)
     assert referenced <= produced, \
@@ -116,9 +117,56 @@ def test_dialog_opens_and_lists_the_pages(app, monkeypatch):
     window = main.GodAI()
     dialog = learning_center.show_learning_center(window, main.RESOURCE_DIR)
 
-    from PySide6.QtWidgets import QListWidget, QTextBrowser
+    from PySide6.QtWidgets import QListWidget, QLineEdit, QTextBrowser
     contents = dialog.findChild(QListWidget)
     browser = dialog.findChild(QTextBrowser)
+    search = dialog.findChild(QLineEdit, "LearnSearch")
     assert contents is not None and browser is not None
+    assert search is not None
     assert contents.count() == len(_pages())
     assert browser.toPlainText().strip(), "first page rendered empty"
+
+
+def test_search_filters_the_complete_handbook(app, monkeypatch):
+    from PySide6.QtCore import Qt
+    from PySide6.QtWidgets import QDialog, QLineEdit, QListWidget
+    import main
+    from ui import learning_center
+
+    monkeypatch.setattr(QDialog, "exec", lambda self: None)
+    window = main.GodAI()
+    dialog = learning_center.show_learning_center(window, main.RESOURCE_DIR)
+    search = dialog.findChild(QLineEdit, "LearnSearch")
+    contents = dialog.findChild(QListWidget, "LearnContents")
+
+    search.setText("launcher")
+    assert contents.count() == 1
+    assert contents.item(0).data(Qt.UserRole) == "07-troubleshooting.md"
+    search.clear()
+    assert contents.count() == len(_pages())
+
+
+def test_every_workspace_agent_has_a_learning_guide():
+    """Adding a workspace must also add searchable operating guidance."""
+    import main
+
+    text = (LEARN_DIR / "02-agents.md").read_text(encoding="utf-8")
+    listed = {agent for agents in main.WORKSPACES.values() for agent in agents}
+    missing_sections = [agent for agent in listed if f"(`{agent}`)" not in text]
+    missing_sheets = [agent for agent in listed
+                      if not (PROJECT_ROOT / "docs" / "agents" / f"{agent}.md").exists()]
+    assert not missing_sections, f"agents missing Learning Centre section: {missing_sections}"
+    assert not missing_sheets, f"agents missing technical guide: {missing_sheets}"
+
+
+def test_income_page_uses_measured_unit_economics_not_income_forecasts():
+    text = (LEARN_DIR / "03-profit.md").read_text(encoding="utf-8").casefold()
+    required = (
+        "contribution margin", "conversion rate", "human hour",
+        "qualified opportunities", "scale rule", "stop rule",
+        "observed transaction", "not a forecast",
+    )
+    assert all(term in text for term in required)
+    assert "what to expect, honestly" not in text
+    assert "/mo" not in text
+    assert "month 6" not in text

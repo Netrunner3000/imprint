@@ -1,266 +1,288 @@
-# 2 · The agents, one by one
+# 2 · Controls & agents
 
-Six agents across four modes. Each one has a `Docs` button that opens its own
-reference sheet from `docs/agents/`; this page is the working guide.
+> **Use this page as the field manual.** Search for the label you see on
+> screen. Each entry explains what it changes, when to use it, and the failure
+> it prevents.
 
----
+Imprint has eight workspaces and ten operating agents. A workspace describes
+the kind of work; an agent owns a specific job. The same model can be excellent
+at drafting and poor at image generation, so menus show only providers with a
+real execution path for that action.
 
-## Write → Draft  *(author)*
+## Controls that appear throughout Imprint
 
-![Draft](img/workspace-draft.png)
+| Control | What it does | Best use |
+|---|---|---|
+| **New Project** | Creates a separate saved context. | One project per sellable output or client order. |
+| **Workspace tabs** | Moves between Write, Audio, Video, Social, Web, Gigs, Creator, and OnlyFans. | Start from the business stage, not the model name. |
+| **Provider** | Selects the service account that receives the request. | Choose for privacy, price, capability, or reliability. |
+| **Model** | Selects a model exposed by that provider. | Use the recommended model until a comparison proves a better route. |
+| **Refresh Models** | Re-reads selectable models and availability. | Use after changing keys, permissions, or provider configuration. |
+| **Get Muse Glimmer** | Retrieves an available Muse Glimmer route when supported. | Use when you want that model family and it is not yet configured. |
+| **Model Guide** | Explains model strengths and trade-offs. | Check before paying for a stronger model “just in case.” |
+| **Docs** | Opens the technical sheet for the current agent. | Use for requirements, storage paths, and implementation limits. |
+| **Auto Route** | Lets routing choose from permitted, ready providers. | Useful for ordinary text work; inspect the result and price. |
+| **Use Recommended** | Applies the agent's maintained default route. | The safe starting point for a new workflow. |
+| **Estimate Cost** | Preflights the current request. | Run before long prompts, batches, narration, images, or video. |
+| **Stop** | Requests local cancellation. | Press once. Provider jobs already accepted may still finish and bill. |
+| **Export / Save** | Writes the current result outside its editor. | Save approved versions, not every generation. |
+| **Clear** | Clears the visible working area. | Save first; do not treat Clear as a reversible undo. |
 
-Long-form drafting: outlines, characters, scenes, dialogue, world-building.
+The status pill reports **Ready**, **Running**, **Blocked**, or a diagnostic
+state. The right rail separates four questions: is the system healthy, where
+will this route, which keys exist, and how much has been spent?
 
-| Control | Use it for |
+## Write → Draft (`author`)
+
+![Draft workspace](img/workspace-draft.png)
+
+The Draft agent creates and maintains long-form writing. It has one persistent
+Book Profile and three stages: Write, Publish, and Market.
+
+### Project and profile controls
+
+| Control | Meaning |
 |---|---|
-| `Direction:` | What to write **next**. One concrete instruction beats a paragraph of context. |
-| `Task:` | The shape of the output — Write Scene, Outline, Character, and so on. |
-| `Draft / Outline / Characters / World Notes / Chapters` | Separate documents that persist per project. |
-| **Write** | A fresh pass from the Direction box. |
-| **Continue** | Extends the existing draft. Use this far more than Write. |
+| **Title / Author / Type** | Identity and fiction/non-fiction mode. Type changes tasks and instructions. |
+| **Hook** | The single promise or tension that makes the work distinct. |
+| **Target reader** | Who chooses it and what they want. “Everyone” gives the model no constraint. |
+| **Comp titles** | Shelf, tone, and expectation expressed through comparable work. |
+| **Publishing path** | The intended route; it shapes packaging and next steps. |
+| **Save Profile** | Persists the profile and injects it into later Write, Publish, and Market prompts. |
 
-**Working method that holds up:** outline first in the Outline tab, then write
-scene by scene with a one-line Direction each time. Long prompts asking for
-"chapter 3" produce mush; "the argument in the kitchen, she leaves angry"
-produces a scene.
+### Write stage
 
-The word and scene counters are live — useful when a publisher wants 80,000
-words and you need to know where you stand.
+| Control | Meaning |
+|---|---|
+| **Task** | Selects the output structure: scene, outline, character, world, chapter, argument, and related tasks. |
+| **Direction** | The next bounded instruction. State the event or decision, not merely “write chapter 3.” |
+| **Draft** | The main editable manuscript. Recent text is used as continuity context. |
+| **Outline** | Structure to fix before prose becomes expensive. |
+| **Characters / World Notes** | Persistent facts injected into later generations. Keep them factual and short. |
+| **Chapters** | A read-only navigator derived from headings in Draft. Double-click to jump. |
+| **Write** | Starts a fresh response for the selected task. |
+| **Continue** | Extends the existing draft with its context. Prefer it for sequential prose. |
+| **Save Draft** | Persists the current text to the project. |
+| **Word / scene counters** | Scope indicators, not quality scores. |
+| **Export Book** | Produces EPUB, DOCX, or PDF from detected chapter headings. |
 
----
+### Publish and Market stages
 
-## Write → Publish  *(author, publish page)*
+**Publish** generates synopsis, blurb, query, pitch, metadata, and listing
+packages. **Market** generates platform-specific launch, newsletter, ARC, and
+store copy. Each has Generate, Stop, Copy, and Save. Treat generated categories,
+claims, quotations, and metadata as proposals that require verification.
 
-![Publish](img/workspace-publish.png)
+**Maximum-leverage pattern:** lock the profile → approve the outline → draft
+scene by scene → edit → generate packaging from the approved manuscript.
 
-Turns a finished draft into the documents publishing actually asks for:
-synopsis, blurb, query letter, one-page pitch.
+## Write → Publish (`manuscript`)
 
-`Comp Titles` matters more than it looks. "Gone Girl meets Dark Places" tells
-the model the shelf, the tone and the reader in four words, and it is the field
-most people leave blank.
+![Publisher agent](img/agent-manuscript.png)
 
----
+This is the post-draft agent: owned sales data, quote assets, shorts, a content
+calendar, and publishing tasks.
 
-## Write → Publish & Market → Market  *(author, market page)*
+| Area | Controls and result |
+|---|---|
+| **Overview** | Period and Refresh Data load PublishDrive metrics; Ingest KDP CSV imports files without double-counting; Ask answers against loaded data; Publishing Todos tracks launch work. |
+| **Quote Finder** | Paste text or Load File, choose quote count, theme, voice, and attribution. Suggested lines must be checked against the source. |
+| **Quote Graphics** | Quote, attribution, theme, and size create a local PNG without an image API. |
+| **Shorts** | Quote, theme, voice source, and voice combine narration and a vertical graphic with ffmpeg. |
+| **Calendar** | Weeks, start date, platforms, theme, voice, and attribution build a deterministic schedule; captions use one batched model request. |
 
-![Market](img/workspace-market.png)
+Use **Graphic** or **Short** on a calendar row to create that row's asset. Export
+the calendar CSV as a manual publishing queue. Imported reports are observations;
+model answers are interpretations.
 
-Store-facing copy: Amazon description, launch posts, newsletter copy. `Platform`
-changes the format — an Amazon description and a social post are not the same
-text with different lengths.
+## Audio → Audiobooks (`audiobook`)
 
----
+### Convert tab
 
-## Publish  *(manuscript)*
+| Control | Meaning |
+|---|---|
+| **Book list / Refresh** | Supported ebooks discovered in the input folder. |
+| **Input / Open** | Folder containing PDF, EPUB, TXT, or MOBI source files. |
+| **Output / Change** | Destination for completed audio. |
+| **Voice** | OpenAI TTS voice used for narration. |
+| **Chunk Tokens** | Text sent per speech request. Smaller chunks retry more precisely; larger chunks make fewer calls. |
+| **Start / Stop** | Launches or terminates the converter process. Partial output and charges may remain. |
+| **Progress / Output Log** | The authoritative stage, resume, quota, and error record. |
 
-![Publish agent](img/agent-manuscript.png)
+OpenAI access is required even if another text provider is selected elsewhere.
+Listen to a sample before converting an entire book.
 
-Sales tracking and the publishing todo list.
+### Listen tab
 
-- **Ingest KDP CSV** — Amazon has no public API, so royalties arrive as CSV
-  reports you download from KDP. This reads them into the app's database.
-- **Refresh Data** / **Period** — the metrics view over what has been ingested.
-- **Publishing Todos** — a seeded checklist per platform (KDP, Draft2Digital,
-  IngramSpark, PublishDrive).
-- **Ask about your book** — questions answered against your own ingested numbers.
+![Audiobook library](img/agent-audiobook-listen.png)
 
----
+**Rescan** refreshes the library. **Listen / Pause**, ±30 seconds, the scrubber,
+and speed control operate the selected file. **Start Over** deliberately clears
+its saved position; **Show in Finder** reveals the file. Position is stored by
+path every few seconds and completed books restart next time.
 
-## Audio → Audiobooks  *(audiobook)*
+## Audio → Music (`music`)
 
-Converts an ebook (PDF / EPUB / TXT / MOBI) into MP3 via OpenAI TTS.
+![Music planning](img/agent-music.png)
 
-Costed per character, so a full novel is not trivial — check the estimate before
-starting. The conversion runs as a separate process and can be stopped.
+Music is a release-planning agent, not an audio generator.
 
-**Note:** the panel opens a dialog if its input folder holds no supported ebook.
-Point it at a folder with real files before selecting it.
+| Control | Meaning |
+|---|---|
+| **Artist / Project Name** | Release identity. |
+| **Genre / Describe Your Music** | Sound and context; use concrete references you have rights to mention. |
+| **Release Type** | Single, EP, album, or mixtape; changes the plan's scope. |
+| **Distributor** | Current or intended distribution route. |
+| **Target Audience** | The listeners and context of use. |
+| **Generate Plan** | Produces Artist Profile, Release Setup, Distribution, Spotify Strategy, and Income Roadmap tabs. |
+| **Save Full Plan / Clear / Stop** | Export, reset, or request cancellation. |
 
----
+Items marked **AI OUTPUT — COPY-PASTE READY** are drafts. Items marked **HUMAN
+ACTION REQUIRED** are real accounts, registrations, rights checks, or uploads.
 
-### Listening to what you made
+## Video → Video (`video`)
 
-![The Listen tab](img/agent-audiobook-listen.png)
+![Video generator](img/agent-video.png)
 
-The **Listen** tab is the library: every audio file in your output folder, with
-progress and position. Select one and the button reads *Resume at 1:24:03* — it
-picks up exactly there.
+Video supports two production routes: a narrated pipeline assembled from scene
+images, and direct video models that return one short clip.
 
-Position is remembered per file and saved while you listen, not only when you
-stop, so closing the laptop mid-chapter does not lose your place. A book played
-to the end is marked finished and starts over next time rather than resuming
-three seconds from the end. **Start Over** resets one deliberately.
+| Control | Meaning |
+|---|---|
+| **Topic** | Subject or brief. Empty can consume the next configured topic. |
+| **Format** | Long-form narrated pipeline or Social clip. Set this first. |
+| **Visual provider / model** | Only callable media routes appear; text-only models do not. |
+| **Aspect** | Vertical, square, or landscape where the selected route supports it. |
+| **Clip length** | Allowed values change with provider/model capability. |
+| **Render Video** | Estimates, authorises, then starts the chosen route. |
+| **Stop** | Cancels the local pipeline at a boundary; direct provider jobs may be non-cancellable after submission. |
+| **Open Output Folder** | Opens the shared vidforge library location. |
+| **Library / Play / Show in Finder** | Reviews completed outputs before publishing. |
 
----
+### Selectable visual routes
 
-## Audio → Music  *(music)*
+| Route | What it creates | Key |
+|---|---|---|
+| **OpenAI GPT Image 2.5 / GPT Image 2** | Scene images assembled into narrated long-form or clips. | OpenAI |
+| **OpenAI Sora 2 / Pro** | Direct 4, 8, or 12-second clip with audio; marked with its retirement date. | OpenAI |
+| **Gemini Omni 1.1 Flash** | Direct 3–10-second 720p clip with audio. | Google/Gemini |
+| **Veo 3.1 / Fast / Lite** | Direct 4, 6, or 8-second 720p operation. | Google/Gemini |
+| **Wan 3.0 / Prime / 2.7** | Direct 2–30-second 720p task, model dependent. | DashScope/Qwen |
+| **Higgsfield Seedance** | Direct clip after an exact provider quote. | Higgsfield key ID + secret |
+| **Pexels** | Stock scene visuals for the narrated pipeline. | Pexels |
+| **Local** | Local gradient scene cards for the narrated pipeline. | None for visuals |
 
-![Music](img/agent-music.png)
+DALL·E 2 and 3 are absent because their APIs were retired; current GPT Image
+models fill the scene-image role. DeepSeek, Anthropic, Kimi, and Ollama can
+write scripts or prompts but do not expose official video-generation output,
+so they are not presented as renderers.
 
-Release planning rather than audio generation: artist profile, release setup,
-distributor comparison, Spotify pitch, income roadmap.
+## Social → Social (`social`)
 
-Output marks **[AI OUTPUT — COPY-PASTE READY]** against **[HUMAN ACTION
-REQUIRED]**, so you always know which parts you still have to do yourself.
+![Social workspace](img/agent-social.png)
 
----
+| Control | Meaning |
+|---|---|
+| **Campaign / New / Save** | One promoted subject and its saved context. |
+| **Subject / Subject is a** | The product and its type: book, release, product, gig, and related choices. |
+| **Goal / Audience / Link** | Measurable intent, intended reader, and destination. |
+| **Platform** | Applies that platform's format, limits, and prompt guidance. |
+| **Angle** | Launch, behind the scenes, excerpt, value, question, or milestone. |
+| **Variants** | Number of genuinely different drafts. More is not automatically better. |
+| **Write Posts** | Creates editable, platform-specific drafts. |
+| **Make a Clip** | Sends a brief to the shared video pipeline with the right aspect. |
+| **Save to Schedule** | Stores an edited draft as planned work. |
+| **Schedule Drafts** | Dates undated posts using the configured cadence. |
 
-## Web → Site Builder  *(webdesign)*
+On **Schedule**, Copy Text moves a draft to the clipboard, Mark Posted records
+manual completion, and Post Now is available only for configured integrations.
+On **Accounts**, readiness explains why a platform can post or is draft-only.
+Nothing publishes unattended.
+
+## Web → Site Builder (`webdesign`)
 
 ![Site Builder](img/agent-webdesign.png)
 
-HTML/CSS/JS generation with the result split across `HTML`, `CSS` and `JS` tabs
-plus a line count.
+| Control | Meaning |
+|---|---|
+| **Brief** | Page, component, content, interactions, and acceptance criteria. |
+| **Page Type / Responsive** | Intended structure and mobile behaviour. |
+| **Colour Palette** | Real colour constraints; blank invites generic defaults. |
+| **Framework** | Vanilla or the supported front-end structure requested. |
+| **Generate / Stop** | Starts or requests cancellation of code generation. |
+| **HTML / CSS / JS** | Editable outputs separated for inspection. |
+| **Copy All / Save .html / Clear** | Move the approved output, export a previewable file, or reset. |
 
-Fill in `Colour Palette` and `Framework` — left blank, the model picks for you,
-and its default taste is generic.
+Always test the exported page at narrow and wide widths, with keyboard focus,
+and with real copy. Generated code is a starting implementation, not a deploy
+approval.
 
----
-
-## Gigs → Client Gigs  *(fiverr)*
+## Gigs → Client Gigs (`fiverr`)
 
 ![Client Gigs](img/agent-fiverr.png)
 
-Logo concepts, gig descriptions, and client delivery messages.
-
-**Generate Logos** is the paid, headline action — it bills per image, and that
-now counts against your budget caps. Pick a current **GPT Image model** for the
-quality/speed tradeoff. DALL·E 2 and 3 are not shown because their APIs were
-removed. **Delivery Message** and **Gig Description** are text-only and cheap.
-The Orders tab tracks what you produced for whom.
-
----
-
-## Video → Video  *(video)*
-
-![Video](img/agent-video.png)
-
-Topic in, finished video out: script, narration, aligned captions, generated
-visuals, Ken Burns motion, music and a thumbnail. This is the `vidforge`
-pipeline running inside Imprint — the same code as the standalone app, not a
-copy, so a render started in either shows up in both libraries.
-
-Choose the visual route as well as the format:
-
-| Choice | Result |
+| Control | Meaning |
 |---|---|
-| **GPT Image 2.5 / GPT Image 2** | Generates scene images, then assembles the full narrated pipeline. Long-form or 15–90-second social clip. |
-| **Sora 2 / Sora 2 Pro** | One direct 4, 8 or 12-second clip with audio. Retiring 24 September 2026. |
-| **Gemini Omni 1.1 Flash** | One direct 3–10-second 720p clip with audio. |
-| **Veo 3.1 / Fast / Lite** | One direct 4, 6 or 8-second 720p clip with audio. |
-| **Wan 3.0 / Prime / 2.7** | One direct 2–30-second 720p clip through Qwen/Alibaba Model Studio. |
-| **Higgsfield Seedance** | One direct clip after Imprint shows the exact provider quote. |
-| **Pexels** | Stock scene visuals; needs a Pexels key. |
-| **Local** | Local gradient scene cards; no image-generation charge. |
+| **Business Name / Industry** | The client's identity and market. |
+| **Style / Primary Colours / Notes** | Visual constraints, required text, and exclusions. |
+| **Concept count** | Paid image variants, one to four. Use fewer with a stronger brief. |
+| **Text Provider / Model** | Writes the image prompt, gig copy, and handover. |
+| **Image Model** | Current OpenAI GPT Image quality/speed route. |
+| **Generate Logos** | Paid image generation; review spelling, similarity, and rights. |
+| **Delivery Message / Gig Description** | Text-only client and listing drafts. |
+| **Logo Preview / Save All Images** | Review and export selected deliverables. |
+| **Orders** | Tracks client work; use one project/order context per buyer. |
 
-DALL·E does not appear because OpenAI removed the DALL·E 2 and 3 APIs. Choose a
-current GPT Image model for the same scene-image role. DeepSeek, Anthropic,
-Kimi and Ollama can still write the prompt or script, but they are not in the
-visual menu because their APIs do not generate video.
+Do not present raw generations as finished identity work. Check legibility,
+trademark conflicts, originality, formats, and the buyer's actual brief.
 
-The estimate beside the button is checked against your session and daily caps
-before the run starts: a conservative reserve for GPT Image, selected 720p
-per-second rates for Sora/Veo/Wan, a token-based reserve for Gemini Omni, or
-Higgsfield's exact quote. Pexels and Local remove the image generation portion;
-script and narration can still cost money.
+## Creator → Creator (`creator`)
 
-**Stop** cancels a pipeline render at the next stage boundary or requests
-Higgsfield cancellation. Sora, Gemini and Wan direct jobs cannot be safely
-cancelled after submission here, so Imprint keeps watching and saves the paid
-result.
+![Creator workspace](img/agent-creator.png)
 
-![Video library](img/agent-video-library.png)
+Creator is shared production for books, music, ventures, social personas, and
+subscription accounts. It deliberately drafts; it does not impersonate a human
+or publish unattended.
 
----
-
-## Social → Social  *(social)*
-
-![Social](img/agent-social.png)
-
-The funnel for everything else in the studio. A **campaign** is one subject —
-a book, a release, a product, a gig — and its goal. Posts are written per
-platform, laid on a schedule, and either posted directly or copied out.
-
-Write for the platform, not for "social media". The same announcement is a
-different piece of writing on each one, and not because of length: Reddit
-removes posts that read as marketing, Pinterest is a search engine wearing a
-mood board, X gives you seven words before someone scrolls. That guidance is
-built into each platform's prompt.
-
-**Angle** matters more than most people expect. `launch` is the one everyone
-reaches for and the one that works least often; `behind_the_scenes`, `excerpt`
-and `value` all give someone a reason to read who was not already going to buy.
-
-**Make a Clip** is where Video and Social meet: it writes a topic brief, hands
-it to the video pipeline at the right aspect and length for the platform, and
-files the finished mp4 against the campaign. You are not maintaining two video
-workflows.
-
-**Schedule Drafts** spreads undated drafts across the coming weeks at each
-platform's own cadence — seven a week on X, one a week on Reddit. That last
-number is not timidity: posting more often than that on Reddit is how accounts
-get banned, whatever the API allows.
-
-### What can actually post
-
-![Social accounts](img/agent-social-accounts.png)
-
-Writing works everywhere. Posting does not, and the Accounts tab is honest
-about which is which:
-
-| | |
+| Control | Meaning |
 |---|---|
-| **YouTube, Reddit, Pinterest** | Can post today. Each needs credentials you can obtain yourself — see the tab for exactly which. |
-| **X, Instagram, TikTok, Threads, LinkedIn** | Drafting only. Each needs a paid tier, a linked business account, or an app review that Imprint cannot obtain on your behalf. |
+| **Profile / Handle / Platform** | Saved identity and destination. |
+| **Ownership** | `own`, `managed`, or `persona`; changes required safeguards. |
+| **Authorised by** | Required evidence for managed profiles. |
+| **Disclosure** | Required public framing for a synthetic persona. |
+| **Kind** | Post, caption, campaign, posting plan, promo assets, hooks, bio, PPV, welcome, or promo. |
+| **Price** | PPV only; shapes the proposed value without predicting sales. |
+| **Audience** | Segment for targeted messages. |
+| **Promo channel** | Destination for off-platform promo. |
+| **Brief** | The concrete event, offer, asset, or message to create. |
+| **Draft / Add to Calendar** | Generate editable copy, then schedule the approved version. |
+| **Generate Teaser** | Requests a safe-for-work Higgsfield promo after an exact quote. |
 
-Nothing posts on its own. There is no scheduler running in the background and
-no "publish all" — the schedule is a plan you work through, one confirmed click
-at a time. That is deliberate: a tool that posts unattended is how an account
-gets banned for something its owner never saw.
+Tabs hold Draft, Calendar, Earnings, Voice, Media, Agency, and Records. Add five
+representative writing samples in **Voice** before evaluating output quality.
+Import statements or Record Revenue in **Earnings**; Add Media in **Media**;
+store verification and releases in **Records**. These records support review
+but do not replace legal or platform obligations.
 
----
+## OnlyFans → OnlyFans (`onlyfans`)
 
-## Creator → Creator  *(creator)*
+OnlyFans is venture intelligence, separate from content production.
 
-![Creator](img/agent-creator.png)
-
-Planning and drafting for subscription creator accounts: content calendar,
-captions, PPV copy, welcome messages, off-platform promos, and earnings.
-
-**It does not post.** OnlyFans has no usable API, and the tools that fake one
-get accounts permanently banned — so this drafts and you send. That is also the
-only kind of automation their terms allow: the kind that assists a human rather
-than replacing one.
-
-| Tab | What it holds |
+| Control | Meaning |
 |---|---|
-| Draft | The generated copy, editable. |
-| Calendar | What is queued, and what each item earned once you record it. |
-| Earnings | Imported statements, price points that actually converted, top content. |
-| Voice | The account's own writing samples — the single biggest lever on quality. |
-| Media | Photosets, clips, and anything Higgsfield rendered. |
-| Agency | Every account side by side, for managed work. |
-| Records | That age and identity documents exist for anyone depicted, and where. |
+| **Niche / Geography / Time window** | Filters the currently loaded signal set. |
+| **Refresh signals** | Reloads configured sources; the source note says when results are sample data. |
+| **Overview** | Directional opportunity, momentum, demand, and saturation views. |
+| **Trends & Opportunities** | Ranked hypotheses with source, freshness, risk, format, and pricing idea. |
+| **Content Intelligence** | A testable content direction for the selected signal. |
+| **Monetization & Analytics** | Imported receipts and attribution beside the hypothesis. |
+| **Market & Strategy** | Competition and positioning context. |
+| **Create Campaign in Creator** | Sends the selected signal and provenance into Creator as a draft brief. |
 
-**Fill in Voice first.** Paste five of the account's own posts. Everything the
-agent writes afterwards imitates them, and without that step the drafts are
-competent and completely generic — the difference is larger than any other
-setting in the app.
-
-Accounts are typed **own**, **managed** or **persona**. A managed account —
-someone else's, run on their behalf — will not draft until you record who
-authorised it. A persona carries a character bible and a locked seed so it stays
-one character instead of becoming a new one each session.
-
-`Generate Teaser` renders promo video through Higgsfield. It is safe-for-work
-by construction: Higgsfield prohibits explicit material and moderates prompts,
-reference images and outputs, so explicit content has to come from elsewhere.
-Its role is the teaser that lives on X or Reddit. Imprint shows Higgsfield's
-estimate before asking permission to spend, lets you cancel while the request
-is queued, saves the completed file locally, and attaches it to the selected
-Calendar row.
+An opportunity score is **not** a creator ranking, live revenue forecast, or
+proof of demand. Sample data is interface demonstration only. The correct loop
+is signal → small campaign → observed response → imported actuals → decision.
 
 ---
 
-Next: [Making money with it](03-profit.md)
+Next: [Income science](03-profit.md) · Need a recovery path? [Troubleshooting](07-troubleshooting.md)

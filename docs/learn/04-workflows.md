@@ -1,146 +1,212 @@
-# 4 · End-to-end workflows
+# 4 · Automation playbooks
 
-Recipes that cross agents. Each one is a sellable thing, start to finish.
+> A playbook is a repeatable sequence with a trigger, inputs, automated work,
+> human gates, an output, and a metric. If any one is missing, it is only a
+> checklist.
+
+Use these after writing the experiment card in [Income science](03-profit.md).
+Imprint prepares and records work; it does not run an unattended business in
+the background.
+
+## Playbook A · Productised client delivery
+
+**Trigger:** a qualified buyer accepts a fixed scope.
+
+**Best for:** a narrow logo concept or landing-page offer.
+
+### Inputs
+
+- Buyer, deadline, deliverable, revision limit, price, and acceptance criteria.
+- Required text/assets, visual constraints, prohibited references, and rights.
+- One project named for the order.
+
+### Run
+
+1. Record the brief before generating anything.
+2. For a logo, open **Gigs → Client Gigs**, set the business, industry, style,
+   colours, notes, and a small concept count. For a page, open **Web → Site
+   Builder** and state content, interactions, responsive behaviour, and checks.
+3. Estimate and authorise the request.
+4. Generate a first pass. Reject unusable work before polishing it.
+5. Review against the written acceptance criteria: spelling, completeness,
+   responsive layout, keyboard use, originality, and brand constraints.
+6. Make the smallest manual or model-assisted correction.
+7. Export only the approved assets.
+8. Use **Delivery Message** or write a concise handover that names files, scope,
+   and how the buyer should request the included revision.
+9. Record collected revenue, fees, refund/revision time, API spend, and total
+   hands-on minutes.
+
+### Human gates
+
+Scope acceptance → rights/trademark review → quality approval → final delivery.
+
+### Metric
+
+`Contribution per human hour`, plus revision and refund rate. If revisions grow
+with volume, improve the brief or narrow the offer before automating more.
+
+## Playbook B · Book-to-catalogue cohort
+
+**Trigger:** a hook has enough observed reader intent to justify a production
+test.
+
+**Best for:** one tightly positioned book and an optional audiobook edition.
+
+### Inputs
+
+- Hook, target reader, comp titles, publishing path, target length, and proof
+  collected during validation.
+- A release cohort label so later sales are not mixed with older work.
+
+### Run
+
+1. Create one project. Complete and save the **Book Profile**.
+2. In **Write → Draft → Outline**, generate structure. Edit until every section
+   earns its place; structural repair is cheapest here.
+3. Draft one scene or section at a time. Maintain Characters and World Notes for
+   fiction; maintain claims and source notes outside the prose for non-fiction.
+4. Use **Continue** for sequential text. Save at meaningful checkpoints.
+5. Export DOCX for editing. Complete editorial, factual, sensitivity, and rights
+   review outside the generation loop.
+6. Return to **Publish** for synopsis, blurb, metadata, and listing proposals.
+   Verify every category, keyword, claim, and quotation.
+7. In the Publisher agent, create quote candidates and local graphics. Compare
+   every proposed quote with the source text.
+8. In **Social**, create one campaign with one measurable destination. Draft
+   platform-specific angles and save the approved versions to Schedule.
+9. Publish through the platform's own controls. Imprint does not submit the book.
+10. After the observation window, import KDP/PublishDrive actuals and record
+    source-specific campaign results.
+11. Only if the text and economics justify it, use **Audio → Audiobooks**:
+    convert a sample, approve voice/pronunciation, estimate the full book, then
+    run the conversion.
+
+### Human gates
+
+Outline approval → editorial/fact review → rights and store-policy review →
+listing approval → audiobook sample approval → platform submission.
+
+### Metric
+
+Contribution per release cohort, conversion by traffic source, refund rate,
+and follow-on sales to other catalogue items.
+
+## Playbook C · Content-to-offer experiment
+
+**Trigger:** one offer has a measurable destination and one audience problem.
+
+**Best for:** testing positioning before building more inventory.
+
+### Inputs
+
+- Offer, audience, one channel, destination link, observation window, and three
+  distinct angles.
+- A link or landing-page analytics method that preserves the denominator.
+
+### Run
+
+1. If needed, create a focused landing page in **Web**. Put one promise, proof,
+   boundary, and action above the fold. Test it on phone and desktop.
+2. Create a **Social** campaign. Set Subject, type, audience, goal, and the exact
+   destination link.
+3. Generate variants separately for `value`, `behind_the_scenes`, and one other
+   relevant angle. Do not alter the offer during this comparison.
+4. Edit claims and adapt the drafts to the actual community. Save approved
+   versions to Schedule.
+5. Where motion materially helps, use **Make a Clip** or **Video → Social clip**.
+   Set provider, aspect, and duration before rendering; review the finished file.
+6. Post manually or through an explicitly configured Post Now integration. Mark
+   each item posted so the schedule remains truthful.
+7. At the fixed review date, record qualified impressions/visits, destination
+   actions, completed sales, revenue, refunds, spend, and human time by angle.
+8. Keep the offer fixed and replicate the best-supported angle in the next
+   window. Stop angles that produce attention without the intended action.
+
+### Human gates
+
+Community fit → factual/rights review → render approval → publish confirmation
+→ response handling.
+
+### Metric
+
+`Completed sales ÷ qualified visits` and `contribution per 100 qualified visits`.
+Likes and views are diagnostic only unless the hypothesis was explicitly about
+reach.
+
+## Playbook D · OnlyFans signal to measured campaign
+
+**Trigger:** a sourced, fresh signal suggests one content/offer experiment.
+
+**Best for:** an owned account, an authorised managed account, or a clearly
+disclosed synthetic persona.
+
+### Inputs
+
+- Account ownership, authorisation or disclosure, records location, audience
+  segment, source, freshness, risk, content format, price hypothesis, and window.
+
+### Run
+
+1. In **OnlyFans**, select geography and window, then refresh. Confirm whether
+   the source note says **sample data**. Sample data is not a basis for spend.
+2. In **Trends & Opportunities**, select one row. Inspect source, freshness,
+   saturation, risk, and suggested format. Treat the score as directional.
+3. Click **Create Campaign in Creator**. The source context travels into the
+   brief; review it before generation.
+4. Select or create the correct Creator profile. Managed profiles require
+   authorisation; personas require disclosure. Add representative Voice samples.
+5. Choose one Kind and audience segment. Draft, edit, and Add to Calendar.
+6. If a safe-for-work external teaser is justified, request **Generate Teaser**,
+   inspect the exact Higgsfield quote, and review the completed result. It is
+   promo material, not explicit content.
+7. Publish and interact manually under current platform rules.
+8. Import the platform statement or Record Revenue. Attribute only what the
+   available data supports; keep “unknown” where source cannot be determined.
+9. Review net receipts, retained buyers/subscribers, refunds, production cost,
+   acquisition source, and human time for this cohort.
+
+### Human gates
+
+Consent/identity/age/rights → platform-policy check → content approval → price
+approval → posting and interaction → revenue attribution.
+
+### Metric
+
+Contribution per retained subscriber or buyer cohort. A rising signal without
+retention or collected receipts does not earn automation.
+
+## Playbook E · Music release preparation
+
+**Trigger:** a finished, rights-cleared recording has a release date.
+
+1. In **Audio → Music**, enter the artist, genre, release type, distributor,
+   audience, and an accurate description of the recording.
+2. Generate the five-part plan. Save it as a working checklist.
+3. Review profile copy, cover specification, identifiers, distributor choice,
+   editorial pitch, and income registrations. Anything labelled Human Action
+   remains yours to complete.
+4. Create a Social campaign linked to the actual release destination. Prepare
+   value, process, excerpt, and launch angles rather than repeated announcements.
+5. Record distribution fees, promotional spend, owned traffic, saves/sales or
+   other available outcomes, and hands-on hours by release cohort.
+
+**Metric:** contribution per release cohort and qualified destination actions by
+source. Model-generated stream projections are hypotheses, never actuals.
+
+## Turn a playbook into a reliable routine
+
+For every repeated run, preserve five artifacts:
+
+1. **Input template** — the minimum complete brief.
+2. **Acceptance checklist** — objective reasons to approve or reject output.
+3. **Human gates** — named decisions that automation cannot pass.
+4. **Run record** — output location, provider, cost, time, and failures.
+5. **Outcome row** — denominator, transactions, contribution, and cohort.
+
+Improve the step with the largest verified loss. Do not optimise generation
+speed while discovery, conversion, refund, or fulfilment is the constraint.
 
 ---
 
-## A novel, from nothing to a store page
-
-1. **New Project** in the left rail. Fill the Project Bar — Title, Author, Type,
-   Genre, Tone, POV.
-2. **Book Profile → Save Profile.** Hook and target reader. Every prompt after
-   this reuses them.
-3. **Draft → Outline tab.** Task `Outline`, Direction: the premise in one
-   sentence. Edit the result until the beats are right — this is the cheapest
-   place to fix structural problems.
-4. **Draft tab, scene by scene.** One Direction per scene, **Continue** between
-   them. Watch the word counter against your target.
-5. **Publish page.** Generate the synopsis and blurb. Fill `Comp Titles`.
-6. **Market page.** `Platform: Amazon Description`, then again for launch posts.
-7. **Export Book** — EPUB for KDP, DOCX if an editor wants it.
-8. Upload to KDP yourself, then work the **Publishing Todos** list.
-9. Once sales exist: download the KDP CSV monthly and **Ingest KDP CSV**.
-
-**Where it usually goes wrong:** skipping step 2, then wondering why chapter 9
-sounds like a different book.
-
----
-
-## Launching that novel on social
-
-The book is done and on a store page. This is the part that decides whether
-anyone finds it.
-
-1. **Social → New Campaign.** Subject: the title. Subject is a: `book`. Goal:
-   what the fortnight is for — "launch week sales", not "awareness". Link: the
-   store page.
-2. **Write one post per platform, not one post.** Change `Platform` and press
-   **Write Posts** again. The prompt changes with it: what works on Reddit is
-   removed as marketing if you paste the X version into it.
-3. **Vary the angle.** `launch` once, on the day. Then `excerpt`,
-   `behind_the_scenes` and `value` for everything else. Six launch posts in a
-   row is how a feed gets muted.
-4. **Save to Schedule** after editing each batch. Two or three variants per
-   platform gives you something to rotate.
-5. **Make a Clip** for TikTok and Reels. It writes a brief, hands it to the
-   video pipeline vertically at 30 seconds, and files the mp4 against the
-   campaign. About €0.25 each.
-6. **Schedule Drafts.** Everything undated gets a date at its platform's own
-   cadence — seven a week on X, one a week on Reddit.
-7. **Work the Schedule tab.** `Post Now` where it is configured, `Copy Text`
-   and `Mark Posted` everywhere else.
-
-**Where it usually goes wrong:** posting the same text everywhere, and posting
-to Reddit more than once a week. Both are more likely to cost you the account
-than to sell a book.
-
----
-
-## A YouTube video from a topic
-
-1. **Video → Render.** `Format: Long-form`. Type a topic, or leave it empty to
-   take the next line of `topics.txt`.
-2. Check the estimate beside the button — typically €1–2, most of it images.
-   It is charged against your caps before the run starts.
-3. **Render Video.** Eight stages, roughly ten to twenty minutes. **Stop**
-   cancels at the next stage boundary, and the part-finished build stays in the
-   Library so you can resume it.
-4. **Library tab → Play** to check it before it goes anywhere.
-5. To publish: **Social**, platform `YouTube`, write the description, then
-   `Post Now`. Uploads default to private — make it public from YouTube once
-   you have looked at it.
-
-**Where it usually goes wrong:** rendering long-form when you wanted a clip.
-`Format` is the first thing to set, not the last.
-
----
-
-## The same manuscript as an audiobook
-
-1. Export the finished book to a folder of supported files.
-2. **Audio → Audiobooks**, point the input folder at it.
-3. Check the cost estimate. A novel is dollars, not cents.
-4. Pick a voice, **Start**, leave it running.
-5. Submit to ACX for a 25–40% royalty, or sell direct.
-
-One manuscript now earns twice. The marginal cost of the second product is the
-TTS bill and an afternoon.
-
----
-
-## A logo gig, order to delivery
-
-1. **Gigs → Client Gigs.** Fill Business Name, Industry, Style, Primary Colours
-   from the buyer's brief.
-2. **Generate Logos** — this is the paid step, about $0.04 an image.
-3. Pick the concepts worth showing. Send fewer, better options; three strong
-   beats eight mediocre.
-4. **Delivery Msg** for the handover note.
-5. **Gig Description** once, when you set the gig up — reuse it after that.
-
-**Margin check:** a few cents of images against a $10–$75 order. The constraint
-is your review time, not the API.
-
----
-
-## A single release, planned properly
-
-1. **Audio → Music.** Artist name, genre, release type, distributor.
-2. **Generate Plan** → five tabs: profile, release setup, distribution, Spotify
-   strategy, income roadmap.
-3. Do the **[HUMAN ACTION REQUIRED]** items yourself — distributor signup,
-   SoundExchange registration, the Spotify editorial pitch.
-4. Paste the **[AI OUTPUT — COPY-PASTE READY]** parts into the distributor and
-   Spotify for Artists.
-
-The plan is a checklist, not a release. Nothing ships until you do the human
-half.
-
----
-
-## A landing page for any of the above
-
-1. **Web → Site Builder.** Page Type `Landing Page`, fill Colour Palette and
-   Framework.
-2. Brief it with the product you just made — the book's hook, the release, the
-   service.
-3. **Generate**, then take the `HTML` / `CSS` / `JS` tabs.
-4. Deploy free on Netlify or Vercel.
-
-Every product benefits from one URL you control and can point ads at.
-
----
-
-## Stacking it
-
-The compounding version of all of the above:
-
-> Draft a book → publish on KDP → convert to audiobook for ACX → build a landing
-> page → write launch copy in Market → sell a companion course on Gumroad.
-
-One body of work, five products, five income lines. That is the reason the
-agents live in one app instead of six.
-
----
-
-Next: [Best practices](05-best-practices.md)
+Next: [Operate safely](05-best-practices.md) · Run the weekly decision loop in [Measure & improve](06-measure-and-improve.md)
