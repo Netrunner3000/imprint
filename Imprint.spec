@@ -109,7 +109,7 @@ coll = COLLECT(
 app = BUNDLE(
     coll,
     name="Imprint.app",
-    icon="assets/icon-v2.icns",
+    icon="assets/icon.icns",
     bundle_identifier="com.netrunner3000.imprint",
     info_plist={
         "CFBundleName": "Imprint",

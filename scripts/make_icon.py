@@ -7,8 +7,8 @@ from PIL import Image
 
 ROOT = Path(__file__).resolve().parent.parent
 ASSETS = ROOT / "assets"
-SOURCE = ASSETS / "icon_source_v2.png"
-OUTPUT = ASSETS / "icon-v2.icns"
+SOURCE = ASSETS / "icon_source.png"
+OUTPUT = ASSETS / "icon.icns"
 
 def main() -> None:
     if not SOURCE.exists():
