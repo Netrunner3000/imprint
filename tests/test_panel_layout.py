@@ -193,6 +193,82 @@ def test_no_control_is_unreachable(app, window, agent, size):
     assert not unreachable, f"[{agent}] " + "; ".join(unreachable)
 
 
+def test_author_workbench_has_no_nested_control_scroller(app, window):
+    """Compose, Task and Model belong in the canvas, not a tiny scroll pane."""
+    from PySide6.QtWidgets import QScrollArea
+
+    _settle(app, window, (1760, 820), "author")
+    window._author_set_mode("write")
+    app.processEvents()
+    assert not window.author_panel.findChildren(QScrollArea)
+
+
+def test_author_compose_remains_whole_with_profile_open(app, window):
+    """Opening Book Profile must not crop the command deck below it."""
+    from PySide6.QtCore import QPoint
+
+    _settle(app, window, (1760, 820), "author")
+    window._author_set_mode("write")
+    was_open = window.author_profile_section.content.isVisible()
+    if not was_open:
+        window.author_profile_section.header_btn.click()
+    for _ in range(6):
+        app.processEvents()
+
+    card = window.author_compose_card
+    for control in (
+        window.author_direction_input,
+        window.author_task_box,
+        window.author_provider_box,
+        window.author_model_box,
+        window.author_write_btn,
+        window.author_continue_btn,
+        window.author_stop_btn,
+    ):
+        top_left = control.mapTo(card, QPoint(0, 0))
+        bottom_right = control.mapTo(card, control.rect().bottomRight())
+        assert card.rect().contains(top_left), _describe(control)
+        assert card.rect().contains(bottom_right), _describe(control)
+
+    if not was_open:
+        window.author_profile_section.header_btn.click()
+
+
+def test_author_footer_prioritises_primary_actions_when_narrow(app, window):
+    """Low-priority metadata gives way before Save or Export can be clipped."""
+    _settle(app, window, (1000, 600), "author")
+    window._author_set_mode("write")
+    for _ in range(6):
+        app.processEvents()
+
+    assert not window.author_word_metric.isVisible()
+    assert not window.author_export_author_input.isVisible()
+    assert window.author_save_btn.isVisible()
+    assert window.author_export_format_box.isVisible()
+    assert window.author_export_btn.isVisible()
+    assert window.author_save_btn.text() == "Save"
+    assert window.author_export_btn.text() == "Export"
+
+
+def test_dropdowns_use_the_shared_polished_popup(app, window):
+    """Dropdowns should read as menus, with usable rows and smooth scrolling."""
+    from PySide6.QtWidgets import QAbstractItemView
+
+    _settle(app, window, (1760, 820), "author")
+    combo = window.author_model_box
+    view = combo.view()
+
+    assert view.sizeHintForRow(0) >= 36
+    assert view.minimumWidth() >= 180
+    assert combo.maxVisibleItems() == 9
+    assert view.verticalScrollMode() == QAbstractItemView.ScrollPerPixel
+    assert "dropdown-chevron.svg" in window.styleSheet()
+
+    spec = os.path.join(os.path.dirname(__file__), "..", "Imprint.spec")
+    assert '("assets/dropdown-chevron.svg", "assets")' in open(
+        spec, encoding="utf-8").read()
+
+
 # ── Conditional fields ───────────────────────────────────────────────────────
 CREATOR_KINDS = [
     ("post", 2),        # kind + audience

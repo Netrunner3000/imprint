@@ -8,7 +8,8 @@ controls past their own minimums until the labels are chopped.
 """
 from PySide6.QtCore import Qt, QRect, QPoint, QSize
 from PySide6.QtWidgets import (
-    QComboBox, QLayout, QPushButton, QScrollArea, QVBoxLayout, QWidget,
+    QAbstractItemView, QComboBox, QLayout, QPushButton, QScrollArea,
+    QVBoxLayout, QWidget,
 )
 
 
@@ -228,8 +229,11 @@ def let_combos_shrink(root: QWidget, visible_chars: int = 8) -> int:
         natural = combo.sizeHint().width()
         combo.setSizeAdjustPolicy(QComboBox.AdjustToMinimumContentsLengthWithIcon)
         combo.setMinimumContentsLength(visible_chars)
+        combo.setMaxVisibleItems(9)
         view = combo.view()
         if view is not None:
             view.setMinimumWidth(max(natural, 180))
+            view.setVerticalScrollMode(QAbstractItemView.ScrollPerPixel)
+            view.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         count += 1
     return count

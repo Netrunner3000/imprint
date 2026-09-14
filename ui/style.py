@@ -29,6 +29,8 @@ Greys are slightly blue rather than neutral (#0d0f12, not #0f0f0f) because a
 pure grey next to the emerald reads faintly magenta.
 """
 
+from services.runtime_paths import resource_base
+
 # ── Tokens ───────────────────────────────────────────────────────────────
 # Surfaces, darkest first. Page sits behind cards; inputs sink below cards.
 BG        = "#0d0f12"   # window / page
@@ -66,6 +68,8 @@ INFO_LINE   = "rgba(96, 165, 250, 0.32)"
 RADIUS    = "8px"
 RADIUS_SM = "6px"
 RADIUS_LG = "12px"
+
+CHEVRON_DOWN = (resource_base() / "assets" / "dropdown-chevron.svg").as_posix()
 
 
 GLOBAL_STYLESHEET = f"""
@@ -127,30 +131,71 @@ GLOBAL_STYLESHEET = f"""
             color: {TEXT};
             border: 1px solid {BORDER};
             border-radius: {RADIUS_SM};
-            padding: 6px 10px;
+            padding: 6px 38px 6px 11px;
             min-height: 20px;
         }}
         QComboBox:hover {{ border: 1px solid {BORDER_STRONG}; }}
         QComboBox:focus {{ border: 1px solid {ACCENT_LINE}; }}
-        /* Give selection controls a recognisable trailing affordance. The
-           native arrow remains platform-correct; the separated surface makes
-           a combo visually distinct from a text field even when its value is
-           long and elided. */
+        /* A quiet chevron makes the control recognisable without the chunky
+           platform-native arrow block.  The value gets explicit right padding
+           so long model names can never run underneath it. */
         QComboBox::drop-down {{
             border: none;
-            border-left: 1px solid {BORDER};
-            width: 28px;
+            width: 32px;
+            background-color: transparent;
+        }}
+        QComboBox:hover::drop-down {{
             background-color: {ELEVATED};
+        }}
+        QComboBox::down-arrow {{
+            image: url("{CHEVRON_DOWN}");
+            width: 12px;
+            height: 12px;
+        }}
+        /* Compact selectors (for example EPUB / PDF) retain the same visual
+           language without spending most of their width on the arrow area. */
+        QComboBox#CompactCombo {{
+            padding: 6px 26px 6px 8px;
+        }}
+        QComboBox#CompactCombo::drop-down {{ width: 24px; }}
+        QComboBox#CompactCombo::down-arrow {{
+            width: 10px;
+            height: 10px;
+        }}
+
+        /* The popup is a floating menu, not a plain text dump.  Each option
+           has a comfortable target and a contained hover/selection state. */
+        QComboBoxPrivateContainer {{
+            background-color: {SURFACE};
+            border: 1px solid {BORDER_STRONG};
+            border-radius: {RADIUS_LG};
+            padding: 5px;
         }}
         QComboBox QAbstractItemView {{
             background-color: {SURFACE};
             color: {TEXT};
-            border: 1px solid {BORDER_STRONG};
-            border-radius: {RADIUS_SM};
+            border: none;
+            border-radius: {RADIUS};
             padding: 4px;
+            font-size: 13px;
             selection-background-color: {ACCENT_WASH};
-            selection-color: {TEXT};
+            selection-color: {ACCENT};
             outline: none;
+        }}
+        QComboBox QAbstractItemView::item {{
+            min-height: 34px;
+            padding: 0 11px;
+            margin: 2px 0;
+            border: none;
+            border-radius: {RADIUS_SM};
+        }}
+        QComboBox QAbstractItemView::item:hover {{
+            background-color: {ELEVATED};
+            color: {TEXT};
+        }}
+        QComboBox QAbstractItemView::item:selected {{
+            background-color: {ACCENT_WASH};
+            color: {ACCENT};
         }}
 
         /* ── Buttons ───────────────────────────────────────────────── */
