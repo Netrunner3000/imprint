@@ -59,13 +59,14 @@ hasn't been done.
 16. [File & Directory Structure](#16-file--directory-structure)
    - [Tests](#161-tests)
 17. [First-Run & Migration](#17-first-run--migration)
-18. [Configuration Reference](#18-configuration-reference)
-19. [Learning Centre](#19-learning-centre)
-20. [Earning Income with Imprint](#20-earning-income-with-imprint)
-   - [Service-Based Income (Fiverr, Web Design, Author)](#201-service-based-income-fiverr-web-design-author)
-   - [Recurring Revenue (Music, Audiobook, Courses)](#202-recurring-revenue-music-audiobook-courses)
-   - [Required External Accounts & Tools](#203-required-external-accounts--tools)
-   - [Realistic Earnings Expectations](#204-realistic-earnings-expectations)
+18. [Installing and Packaging](#18-installing-and-packaging)
+19. [Configuration Reference](#19-configuration-reference)
+20. [Learning Centre](#20-learning-centre)
+21. [Earning Income with Imprint](#21-earning-income-with-imprint)
+   - [Service-Based Income (Fiverr, Web Design, Author)](#211-service-based-income-fiverr-web-design-author)
+   - [Recurring Revenue (Music, Audiobook, Courses)](#212-recurring-revenue-music-audiobook-courses)
+   - [Required External Accounts & Tools](#213-required-external-accounts--tools)
+   - [Realistic Earnings Expectations](#214-realistic-earnings-expectations)
 
 ---
 
@@ -2197,7 +2198,71 @@ this app doesn't build, so it can't touch one a user has since added.
 
 ---
 
-## 18. Configuration Reference
+## 18. Installing and Packaging
+
+There are **two** ways to install Imprint, and they behave differently enough
+that picking the wrong one wastes an afternoon.
+
+| | `scripts/install_app.sh` | `scripts/build_app.sh` |
+|---|---|---|
+| What it installs | A small launcher bundle that runs this checkout | A frozen PyInstaller bundle with its own Python |
+| After you edit code | Next launch picks it up | Rebuild, every time |
+| Needs the project folder + `.venv` | Yes | No |
+| Build time | Seconds | ~1 minute |
+| Use it for | **Everyday development** | Handing the app to another machine |
+
+`install_app.sh` is the everyday one. `build_app.sh` freezes the code, so
+running it replaces the live app with a snapshot and puts you back to
+rebuilding after every edit.
+
+Both install to `/Applications/Imprint.app`, so **the last one you ran wins**.
+To tell which produced the bundle you have:
+
+```bash
+ls /Applications/Imprint.app/Contents/MacOS/
+```
+
+`Imprint` is the frozen build. `applet` is the live launcher — `install_app.sh`
+builds it with `osacompile`, which is why the executable and the icon file
+inside carry AppleScript's `applet` name.
+
+### The icon
+
+One source, one name: `assets/icon_source.png` → `assets/icon.icns`, generated
+by `scripts/make_icon.py`. Both install paths read `assets/icon.icns`.
+
+That is worth stating because it was not true until September 2026. The icon
+inherited from the `sentinel_ai` fork — a surveillance eye in a shield, wrong
+for a publishing tool — kept the obvious filename, while Imprint's own artwork
+sat beside it as `icon-v2.icns`. Only `Imprint.spec` referenced the `-v2` name,
+so a frozen build showed the book and a live-launcher install showed the eye:
+the same app with two logos depending on which script ran last. The suffixed
+files are gone, which is the only reliable fix — while the obvious name held
+the wrong image, anything written against it was wrong by default.
+
+**Changing the icon takes a reinstall.** The `.icns` is copied into the bundle
+at install time, so editing the asset does nothing until you re-run one of the
+two scripts. macOS also caches icons; if the Dock still shows the old one,
+`killall Dock`.
+
+### Verifying a packaged build
+
+`main.py --selftest` checks what only a real bundle can break:
+
+```bash
+/Applications/Imprint.app/Contents/MacOS/Imprint --selftest
+```
+
+It confirms the writable data directory is outside the bundle, that every agent
+in `CUSTOM_PANELS` has a registry row, that `vidforge` imported and its output
+root is writable, and that the read-only resources seeded from the bundle
+(`docs/agents`, `docs/learn`, `config`) are present. Three of those failure
+modes do not exist until the app is frozen — see the packaging notes in the
+workspace `AGENTS.md`.
+
+---
+
+## 19. Configuration Reference
 
 ### Environment Variables (API Keys)
 
@@ -2262,7 +2327,7 @@ The Audiobook agent reads its paths and defaults from `services/tool_runner.py`,
 
 ---
 
-## 19. Learning Centre
+## 20. Learning Centre
 
 `ACTIONS → 🎓 Learning Centre` in the right rail opens a five-page guide
 rendered from `docs/learn/`:
@@ -2296,7 +2361,7 @@ perfectly from a source checkout.
 
 ---
 
-## 20. Earning Income with Imprint
+## 21. Earning Income with Imprint
 
 Imprint's agents are designed to produce **deliverables you can sell** — logos, websites, books, music, audiobooks, courses. This chapter is the practical, no-nonsense guide to converting agent output into income, broken down by income type.
 
@@ -2304,7 +2369,7 @@ Imprint's agents are designed to produce **deliverables you can sell** — logos
 
 ---
 
-### 20.1 Service-Based Income (Fiverr, Web Design, Author)
+### 21.1 Service-Based Income (Fiverr, Web Design, Author)
 
 Service income is the **fastest path to revenue**: you sell a deliverable, you get paid. These agents accelerate your output so you can take more orders or charge for premium work without burning hours.
 
@@ -2424,7 +2489,7 @@ Service income is the **fastest path to revenue**: you sell a deliverable, you g
 
 ---
 
-### 20.2 Recurring Revenue (Music, Audiobook, Courses)
+### 21.2 Recurring Revenue (Music, Audiobook, Courses)
 
 Recurring revenue compounds — once published, content keeps earning. These agents produce **assets that generate passive income** over months and years.
 
@@ -2535,7 +2600,7 @@ HeyGen/Synthesia per-minute avatar-video credits (skip both with
 
 ---
 
-### 20.3 Required External Accounts & Tools
+### 21.3 Required External Accounts & Tools
 
 A compact reference of everything you need for each income path.
 
@@ -2567,7 +2632,7 @@ A compact reference of everything you need for each income path.
 
 ---
 
-### 20.4 Realistic Earnings Expectations
+### 21.4 Realistic Earnings Expectations
 
 A summary of what you can realistically expect from each path, based on public data and platform averages.
 
