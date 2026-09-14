@@ -464,7 +464,7 @@ class GodAI(QWidget):
             self.author_save_btn.setFixedWidth(58)
             self.author_export_btn.setText("Export")
             self.author_export_btn.setFixedWidth(68)
-            self.author_export_format_box.setFixedWidth(64)
+            self.author_export_format_box.setFixedWidth(86)
         else:
             layout.setContentsMargins(MD, SM, MD, SM)
             layout.setSpacing(SM)
@@ -474,7 +474,7 @@ class GodAI(QWidget):
             self.author_export_btn.setText("Export Book")
             self.author_export_btn.setMinimumWidth(0)
             self.author_export_btn.setMaximumWidth(16777215)
-            self.author_export_format_box.setFixedWidth(88)
+            self.author_export_format_box.setFixedWidth(100)
 
     def _set_tooltips(self, mapping: dict):
         """Helper: apply a {widget_attr_name: text} mapping in one call.
@@ -2148,6 +2148,7 @@ class GodAI(QWidget):
 
         compose_card = QFrame()
         compose_card.setObjectName("AuthorComposeCard")
+        self.author_compose_card = compose_card
         compose_layout = QVBoxLayout(compose_card)
         compose_layout.setContentsMargins(MD, SM, MD, SM)
         compose_layout.setSpacing(SM)
@@ -2157,11 +2158,10 @@ class GodAI(QWidget):
         compose_grid.setHorizontalSpacing(MD)
         compose_grid.setVerticalSpacing(0)
 
-        self.author_direction_input = QTextEdit()
+        self.author_direction_input = QLineEdit()
         self.author_direction_input.setPlaceholderText(
             "What happens next? One concrete instruction beats a paragraph."
         )
-        self.author_direction_input.setFixedHeight(40)
         self.author_direction_field = field(
             "Direction", self.author_direction_input)
         compose_grid.addWidget(self.author_direction_field, 0, 0)
@@ -2306,8 +2306,9 @@ class GodAI(QWidget):
         document_actions.addWidget(self.author_export_author_input, 1)
 
         self.author_export_format_box = QComboBox()
+        self.author_export_format_box.setObjectName("CompactCombo")
         self.author_export_format_box.addItems(["EPUB", "DOCX", "PDF"])
-        self.author_export_format_box.setFixedWidth(88)
+        self.author_export_format_box.setFixedWidth(100)
         document_actions.addWidget(self.author_export_format_box)
         self.author_export_btn = QPushButton("Export Book")
         self.author_export_btn.clicked.connect(self.author_export_book)
@@ -6343,7 +6344,7 @@ class GodAI(QWidget):
         self.author_worker.start()
 
     def author_write(self):
-        direction = self.author_direction_input.toPlainText().strip()
+        direction = self.author_direction_input.text().strip()
         if not direction:
             QMessageBox.warning(self, "Missing Input", "Please enter a direction.")
             return
@@ -6360,7 +6361,7 @@ class GodAI(QWidget):
         self._author_start_worker(provider, model, prompt, recent_draft_text=existing)
 
     def author_continue(self):
-        direction = self.author_direction_input.toPlainText().strip()
+        direction = self.author_direction_input.text().strip()
         provider = self.author_provider_box.currentText()
         model = self.author_model_box.currentText()
         if not model:

@@ -51,6 +51,7 @@ if (_VIDFORGE / "vidforge").is_dir():
 # Read-only resources seeded into the writable user-data dir on first launch.
 datas += [
     ("config", "config"),
+    ("assets/dropdown-chevron.svg", "assets"),
     ("README.md", "."),
     (".env.example", "."),
     ("docs/agents", "docs/agents"),   # per-agent capability sheets (Docs button)
