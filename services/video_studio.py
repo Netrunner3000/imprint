@@ -74,8 +74,16 @@ def _load() -> bool:
         return False
 
     try:
+        # Appended, never inserted. That directory is a whole application: it
+        # holds vidforge's own `main.py` and `app.py` alongside the `vidforge`
+        # package, so putting it first shadows Imprint's `main` for anything
+        # imported afterwards. The app survived it because `main` is already in
+        # sys.modules by then, but the test suite does not — collecting a
+        # module that touches this and then importing `main` got vidforge's.
+        # Appending keeps Imprint's own root ahead while still exposing the
+        # package.
         if VIDFORGE_ROOT.is_dir() and str(VIDFORGE_ROOT) not in sys.path:
-            sys.path.insert(0, str(VIDFORGE_ROOT))
+            sys.path.append(str(VIDFORGE_ROOT))
         from vidforge import config as config_mod      # type: ignore
         from vidforge import pipeline as pipeline_mod  # type: ignore
         from vidforge import progress as progress_mod  # type: ignore
