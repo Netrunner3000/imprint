@@ -84,6 +84,44 @@ GLOBAL_STYLESHEET = f"""
             border: 1px solid {BORDER};
             border-radius: {RADIUS_LG};
         }}
+        QFrame#InsightCard {{
+            background-color: {SURFACE};
+            border: 1px solid {BORDER};
+            border-radius: {RADIUS_LG};
+        }}
+        QLabel#InsightTitle {{
+            color: {TEXT};
+            font-size: 15px;
+            font-weight: 650;
+        }}
+        QLabel#InsightIntro {{
+            color: {TEXT_DIM};
+            font-size: 12px;
+        }}
+        QLabel#InsightBody {{
+            color: {TEXT_DIM};
+            font-size: 13px;
+        }}
+        QTableWidget#OpportunityTable {{
+            background-color: {SUNKEN};
+            alternate-background-color: {SURFACE};
+            color: {TEXT_DIM};
+            border: 1px solid {BORDER};
+            border-radius: {RADIUS};
+            gridline-color: transparent;
+            selection-background-color: {ACCENT_WASH};
+            selection-color: {TEXT};
+            outline: none;
+        }}
+        QHeaderView#OpportunityHeader::section {{
+            background-color: {SURFACE};
+            color: {TEXT_MUTE};
+            border: none;
+            border-bottom: 1px solid {BORDER_STRONG};
+            padding: 9px 10px;
+            font-size: 11px;
+            font-weight: 650;
+        }}
 
         /* ── Inputs ────────────────────────────────────────────────── */
         QTextEdit, QTextBrowser, QListWidget {{
@@ -127,6 +165,7 @@ GLOBAL_STYLESHEET = f"""
         }}
 
         QComboBox {{
+            combobox-popup: 0;
             background-color: {SUNKEN};
             color: {TEXT};
             border: 1px solid {BORDER};
@@ -171,7 +210,8 @@ GLOBAL_STYLESHEET = f"""
             border-radius: {RADIUS_LG};
             padding: 5px;
         }}
-        QComboBox QAbstractItemView {{
+        QComboBox QAbstractItemView,
+        QListView#ImprintComboPopup {{
             background-color: {SURFACE};
             color: {TEXT};
             border: none;
@@ -182,18 +222,21 @@ GLOBAL_STYLESHEET = f"""
             selection-color: {ACCENT};
             outline: none;
         }}
-        QComboBox QAbstractItemView::item {{
+        QComboBox QAbstractItemView::item,
+        QListView#ImprintComboPopup::item {{
             min-height: 34px;
             padding: 0 11px;
             margin: 2px 0;
             border: none;
             border-radius: {RADIUS_SM};
         }}
-        QComboBox QAbstractItemView::item:hover {{
+        QComboBox QAbstractItemView::item:hover,
+        QListView#ImprintComboPopup::item:hover {{
             background-color: {ELEVATED};
             color: {TEXT};
         }}
-        QComboBox QAbstractItemView::item:selected {{
+        QComboBox QAbstractItemView::item:selected,
+        QListView#ImprintComboPopup::item:selected {{
             background-color: {ACCENT_WASH};
             color: {ACCENT};
         }}
@@ -644,10 +687,10 @@ GLOBAL_STYLESHEET = f"""
             letter-spacing: 1.1px;
         }}
         QLabel#SectionLabel {{
-            color: {TEXT_MUTE};
-            font-size: 10px;
-            font-weight: 700;
-            letter-spacing: 1.4px;
+            color: {TEXT};
+            font-size: 14px;
+            font-weight: 600;
+            letter-spacing: 0.1px;
         }}
         QLabel#StatValue {{
             color: {TEXT};

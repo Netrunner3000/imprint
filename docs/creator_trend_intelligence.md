@@ -6,12 +6,13 @@ opportunity index and keeps every source behind an adapter so one unavailable
 provider cannot prevent the dashboard from loading.
 
 OnlyFans business decisions and Creator production are separate on purpose.
-The venture workspace owns Overview, Trends & Opportunities, Content
-Intelligence, Monetization & Analytics, and Market & Strategy. **Create Campaign
-in Creator** passes the selected signal, evidence, freshness, risk, suggested
-format, pricing hypothesis, and concrete deliverables into the shared Creator
-workspace. Creator can use the same workflow for publishing, music, AltMerch,
-and future ventures without inheriting OnlyFans-specific assumptions.
+The venture workspace owns Overview, Opportunities, Content Intelligence,
+Monetization Analytics, and Market Strategy. **Create Campaign in Creator** or
+**Build this test in Creator** passes the selected signal, evidence, freshness,
+risk, suggested format, pricing hypothesis, and concrete deliverables into the
+shared Creator workspace. Creator can use the same workflow for publishing,
+music, AltMerch, and future ventures without inheriting OnlyFans-specific
+assumptions.
 
 ## What the numbers mean
 
@@ -22,8 +23,10 @@ monetization potential (25%), and whitespace/low saturation (20%), then applies
 a visible penalty to elevated compliance risk. Pricing text is an experiment
 idea, not a claim about what buyers will pay.
 
-Every row names its source and observation timestamp. When no live connector
-is configured, the entire dashboard is marked **SAMPLE DATA** and uses bundled
+Every signal retains its source and observation timestamp. The compact table
+exposes them in row tooltips and the Market Strategy evidence card rather than
+compressing eleven columns into unreadable headers. When no live connector is
+configured, the entire dashboard is marked **SAMPLE DATA** and uses bundled
 illustrative records. Sample values are never presented as measured demand.
 
 The analytics view is different: it reads only the user's saved OnlyFans
@@ -53,7 +56,7 @@ matching statement periods.
 ## Wiring connectors later
 
 The normalization contract is the `Trend` dataclass in
-`services/creator_trends.py`. A connector implements `fetch(geography, window)`
+`agents/onlyfans/trends.py`. A connector implements `fetch(geography, window)`
 and returns `Trend` records. Add it to the adapter tuple in `load_trends`.
 Network work should run off the UI thread, cache the last successful response,
 set an honest `observed_at`, and return an empty list on unavailable sources.

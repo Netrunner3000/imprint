@@ -477,7 +477,7 @@ class VideoWorker(QThread):
             self._reporter.cancel()
 
     def run(self):
-        from services import video_studio
+        from agents.video import video_studio
 
         try:
             base = video_studio.reporter_base()
@@ -486,7 +486,7 @@ class VideoWorker(QThread):
 
             class QtReporter(base):
                 def on_stage(self, stage_key, detail):
-                    from services.video_studio import overall_fraction
+                    from agents.video.studio import overall_fraction
                     label = dict((k, l) for k, l, _ in video_studio.stages()).get(
                         stage_key, stage_key)
                     worker.stage_signal.emit(stage_key, label)
@@ -494,7 +494,7 @@ class VideoWorker(QThread):
                         int(overall_fraction(stage_key) * 100), detail)
 
                 def on_progress(self, stage_key, fraction, detail):
-                    from services.video_studio import overall_fraction
+                    from agents.video.studio import overall_fraction
                     worker.progress_signal.emit(
                         int(overall_fraction(stage_key, fraction) * 100), detail)
 

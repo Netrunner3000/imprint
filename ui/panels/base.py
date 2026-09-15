@@ -63,9 +63,11 @@ class AgentPanel:
         try:
             client = getattr(self.host, provider, None)
             models = client.list_models() if client is not None else []
+            self.model_box.setProperty("imprintModelsLive", bool(models))
             for model in models:
                 self.model_box.addItem(model)
         except Exception as exc:
+            self.model_box.setProperty("imprintModelsLive", False)
             self.host._note_failure(f"{self.agent}: load models", exc, self.model_box)
 
     # ── convenience for the call sites that read the pair ───────────────

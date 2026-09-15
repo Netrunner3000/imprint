@@ -27,7 +27,7 @@ if not os.environ.get("ANTHROPIC_API_KEY"):
 
 sys.path.insert(0, os.path.dirname(__file__))
 
-from agents.course_agent import CourseAgent
+from agents.course import CourseAgent
 from services.course.models import CourseRequest, DifficultyLevel
 
 

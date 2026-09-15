@@ -23,13 +23,13 @@ import pytest
 # Make sure the project root is on the path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from agents.router_agent       import RouterAgent
-from agents.chat_agent         import ChatAgent
-from agents.author_agent       import AuthorAgent
-from agents.fiverr_agent       import FiverrAgent
-from agents.music_agent        import MusicAgent
-from agents.webdesign_agent    import WebdesignAgent
-from agents.audiobook_connector import AudiobookConnector
+from agents.router             import RouterAgent
+from agents.chat               import ChatAgent
+from agents.author             import AuthorAgent
+from agents.fiverr             import FiverrAgent
+from agents.music              import MusicAgent
+from agents.webdesign          import WebdesignAgent
+from agents.audiobook          import AudiobookConnector
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -57,37 +57,36 @@ def _user(msgs):
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 1. RouterAgent
-# Scenario: classify six different inputs — all four routes, plus edge cases
+# Scenario: classify representative creative work, plus the safe fallback
 # ─────────────────────────────────────────────────────────────────────────────
 
 class TestRouterAgent:
     agent = RouterAgent()
 
-    def test_routes_osint_on_email(self):
-        assert self.agent.classify("Look up the email john.doe@example.com") == "osint"
+    def test_routes_video(self):
+        assert self.agent.classify("Make a YouTube video and storyboard") == "video"
 
-    def test_routes_osint_on_domain_keyword(self):
-        assert self.agent.classify("Run a whois lookup on target domain") == "osint"
+    def test_routes_social(self):
+        assert self.agent.classify("Schedule a social post for Reddit") == "social"
 
-    def test_routes_coding_on_python_keyword(self):
-        assert self.agent.classify("I have a bug in my python script") == "coding"
+    def test_routes_audiobook(self):
+        assert self.agent.classify("Narrate this ebook as an audiobook") == "audiobook"
 
-    def test_routes_coding_on_debug_keyword(self):
-        assert self.agent.classify("Help me debug this function") == "coding"
+    def test_routes_site_builder(self):
+        assert self.agent.classify("Build a responsive landing page in HTML") == "webdesign"
 
-    def test_routes_writing_on_write_keyword(self):
-        assert self.agent.classify("Write a cover letter for a data science role") == "writing"
+    def test_routes_drafting(self):
+        assert self.agent.classify("Write a chapter with a stronger character arc") == "author"
 
-    def test_routes_writing_on_blog_keyword(self):
-        assert self.agent.classify("Draft a blog post about AI trends") == "writing"
+    def test_routes_publishing(self):
+        assert self.agent.classify("Create a query letter and synopsis") == "manuscript"
 
     def test_defaults_to_chat(self):
         assert self.agent.classify("What is the capital of France?") == "chat"
 
     def test_case_insensitive_routing(self):
-        # RouterAgent lowercases internally — verify uppercase inputs still route
-        assert self.agent.classify("DEBUG this CODE please") == "coding"
-        assert self.agent.classify("OSINT on this target") == "osint"
+        assert self.agent.classify("MAKE A SPOTIFY MUSIC RELEASE PLAN") == "music"
+        assert self.agent.classify("ANALYSE ONLYFANS PPV PRICING") == "onlyfans"
 
 
 # 3. ChatAgent

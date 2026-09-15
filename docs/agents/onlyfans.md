@@ -1,6 +1,6 @@
 # ONLYFANS — venture intelligence
 
-`key: onlyfans` · dashboard: `ui/creator_trends.py → OnlyFansDashboard` · panel: `build_onlyfans_panel()`
+`key: onlyfans` · dashboard: `agents/onlyfans/panel.py → OnlyFansDashboard` · panel: `build_onlyfans_panel()`
 
 ## What it does
 
@@ -31,7 +31,7 @@ labels the rows **SAMPLE DATA** and they must not be used as market evidence.
 
 ## Measurement boundary
 
-`services.creator_trends.onlyfans_business_metrics()` reads recorded Creator
+`agents.onlyfans.trends.onlyfans_business_metrics()` reads recorded Creator
 earnings and subscribers. It does not infer profit when costs are unknown.
 Source, freshness, confidence, risk, pricing hypothesis, and requested
 deliverables remain attached through the Creator handoff so a generated brief
@@ -55,8 +55,8 @@ The valid loop is:
 
 | Location | Role |
 |---|---|
-| `ui/creator_trends.py` | Dashboard, charts, tables, source labels, Creator handoff. |
-| `services/creator_trends.py` | Trend loading/filtering, scoring, campaign context, owned metrics. |
+| `agents/onlyfans/panel.py` | Dashboard, charts, tables, source labels, Creator handoff. |
+| `agents/onlyfans/trends.py` | Trend loading/filtering, scoring, campaign context, owned metrics. |
 | `main.py: build_onlyfans_panel()` | Top-level workspace integration. |
 | `main.py: _onlyfans_create_campaign()` | Switches to Creator and fills the structured brief. |
 | Creator earnings tables | Observed receipts, attribution, and subscriber counts. |

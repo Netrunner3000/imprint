@@ -8,7 +8,7 @@ Ideas not yet committed to. Status: `IDEA` · `CONSIDERING` · `PLANNED` · `DON
 
 | # | Suggestion | Category | Effort | Status |
 |---|---|---|---|---|
-| 1 | Refactor Phase 4 — one module per agent panel (`ui/panels/author.py`, …). Phase 3 (the `AgentHost` protocol + shared `AgentPanel` base) shipped; see `TODO.md`. | design | L | PLANNED |
+| 1 | Agent-project architecture — package-per-agent implementation, catalog and local README/TODO/SUGGESTIONS are DONE. Moving panels from `main.py` into their owning packages remains planned in each agent's TODO. | design | L | DONE |
 | 3 | Remove the dead `ops_identity` sidebar entry — listed in `agent_titles` with no implementation behind it | bug | XS | DONE |
 | 5 | DONE — Budget card layout. Both caps are progress bars now, and the four spend figures are stat blocks rather than nine lines of prose. The bar turns red at 100%. | design | S | DONE |
 | 6 | Per-agent cost breakdown in the cost dialog, so it's visible which agent is eating the daily cap | feature | M | IDEA |

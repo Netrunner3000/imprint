@@ -79,7 +79,7 @@ def test_saving_voice_twice_updates_rather_than_duplicates(db):
 
 def test_voice_reaches_the_draft_prompt(db):
     """The point of the whole feature: it has to be in the prompt."""
-    from agents.creator_agent import CreatorAgent
+    from agents.creator import CreatorAgent
     from services.creator_profile import save_voice
     _, account_id = db
     save_voice(account_id, samples="a line only this creator would write")
@@ -91,7 +91,7 @@ def test_voice_reaches_the_draft_prompt(db):
 
 # ── Persona ──────────────────────────────────────────────────────────────────
 def test_persona_block_reaches_persona_accounts_only(db):
-    from agents.creator_agent import CreatorAgent
+    from agents.creator import CreatorAgent
     from services.creator_profile import save_persona
     _, account_id = db
     save_persona(account_id, appearance="silver hair", backstory="from Lisbon")
@@ -115,7 +115,7 @@ def test_persona_seed_is_kept_for_consistent_renders(db):
 
 def test_persona_appearance_is_reused_in_video_prompts(db):
     """Without it every render is a different character."""
-    from agents.creator_agent import CreatorAgent
+    from agents.creator import CreatorAgent
     from services.creator_profile import save_persona
     _, account_id = db
     save_persona(account_id, appearance="silver hair, green coat")
@@ -127,7 +127,7 @@ def test_persona_appearance_is_reused_in_video_prompts(db):
 # ── Segments ─────────────────────────────────────────────────────────────────
 @pytest.mark.parametrize("segment", ["new", "loyal", "lapsed", "big_spender"])
 def test_each_segment_changes_the_prompt(db, segment):
-    from agents.creator_agent import CreatorAgent
+    from agents.creator import CreatorAgent
     _, account_id = db
     messages = CreatorAgent().build_draft_prompt(
         {"id": account_id, "handle": "@a", "account_type": "own"},
@@ -136,7 +136,7 @@ def test_each_segment_changes_the_prompt(db, segment):
 
 
 def test_no_segment_adds_nothing(db):
-    from agents.creator_agent import CreatorAgent
+    from agents.creator import CreatorAgent
     _, account_id = db
     messages = CreatorAgent().build_draft_prompt(
         {"id": account_id, "handle": "@a", "account_type": "own"},
@@ -179,7 +179,7 @@ def test_thin_evidence_is_labelled(db):
 
 
 def test_price_history_reaches_the_ppv_prompt(db):
-    from agents.creator_agent import CreatorAgent
+    from agents.creator import CreatorAgent
     from services.creator_insights import price_history
     database, account_id = db
     _post(database, account_id, 12.0, 90.0)

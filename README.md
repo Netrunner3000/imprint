@@ -2028,14 +2028,14 @@ imprint/
 ├── TODO.md                        # Prioritised engineering backlog
 ├── requirements.txt
 │
-├── agents/                        # One module per agent: prompts + build_*_messages()
-│   ├── router_agent.py            # Keyword routing to an agent
-│   ├── chat_agent.py              # Chat — plain message passthrough
-│   ├── author_agent.py            # Write (fiction + non-fiction) / Publish / Market
-│   ├── manuscript_agent.py        # Publisher: sales Q&A, quote extraction, captions
-│   ├── music_agent.py  webdesign_agent.py  fiverr_agent.py
-│   ├── course_agent.py            # Course Generator — CLI-only, see §5.8
-│   └── audiobook_connector.py
+├── agents/                        # Repo-ready project boundary per agent
+│   ├── catalog.py                 # Umbrella roster, labels, workspaces, recommendations
+│   ├── README.md                  # Ownership and future extraction contract
+│   ├── author/                    # Each project has __init__.py + agent.py
+│   ├── manuscript/                # plus its own README / TODO / SUGGESTIONS
+│   ├── audiobook/  music/  video/  social/
+│   ├── webdesign/  fiverr/  creator/  onlyfans/
+│   └── course/  chat/  router/    # CLI/internal capabilities use the same shape
 │
 │   # osint_agent.py, osint_heavy_agent.py, wifi_agent.py, bug_bounty_agent.py,
 │   # nfl_bet_agent.py, nfl_stats_parser.py, manager_agent.py, coding_agent.py,
@@ -2102,6 +2102,7 @@ imprint/
 │
 ├── docs/
 │   ├── agents/*.md                # One reference page per agent (the Docs button)
+│   ├── agent_project_structure.md # Package ownership, contracts, extraction order
 │   ├── refactor_plan.md           # main.py split — phases, measurements, decisions
 │   ├── app_split.md               # Why this fork is tabbed rather than sidebar-driven
 │   ├── projects_roadmap.md

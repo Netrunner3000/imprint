@@ -12,7 +12,7 @@
 > * **`chat` was kept, not dropped** — and is now the one loose end. It is still
 >   built and instantiated but reachable from no mode tab.
 > * **`vidforge` was folded in** as the Video mode, imported from its nested
->   repository rather than vendored (`services/video_studio.py`), and a
+>   repository rather than vendored (`agents/video/studio.py`), and a
 >   **Social** mode was added that the original plan never scoped. That takes
 >   the app from six agents to eight.
 >
