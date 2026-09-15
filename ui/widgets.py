@@ -6,11 +6,233 @@ Moved verbatim out of main.py (see docs/refactor_plan.md, phase 1).
 minimum width, which pins an impossible minimum on a pane and makes Qt compress
 controls past their own minimums until the labels are chopped.
 """
-from PySide6.QtCore import Qt, QRect, QPoint, QSize
+from PySide6.QtCore import QEvent, QObject, Qt, QRect, QPoint, QSize
+from PySide6.QtGui import QBrush, QColor, QFont, QIcon, QPainter, QPen
 from PySide6.QtWidgets import (
-    QAbstractItemView, QComboBox, QLayout, QPushButton, QScrollArea,
-    QVBoxLayout, QWidget,
+    QAbstractItemView, QApplication, QComboBox, QLayout, QProxyStyle,
+    QPushButton, QScrollArea, QStyle, QStyledItemDelegate, QVBoxLayout, QWidget,
 )
+
+from ui.style import ACCENT, ELEVATED, TEXT, TEXT_MUTE
+
+
+# Semantic item roles used by the recommendation system.  A recommendation is
+# data, not a colour: using ForegroundRole made the renderer confuse grey
+# oversized local models with BEST FIT entries and lost the badge on restyle.
+RECOMMENDED_ROLE = int(Qt.ItemDataRole.UserRole) + 101
+RECOMMENDATION_REASON_ROLE = int(Qt.ItemDataRole.UserRole) + 102
+RECOMMENDATION_SCORE_ROLE = int(Qt.ItemDataRole.UserRole) + 103
+RECOMMENDATION_CONFIDENCE_ROLE = int(Qt.ItemDataRole.UserRole) + 104
+RECOMMENDATION_BADGE_ROLE = int(Qt.ItemDataRole.UserRole) + 105
+
+
+class DropdownProxyStyle(QProxyStyle):
+    """Force Qt's styleable list popup instead of macOS's native menu.
+
+    Cocoa reports ``SH_ComboBox_Popup`` as true. That route paints the popup
+    as a platform menu with a checkmark and mostly ignores the QAbstractItemView
+    rules in our stylesheet — exactly why the previous visual refresh was not
+    visible in the running app. Fusion supplies predictable control metrics;
+    Imprint's stylesheet still owns the colours, border and chevron.
+    """
+
+    def __init__(self):
+        super().__init__("Fusion")
+
+    def styleHint(self, hint, option=None, widget=None, returnData=None):  # noqa: N802
+        if hint == QStyle.StyleHint.SH_ComboBox_Popup:
+            return 0
+        return super().styleHint(hint, option, widget, returnData)
+
+
+class DropdownItemDelegate(QStyledItemDelegate):
+    """Paint a compact menu card with an unmistakable selected state."""
+
+    ROW_HEIGHT = 42
+    HORIZONTAL_PADDING = 14
+    CHECK_SPACE = 34
+    BADGE_SPACE = 72
+
+    def sizeHint(self, option, index):  # noqa: N802 - Qt API
+        base = super().sizeHint(option, index)
+        text = str(index.data(Qt.ItemDataRole.DisplayRole) or "")
+        width = option.fontMetrics.horizontalAdvance(text)
+        badge_space = self.BADGE_SPACE \
+            if index.data(RECOMMENDED_ROLE) else 0
+        # QStyledItemDelegate's width can be the popup viewport's current width
+        # (640px before layout on macOS). Only the content should influence the
+        # horizontal hint; retain the base hint solely for row height.
+        return QSize(
+            width + self.HORIZONTAL_PADDING * 2 + self.CHECK_SPACE + badge_space,
+            max(base.height(), self.ROW_HEIGHT),
+        )
+
+    @staticmethod
+    def _wash(color: str, alpha: int) -> QColor:
+        result = QColor(color)
+        result.setAlpha(alpha)
+        return result
+
+    def paint(self, painter: QPainter, option, index):
+        painter.save()
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+
+        row = option.rect.adjusted(5, 2, -5, -2)
+        selected = bool(option.state & QStyle.StateFlag.State_Selected)
+        hovered = bool(option.state & QStyle.StateFlag.State_MouseOver)
+        enabled = bool(option.state & QStyle.StateFlag.State_Enabled)
+        recommendation_color = QColor(ACCENT)
+        recommended = bool(index.data(RECOMMENDED_ROLE))
+
+        painter.setPen(Qt.PenStyle.NoPen)
+        if selected:
+            painter.setBrush(self._wash(ACCENT, 30))
+            painter.drawRoundedRect(row, 7, 7)
+            rail = QRect(row.left(), row.top() + 8, 3, max(8, row.height() - 16))
+            painter.setBrush(QColor(ACCENT))
+            painter.drawRoundedRect(rail, 2, 2)
+        elif hovered:
+            painter.setBrush(QColor(ELEVATED))
+            painter.drawRoundedRect(row, 7, 7)
+
+        icon = index.data(Qt.ItemDataRole.DecorationRole)
+        text_left = row.left() + self.HORIZONTAL_PADDING
+        if isinstance(icon, QIcon) and not icon.isNull():
+            icon_size = 18
+            icon.paint(painter, text_left, row.center().y() - icon_size // 2,
+                       icon_size, icon_size)
+            text_left += icon_size + 9
+
+        item_font = index.data(Qt.ItemDataRole.FontRole)
+        font = QFont(item_font) if isinstance(item_font, QFont) else QFont(option.font)
+        if selected:
+            font.setWeight(QFont.Weight.DemiBold)
+        painter.setFont(font)
+        foreground = index.data(Qt.ItemDataRole.ForegroundRole)
+        if isinstance(foreground, QBrush):
+            foreground = foreground.color()
+        text_color = (recommendation_color if recommended else
+                      foreground if isinstance(foreground, QColor) else QColor(TEXT))
+        painter.setPen(text_color if enabled else QColor(TEXT_MUTE))
+        badge_space = self.BADGE_SPACE if recommended else 0
+        text_rect = QRect(
+            text_left,
+            row.top(),
+            max(0, row.right() - text_left - self.CHECK_SPACE - badge_space),
+            row.height(),
+        )
+        text = str(index.data(Qt.ItemDataRole.DisplayRole) or "")
+        painter.drawText(
+            text_rect,
+            Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
+            option.fontMetrics.elidedText(
+                text, Qt.TextElideMode.ElideRight, text_rect.width()),
+        )
+
+        if recommended:
+            badge = QRect(row.right() - self.CHECK_SPACE - 66,
+                          row.center().y() - 9, 60, 18)
+            painter.setPen(QPen(self._wash(ACCENT, 90), 1))
+            painter.setBrush(self._wash(ACCENT, 22))
+            painter.drawRoundedRect(badge, 8, 8)
+            badge_font = QFont(option.font)
+            badge_font.setPointSizeF(max(8.0, badge_font.pointSizeF() - 2.0))
+            badge_font.setWeight(QFont.Weight.DemiBold)
+            painter.setFont(badge_font)
+            painter.setPen(QColor(ACCENT))
+            badge_text = str(index.data(RECOMMENDATION_BADGE_ROLE) or "BEST FIT")
+            painter.drawText(badge, Qt.AlignmentFlag.AlignCenter, badge_text)
+
+        if selected:
+            centre = QPoint(row.right() - 17, row.center().y())
+            painter.setBrush(self._wash(ACCENT, 36))
+            painter.setPen(QPen(self._wash(ACCENT, 105), 1))
+            painter.drawEllipse(centre, 10, 10)
+            check_pen = QPen(QColor(ACCENT), 2)
+            check_pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+            check_pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
+            painter.setPen(check_pen)
+            painter.drawLine(centre + QPoint(-4, 0), centre + QPoint(-1, 4))
+            painter.drawLine(centre + QPoint(-1, 4), centre + QPoint(5, -4))
+
+        painter.restore()
+
+
+_DROPDOWN_STYLE: DropdownProxyStyle | None = None
+_DROPDOWN_POLISHER: QObject | None = None
+POPUP_MIN_WIDTH = 180
+POPUP_MAX_WIDTH = 480
+POPUP_FRAME_WIDTH = 12
+
+
+def _dropdown_style() -> DropdownProxyStyle:
+    global _DROPDOWN_STYLE
+    if _DROPDOWN_STYLE is None:
+        _DROPDOWN_STYLE = DropdownProxyStyle()
+    return _DROPDOWN_STYLE
+
+
+def polish_combo(combo: QComboBox, visible_chars: int = 8) -> None:
+    """Apply the complete Imprint dropdown behavior to one combo box."""
+    natural = combo.sizeHint().width()
+    if not combo.property("imprintModernDropdown"):
+        # Mark first: setStyle() emits another Polish event on some platforms.
+        combo.setProperty("imprintModernDropdown", True)
+        combo.setStyle(_dropdown_style())
+
+    combo.setSizeAdjustPolicy(QComboBox.AdjustToMinimumContentsLengthWithIcon)
+    combo.setMinimumContentsLength(visible_chars)
+    combo.setMaxVisibleItems(9)
+    view = combo.view()
+    view.setObjectName("ImprintComboPopup")
+    if not isinstance(combo.itemDelegate(), DropdownItemDelegate):
+        combo.setItemDelegate(DropdownItemDelegate(combo))
+    view.setMouseTracking(True)
+    view.setUniformItemSizes(True)
+    content_width = max(
+        (view.sizeHintForColumn(column) for column in range(view.model().columnCount())),
+        default=0,
+    ) + POPUP_FRAME_WIDTH
+    # A QWidget starts life at 640px wide on macOS. Trust combo.width() only
+    # once the control is visible; otherwise that placeholder becomes the
+    # permanent popup minimum and a two-item menu spans most of the canvas.
+    field_width = combo.width() if combo.isVisible() else natural
+    minimum = 120 if combo.objectName() == "CompactCombo" else POPUP_MIN_WIDTH
+    popup_width = min(
+        POPUP_MAX_WIDTH,
+        max(minimum, field_width, content_width),
+    )
+    view.setFixedWidth(popup_width)
+    view.setVerticalScrollMode(QAbstractItemView.ScrollPerPixel)
+    view.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+
+
+class _DropdownPolisher(QObject):
+    """Catch combo boxes created later by dialogs and auxiliary windows."""
+
+    def eventFilter(self, watched, event):  # noqa: N802 - Qt API
+        if isinstance(watched, QComboBox) and event.type() in (
+            QEvent.Type.Polish,
+            QEvent.Type.Resize,
+            QEvent.Type.Show,
+            QEvent.Type.MouseButtonPress,
+            QEvent.Type.KeyPress,
+        ):
+            polish_combo(watched)
+        return False
+
+
+def install_dropdown_system(app: QApplication | None) -> None:
+    """Install the design-system dropdown once for the whole application."""
+    if app is None:
+        return
+    global _DROPDOWN_POLISHER
+    if _DROPDOWN_POLISHER is None:
+        _DROPDOWN_POLISHER = _DropdownPolisher(app)
+        app.installEventFilter(_DROPDOWN_POLISHER)
+    for widget in app.allWidgets():
+        if isinstance(widget, QComboBox):
+            polish_combo(widget)
 
 
 class FlowLayout(QLayout):
@@ -226,14 +448,6 @@ def let_combos_shrink(root: QWidget, visible_chars: int = 8) -> int:
     """
     count = 0
     for combo in root.findChildren(QComboBox):
-        natural = combo.sizeHint().width()
-        combo.setSizeAdjustPolicy(QComboBox.AdjustToMinimumContentsLengthWithIcon)
-        combo.setMinimumContentsLength(visible_chars)
-        combo.setMaxVisibleItems(9)
-        view = combo.view()
-        if view is not None:
-            view.setMinimumWidth(max(natural, 180))
-            view.setVerticalScrollMode(QAbstractItemView.ScrollPerPixel)
-            view.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        polish_combo(combo, visible_chars)
         count += 1
     return count

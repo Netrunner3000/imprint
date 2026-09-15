@@ -16,7 +16,7 @@
 # folder once installed.
 #
 #   ./scripts/build_app.sh            # build + install to /Applications
-#   ./scripts/build_app.sh --no-install   # build only (dist/Imprint.app)
+#   ./scripts/build_app.sh --no-install   # build only (dist/Builds.noindex/Imprint.app)
 #
 # IMPORTANT: the bundle freezes the CODE at build time. After editing main.py (or
 # anything else), re-run this script to refresh the installed app.
@@ -29,20 +29,26 @@ set -euo pipefail
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 APP_NAME="Imprint"
 APP_BUNDLE="${APP_NAME}.app"
-DIST_APP="${PROJECT_ROOT}/dist/${APP_BUNDLE}"
+# A .noindex parent is stronger than a marker file: Launch Services and
+# Spotlight must not present release artifacts as a second installed app.
+DIST_DIR="${PROJECT_ROOT}/dist/Builds.noindex"
+DIST_APP="${DIST_DIR}/${APP_BUNDLE}"
 INSTALLED="/Applications/${APP_BUNDLE}"
 PY="${PROJECT_ROOT}/.venv/bin/python"
 
 cd "$PROJECT_ROOT"
 
 echo "▸ Building ${APP_BUNDLE} with PyInstaller (this takes ~1 min)…"
-mkdir -p "${PROJECT_ROOT}/dist"
-# Keep Spotlight out of the build output, so the freshly built copy in dist/
-# never shows up as a second "Imprint" alongside the installed one.
-touch "${PROJECT_ROOT}/dist/.metadata_never_index"
-"$PY" -m PyInstaller --noconfirm --clean Imprint.spec
+mkdir -p "$DIST_DIR"
+touch "${PROJECT_ROOT}/dist/.metadata_never_index" "$DIST_DIR/.metadata_never_index"
+"$PY" -m PyInstaller --noconfirm --clean --distpath "$DIST_DIR" Imprint.spec
 
 if [ "${1:-}" = "--no-install" ]; then
+    # PyInstaller's completed bundle can be noticed by Launch Services even
+    # though dist/ is excluded from Spotlight indexing.  Remove that transient
+    # registration as well, otherwise Spotlight may retain two Imprint results.
+    LSREG="/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister"
+    "$LSREG" -u "$DIST_APP" 2>/dev/null || true
     echo "✓ Built: ${DIST_APP}"
     exit 0
 fi

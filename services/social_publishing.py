@@ -139,7 +139,7 @@ class YouTubePublisher(Publisher):
 
     @property
     def configured(self) -> bool:
-        from services import video_studio
+        from agents.video import video_studio
         if not video_studio.available():
             return False
         # vidforge's youtube module imports cleanly without the Google client
@@ -161,7 +161,7 @@ class YouTubePublisher(Publisher):
     def why_not(self) -> str:
         if self.configured:
             return ""
-        from services import video_studio
+        from agents.video import video_studio
         if not video_studio.available():
             return ("YouTube upload runs through vidforge, which is not "
                     "present. See the Video tab.")

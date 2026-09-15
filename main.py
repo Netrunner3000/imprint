@@ -5,6 +5,7 @@ import re
 import subprocess
 import sys
 import time
+from dataclasses import replace
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
@@ -34,7 +35,7 @@ load_dotenv(user_data_base() / ".env")
 import markdown
 
 from PySide6.QtCore import Qt, QTimer, QProcess, QUrl, QThread, Signal, QEvent, QRect, QPoint, QSize
-from PySide6.QtGui import QTextCursor, QDesktopServices, QColor, QFont
+from PySide6.QtGui import QTextCursor, QDesktopServices, QColor
 from PySide6.QtNetwork import QLocalServer, QLocalSocket
 from PySide6.QtWidgets import (
     QApplication, QSizePolicy, QWidget, QVBoxLayout, QHBoxLayout, QGridLayout, QGroupBox,
@@ -65,15 +66,21 @@ from services.registry import Registry
 from services.validator import Validator
 from services.run_logger import RunLogger
 
-from agents.audiobook_connector import AudiobookConnector
-from agents.chat_agent import ChatAgent
-from agents.author_agent import AuthorAgent
-from agents.manuscript_agent import ManuscriptAgent
-from agents.webdesign_agent import WebdesignAgent
-from agents.music_agent import MusicAgent
-from agents.fiverr_agent import FiverrAgent
-from agents.creator_agent import (
+from agents.audiobook import AudiobookConnector
+from agents.chat import ChatAgent
+from agents.author import AuthorAgent
+from agents.manuscript import ManuscriptAgent
+from agents.webdesign import WebdesignAgent
+from agents.music import MusicAgent
+from agents.fiverr import FiverrAgent
+from agents.creator import (
     CreatorAgent, ConsentError, PROMO_CHANNELS,
+)
+from agents.catalog import AGENT_SPECS, workspace_map
+from agents.recommendation_profiles import profile_for
+from services.recommendations import RecommendationContext, RecommendationEngine
+from services.recommendations.catalog import (
+    media_candidate, text_candidates,
 )
 from services.higgsfield_client import (
     HiggsfieldClient, ContentPolicyError, check_prompt,
@@ -106,32 +113,13 @@ ALL_AGENTS_FILTER = "All agents"
 
 # The app is organised around creative outcomes, not implementation-level agent
 # names. Each workspace remembers its last selected tool during the session.
-WORKSPACES = {
-    "Write": ("author", "manuscript"),
-    "Audio": ("audiobook", "music"),
-    "Video": ("video",),
-    "Social": ("social",),
-    "Web": ("webdesign",),
-    "Gigs": ("fiverr",),
-    "Creator": ("creator",),
-    "OnlyFans": ("onlyfans",),
-}
+WORKSPACES = workspace_map()
 
 # Agents that own a dedicated `<name>_panel` rather than sharing `normal_panel`.
 # update_agent_ui walks this instead of a chain of `is_x` booleans.
-CUSTOM_PANELS = ("audiobook", "author", "manuscript", "music", "video",
-                 "social", "fiverr", "webdesign", "creator", "onlyfans")
+CUSTOM_PANELS = tuple(spec.key for spec in AGENT_SPECS if spec.panel)
 WORKSPACE_LABELS = {
-    "author": "Draft",
-    "manuscript": "Publish",
-    "audiobook": "Audiobooks",
-    "music": "Music",
-    "webdesign": "Site Builder",
-    "video": "Video",
-    "social": "Social",
-    "fiverr": "Client Gigs",
-    "creator": "Creator",
-    "onlyfans": "OnlyFans",
+    spec.key: spec.label for spec in AGENT_SPECS if spec.workspace is not None
 }
 
 SETTINGS_FILE = CONFIG_DIR / "settings.json"
@@ -143,90 +131,28 @@ README_FILE = RESOURCE_DIR / "README.md"
 
 SUPPORTED_EBOOKS = {".pdf", ".epub", ".txt", ".mobi"}
 
-# ── Per-agent recommended setup ──────────────────────────────────────────────
-# Single source of truth for "which provider + model is right for THIS agent".
-# Each panel pre-selects its entry on startup, and the recommended provider and
-# model are painted red in their dropdowns so the user can always see what the
-# recommendation was, even after switching to something else mid-session.
-#
-# `provider` must match an item in that panel's provider box. `model` is matched
-# leniently (exact -> prefix -> substring) so a dated API id such as
-# "claude-sonnet-4-6-20260112" still resolves from "claude-sonnet-4-6".
-# The accent, not a warning colour: this marks the *suggested* provider and
-# model, and red here read as "something is wrong with this choice".
-RECOMMENDED_COLOR = ACCENT
-
-AGENT_RECOMMENDATIONS = {
-    "creator": {
-        "provider": "anthropic", "model": "claude-sonnet-5",
-        "reason": "Marketing copy in a consistent voice across many short "
-                  "pieces — Sonnet holds a persona without Opus pricing.",
-    },
-    "fiverr": {
-        "provider": "openai", "model": "gpt-4o-mini",
-        "reason": "Gig copy sits next to GPT Image logo generation — staying on OpenAI "
-                  "keeps prompt style and image calls on one provider, cheaply.",
-    },
-    "author": {
-        "provider": "anthropic", "model": "claude-fable-5",
-        "reason": "Fable 5 is the creative-writing member of the Claude 5 family — "
-                  "the closest fit for long-form fiction, character and dialogue work.",
-    },
-    "manuscript": {
-        "provider": "anthropic", "model": "claude-haiku-4-5-20251001",
-        "reason": "Sales metrics and todo tracking are light structured tasks — "
-                  "Haiku is the fastest and cheapest fit.",
-    },
-    "music": {
-        "provider": "anthropic", "model": "claude-sonnet-5",
-        "reason": "Release planning and distribution strategy — broad, practical "
-                  "reasoning without needing Opus depth.",
-    },
-    "webdesign": {
-        "provider": "anthropic", "model": "claude-sonnet-5",
-        "reason": "Strongest HTML/CSS/JS generation; produces working responsive "
-                  "markup in one pass more often than the cheaper models.",
-    },
-    "audiobook": {
-        "provider": "openai", "model": "tts-1", "voice": "alloy",
-        "reason": "Narrator is hard-wired to OpenAI TTS. Alloy is the most neutral, "
-                  "even-paced voice — the safest default for hours of narration.",
-    },
-}
-
 # agent key -> (provider box attribute, model box attribute)
 AGENT_SETUP_WIDGETS = {
+    "chat":        ("provider_box",             "model_box"),
     "fiverr":      ("fiverr_provider_box",      "fiverr_model_box"),
     "creator":     ("creator_provider_box",     "creator_model_box"),
     "author":      ("author_provider_box",      "author_model_box"),
     "manuscript":  ("manuscript_provider_box",  "manuscript_model_box"),
     "music":       ("music_provider_box",       "music_model_box"),
+    "social":      ("social_provider_box",      "social_model_box"),
     "webdesign":   ("webdesign_provider_box",   "webdesign_model_box"),
 }
 
-# agent key -> the panel's own "reload the model list" method, called after the
-# provider is switched programmatically so the model box is populated before we
-# try to select the recommended model in it.
-AGENT_MODEL_LOADERS = {
-    "fiverr":      "fiverr_load_models",
-    "creator":     "creator_load_models",
-    "author":      "author_load_models",
-    "manuscript":  "manuscript_load_models",
-    "music":       "music_load_models",
-    "webdesign":   "webdesign_load_models",
+AGENT_CONTEXT_WIDGETS = {
+    "author": ("author_content_type_box", "author_task_box"),
+    "creator": ("creator_kind_box", "creator_platform_box"),
+    "fiverr": ("fiverr_style_box",),
+    "music": ("music_genre_box", "music_release_type_box"),
+    "social": ("social_kind_box", "social_platform_box", "social_angle_box"),
+    "webdesign": ("webdesign_type_box", "webdesign_framework_box"),
 }
 
-AGENT_PRETTY_NAMES = {
-    "chat": "Studio Assistant",
-    "fiverr": "Client Gigs",
-    "creator": "Creator",
-    "onlyfans": "OnlyFans",
-    "author": "Draft",
-    "manuscript": "Publish",
-    "music": "Music",
-    "webdesign": "Site Builder",
-    "audiobook": "Audiobooks",
-}
+AGENT_PRETTY_NAMES = {spec.key: spec.label for spec in AGENT_SPECS}
 
 
 from ui.panels.base import AgentPanel
@@ -249,11 +175,13 @@ from ui.forms import (
     line_edit, micro, nav_tab, primary, quiet, rail, rule, section, stat,
 )
 from ui.widgets import (
-    FlowLayout, CollapsibleSection, scrollable, let_combos_shrink,
+    FlowLayout, CollapsibleSection, install_dropdown_system, scrollable,
+    let_combos_shrink, RECOMMENDED_ROLE, RECOMMENDATION_REASON_ROLE,
+    RECOMMENDATION_SCORE_ROLE, RECOMMENDATION_CONFIDENCE_ROLE,
+    RECOMMENDATION_BADGE_ROLE,
 )
-from services.creator_trends import format_creator_brief
-from ui.creator_trends import OnlyFansDashboard
-from agents.social_agent import (
+from agents.onlyfans import OnlyFansDashboard, format_creator_brief
+from agents.social import (
     ANGLES, SUBJECT_KINDS, build_clip_brief_messages,
     build_post_messages, over_limit, split_variants,
 )
@@ -262,6 +190,7 @@ from ui.tooltips import seed_tooltips
 class GodAI(QWidget):
     def __init__(self):
         super().__init__()
+        install_dropdown_system(QApplication.instance())
         self._is_initializing = True
 
         self.setWindowTitle("Imprint")
@@ -292,6 +221,7 @@ class GodAI(QWidget):
         self.gemini = GeminiClientWrapper()
         self.anthropic = AnthropicClientWrapper()
         self.qwen = QwenClientWrapper()
+        self.recommendation_engine = RecommendationEngine()
         self.monitor = ResourceMonitor()
         self.history = HistoryStore()
         self.report_exporter = ReportExporter()
@@ -746,6 +676,7 @@ class GodAI(QWidget):
             save_setting("daily_budget_eur", str(self.daily_budget_eur))
 
             self.update_usage_labels()
+            self.refresh_all_recommendations()
             QMessageBox.information(self, "Budget Saved", "Budget limits saved.")
 
         except ValueError:
@@ -755,118 +686,24 @@ class GodAI(QWidget):
         self.session_cost_total = 0.0
         self.session_request_count = 0
         self.update_usage_labels()
+        self.refresh_all_recommendations()
         QMessageBox.information(self, "Session Reset", "Session spend has been reset.")
 
     def get_recommended_setup(self):
-        agent = self.agent_box.currentText() if hasattr(self, "agent_box") else "chat"
-        tool = self.tool_box.currentText() if hasattr(self, "tool_box") else "General Chat"
-        command = self.command_box.currentText() if hasattr(self, "command_box") else "General Chat"
-        prompt = self.input_box.toPlainText().strip() if hasattr(self, "input_box") else ""
-        tool_config = self.tool_prompts.get(tool, {})
-        tool_provider = tool_config.get("recommended_provider")
-        tool_model = tool_config.get("recommended_model")
-        
-        if tool_provider:
-            model = tool_model or self.model_box.currentText()
-
-            # ===== CHECK API PERMISSION =====
-            if tool_provider == "openai" and not self.allow_openai_checkbox.isChecked():
-                return {
-                    "mode": "Local only",
-                    "provider": "ollama",
-                    "model": self.model_box.currentText(),
-                    "reason": f"{tool} recommends OpenAI, but API is disabled. Using local model."
-                }
-
-            if tool_provider == "deepseek" and not self.allow_deepseek_checkbox.isChecked():
-                return {
-                    "mode": "Local only",
-                    "provider": "ollama",
-                    "model": self.model_box.currentText(),
-                    "reason": f"{tool} recommends DeepSeek, but API is disabled. Using local model."
-                }
-
-            if tool_provider == "kimi" and not self.allow_kimi_checkbox.isChecked():
-                return {
-                    "mode": "Local only",
-                    "provider": "ollama",
-                    "model": self.model_box.currentText(),
-                    "reason": f"{tool} recommends Kimi, but API is disabled. Using local model."
-                }
-
-            if tool_provider == "gemini" and not self.allow_gemini_checkbox.isChecked():
-                return {
-                    "mode": "Local only",
-                    "provider": "ollama",
-                    "model": self.model_box.currentText(),
-                    "reason": f"{tool} recommends Gemini, but API is disabled. Using local model."
-                }
-
-            if tool_provider == "anthropic" and not self.allow_anthropic_checkbox.isChecked():
-                return {
-                    "mode": "Local only",
-                    "provider": "ollama",
-                    "model": self.model_box.currentText(),
-                    "reason": f"{tool} recommends Anthropic, but API is disabled. Using local model."
-                }
-
-            # ===== VALID CASE =====
-            mode = "Local only" if tool_provider == "ollama" else "Hybrid allowed"
-
+        provider_result, _model_result = self._text_recommendations("chat")
+        if provider_result is None:
             return {
-                "mode": mode,
-                "provider": tool_provider,
-                "model": model,
-                "reason": f"{tool} tool recommends {tool_provider} for best results."
+                "mode": self.execution_mode_box.currentText(),
+                "provider": self.provider_box.currentText(),
+                "model": self.model_box.currentText(),
+                "reason": "No eligible model is currently listed.",
             }
-
-        text = f"{agent} {tool} {command} {prompt}".lower()
-
-        if agent == "audiobook":
-            return {
-                "mode": "Cloud only",
-                "provider": "openai",
-                "model": "tts",
-                "reason": "Audiobook conversion uses OpenAI TTS only."
-            }
-
-        if any(k in text for k in ["debug", "error", "traceback", "python", "code", "refactor", "function", "class"]):
-            if self.allow_anthropic_checkbox.isChecked():
-                return {"mode": "Hybrid allowed", "provider": "anthropic", "model": "claude-sonnet-4-6", "reason": "Coding/debugging task; Claude Sonnet is excellent for code analysis and generation."}
-            if self.allow_kimi_checkbox.isChecked():
-                return {"mode": "Hybrid allowed", "provider": "kimi", "model": "kimi-k2.7-code", "reason": "Coding/debugging task; Kimi K2.7 Code is purpose-built for coding and long-context tool use."}
-            if self.allow_deepseek_checkbox.isChecked():
-                return {"mode": "Hybrid allowed", "provider": "deepseek", "model": "deepseek-chat", "reason": "Coding/debugging task; DeepSeek is strong for code analysis."}
-            if self.allow_openai_checkbox.isChecked():
-                return {"mode": "Hybrid allowed", "provider": "openai", "model": "gpt-4o-mini", "reason": "Coding/debugging task; OpenAI is reliable for code assistance."}
-            return {"mode": "Local only", "provider": "ollama", "model": self.model_box.currentText(), "reason": "Coding task detected, but APIs are not enabled. Using local model."}
-
-        if any(k in text for k in ["write", "rewrite", "email", "cv", "cover letter", "professional", "polish"]):
-            if self.allow_anthropic_checkbox.isChecked():
-                return {"mode": "Hybrid allowed", "provider": "anthropic", "model": "claude-sonnet-4-6", "reason": "Writing task; Claude is highly recommended for polished professional text."}
-            if self.allow_openai_checkbox.isChecked():
-                return {"mode": "Hybrid allowed", "provider": "openai", "model": "gpt-4o-mini", "reason": "Writing task; OpenAI is recommended for polished professional text."}
-            if self.allow_gemini_checkbox.isChecked():
-                return {"mode": "Hybrid allowed", "provider": "gemini", "model": "gemini-1.5-flash", "reason": "Writing task; Gemini is a good API fallback."}
-            return {"mode": "Local only", "provider": "ollama", "model": self.model_box.currentText(), "reason": "Writing task detected, but APIs are not enabled. Using local model."}
-
-        # Keyword branch, not an agent branch: "research", "analysis" and "report"
-        # are ordinary asks in a publishing app (market research, sales analysis),
-        # so this still fires. Only the OSINT wording left with the security half.
-        if any(k in text for k in ["investigate", "research", "summarize sources", "analysis", "report"]):
-            if self.allow_kimi_checkbox.isChecked():
-                return {"mode": "Hybrid allowed", "provider": "kimi", "model": "kimi-k2.7-code", "reason": "Research/analysis task; Kimi's strong tool-use performance suits multi-step work."}
-            if self.allow_deepseek_checkbox.isChecked():
-                return {"mode": "Hybrid allowed", "provider": "deepseek", "model": "deepseek-chat", "reason": "Research/analysis task; DeepSeek is recommended."}
-            if self.allow_gemini_checkbox.isChecked():
-                return {"mode": "Hybrid allowed", "provider": "gemini", "model": "gemini-1.5-flash", "reason": "Analysis task; Gemini is suitable for broad summarization."}
-            return {"mode": "Local only", "provider": "ollama", "model": self.model_box.currentText(), "reason": "Analysis task detected, but APIs are not enabled. Using local model."}
-
+        winner = provider_result.candidate
         return {
-            "mode": "Local only",
-            "provider": "ollama",
-            "model": self.model_box.currentText(),
-            "reason": "General/simple task. Local Ollama is free and private."
+            "mode": "Local only" if winner.provider == "ollama" else "Hybrid allowed",
+            "provider": winner.provider,
+            "model": winner.model_id,
+            "reason": provider_result.reason,
         }
 
     def apply_recommended_setup(self):
@@ -1073,12 +910,7 @@ class GodAI(QWidget):
         except Exception:
             return []
 
-    # ── Per-agent recommended setup ──────────────────────────────────────────
-    # Every agent panel gets its recommendation from AGENT_RECOMMENDATIONS
-    # pre-selected on startup, and the recommended provider/model entries are
-    # painted red inside their dropdowns. The red entry survives the user
-    # switching to something else, so the original recommendation stays visible
-    # for the whole session.
+    # ── Explainable provider/model recommendations ───────────────────────────
 
     @staticmethod
     def _find_model_index(combo, wanted: str) -> int:
@@ -1103,212 +935,307 @@ class GodAI(QWidget):
         for i in range(combo.count()):
             if lowered in combo.itemText(i).lower():
                 return i
+        # Media dropdowns display a friendly label but store MediaModel as data.
+        for i in range(combo.count()):
+            data = combo.itemData(i)
+            if getattr(data, "model_id", "").lower() == lowered:
+                return i
         return -1
 
-    def _paint_recommended_item(self, combo, index: int, tooltip: str) -> None:
-        """Colour one dropdown entry red + bold and clear any previous marking.
+    @staticmethod
+    def _find_provider_index(combo, provider: str) -> int:
+        wanted = provider.casefold()
+        return next((i for i in range(combo.count())
+                     if combo.itemText(i).casefold() == wanted), -1)
 
-        Only the item's colour and tooltip change — never its text — because the
-        panels read `currentText()` straight back as the provider/model name.
-        """
+    def _paint_recommended_item(self, combo, index: int, tooltip: str,
+                                *, score: float = 0.0,
+                                confidence: str = "low",
+                                badge: str = "BEST FIT") -> None:
+        """Attach semantic recommendation data without changing item text."""
         if combo is None:
             return
 
-        # The stock combo popup ignores per-item colour under some styles; an
-        # explicit QStyledItemDelegate makes ForegroundRole/FontRole take effect.
-        if not combo.property("_rec_delegate"):
-            from PySide6.QtWidgets import QStyledItemDelegate
-            combo.setItemDelegate(QStyledItemDelegate(combo))
-            combo.setProperty("_rec_delegate", True)
-
-        default_font = combo.font()
         for i in range(combo.count()):
-            combo.setItemData(i, None, Qt.ForegroundRole)
-            combo.setItemData(i, default_font, Qt.FontRole)
-            combo.setItemData(i, "", Qt.ToolTipRole)
+            was_recommended = bool(combo.itemData(i, RECOMMENDED_ROLE))
+            combo.setItemData(i, False, RECOMMENDED_ROLE)
+            combo.setItemData(i, None, RECOMMENDATION_REASON_ROLE)
+            combo.setItemData(i, None, RECOMMENDATION_SCORE_ROLE)
+            combo.setItemData(i, None, RECOMMENDATION_CONFIDENCE_ROLE)
+            combo.setItemData(i, None, RECOMMENDATION_BADGE_ROLE)
+            if was_recommended:
+                combo.setItemData(i, "", Qt.ToolTipRole)
 
         if index < 0:
             return
 
-        marked_font = QFont(default_font)
-        marked_font.setBold(True)
-        combo.setItemData(index, QColor(RECOMMENDED_COLOR), Qt.ForegroundRole)
-        combo.setItemData(index, marked_font, Qt.FontRole)
+        combo.setItemData(index, True, RECOMMENDED_ROLE)
+        combo.setItemData(index, tooltip, RECOMMENDATION_REASON_ROLE)
+        combo.setItemData(index, float(score), RECOMMENDATION_SCORE_ROLE)
+        combo.setItemData(index, confidence, RECOMMENDATION_CONFIDENCE_ROLE)
+        combo.setItemData(index, badge, RECOMMENDATION_BADGE_ROLE)
         combo.setItemData(index, tooltip, Qt.ToolTipRole)
 
-    def _mark_deviation(self, combo, is_recommended: bool) -> None:
-        """Tint a combo's border red while it holds a non-recommended value.
-
-        The red dropdown entry is only visible once the list is open; this makes
-        the deviation legible at a glance with the panel closed. The focus rule
-        is repeated here because a widget-level stylesheet outranks the global
-        one and would otherwise drop the green focus ring.
-        """
-        if combo is None:
-            return
-
-        if is_recommended:
-            combo.setStyleSheet("")
-        else:
-            combo.setStyleSheet(
-                f"QComboBox {{ border: 1px solid {RECOMMENDED_COLOR}; }}"
-                f"QComboBox:focus {{ border: 1px solid {ACCENT}; }}"
-            )
-
-    def _recommendation_for(self, agent_key: str) -> dict | None:
-        """Return {provider, model, reason} for an agent.
-
-        Chat is the one agent whose recommendation is not fixed — it already has
-        a live recommender that reacts to the selected tool, command and prompt
-        text — so defer to that and let the red marking follow it around.
-        """
+    def _recommendation_task(self, agent_key: str) -> str:
         if agent_key == "chat":
-            try:
-                rec = self.get_recommended_setup()
-            except Exception:
-                return None
-            # The audiobook branch reports a pseudo-model that has no combo entry.
-            return rec if rec.get("model") != "tts" else None
+            parts = [getattr(self, "tool_box", None),
+                     getattr(self, "command_box", None)]
+            text = " ".join(w.currentText() for w in parts if w is not None)
+            prompt = getattr(self, "input_box", None)
+            if prompt is not None:
+                text += " " + prompt.toPlainText()[:240]
+            return text.strip()
+        values = []
+        for name in AGENT_CONTEXT_WIDGETS.get(agent_key, ()):
+            widget = getattr(self, name, None)
+            if widget is not None:
+                values.append(widget.currentText())
+        return " ".join(values)
 
-        return AGENT_RECOMMENDATIONS.get(agent_key)
+    def _provider_permission(self, provider: str) -> bool:
+        """Whether the user has permitted this provider for paid/external work."""
+        key = provider.casefold()
+        if key in {"ollama", "local", "pexels"}:
+            return True
+        checkbox = getattr(self, f"allow_{key}_checkbox", None)
+        return bool(checkbox is not None and checkbox.isChecked())
 
-    def refresh_recommendation_marks(self, agent_key: str) -> None:
-        """Re-apply the red marking for one agent's provider and model boxes.
-
-        Called after any model-list reload, since clearing a combo also drops the
-        per-item colour data.
-        """
-        rec = self._recommendation_for(agent_key)
+    def _text_recommendations(self, agent_key: str):
         widgets = AGENT_SETUP_WIDGETS.get(agent_key)
-        if not rec or not widgets:
-            return
-
+        if not widgets:
+            return None, None
         provider_box = getattr(self, widgets[0], None)
         model_box = getattr(self, widgets[1], None)
-        pretty = AGENT_PRETTY_NAMES.get(agent_key, agent_key)
-        tooltip = (
-            f"Recommended for {pretty}: {rec['provider']} · {rec['model']}\n"
-            f"{rec['reason']}"
+        if provider_box is None or model_box is None:
+            return None, None
+
+        providers = [provider_box.itemText(i) for i in range(provider_box.count())]
+        if agent_key == "chat" and getattr(self, "execution_mode_box", None) is not None:
+            mode = self.execution_mode_box.currentText()
+            allowed_cloud = [
+                provider for provider in providers if provider != "ollama"
+                and getattr(self, f"allow_{provider}_checkbox", None) is not None
+                and getattr(self, f"allow_{provider}_checkbox").isChecked()
+            ]
+            if mode == "Local only":
+                providers = [provider for provider in providers if provider == "ollama"]
+            elif mode == "Cloud only":
+                # With no permission checked, rank cloud choices as setup
+                # targets; once permissions exist they become a hard filter.
+                providers = allowed_cloud or [p for p in providers if p != "ollama"]
+            else:
+                providers = [p for p in providers
+                             if p == "ollama" or p in allowed_cloud]
+        selected = provider_box.currentText()
+        live = {selected: [model_box.itemText(i) for i in range(model_box.count())]}
+        candidates = text_candidates(providers, live)
+        candidates = [
+            replace(item, available=(
+                bool(item.available and self._provider_permission(item.provider))
+                if item.provider.casefold() != "ollama"
+                else bool(selected == "ollama"
+                          and model_box.property("imprintModelsLive"))
+            ))
+            for item in candidates
+        ]
+        profile = profile_for(agent_key)
+        base = RecommendationContext(
+            agent=agent_key,
+            task=self._recommendation_task(agent_key),
+            budget_remaining=max(0.0, self.session_budget_eur - self.session_cost_total),
+            priority=("privacy" if agent_key == "chat"
+                      and getattr(self, "execution_mode_box", None) is not None
+                      and self.execution_mode_box.currentText() == "Local only"
+                      else "balanced"),
         )
+        provider_result = self.recommendation_engine.recommend(profile, candidates, base)
+        model_result = self.recommendation_engine.recommend(
+            profile, candidates,
+            RecommendationContext(**{**base.__dict__, "selected_provider": selected}),
+        )
+        return provider_result, model_result
 
-        if provider_box is not None:
-            idx = provider_box.findText(rec["provider"])
-            self._paint_recommended_item(provider_box, idx, tooltip)
+    def refresh_recommendation_marks(self, agent_key: str) -> None:
+        """Mark the best provider overall and best model within the selection."""
+        widgets = AGENT_SETUP_WIDGETS.get(agent_key)
+        if not widgets:
+            return
+        provider_box = getattr(self, widgets[0], None)
+        model_box = getattr(self, widgets[1], None)
+        provider_result, model_result = self._text_recommendations(agent_key)
+
+        if provider_box is not None and provider_result is not None:
+            tooltip = (f"Best provider for {AGENT_PRETTY_NAMES.get(agent_key, agent_key)}: "
+                       f"{provider_result.candidate.provider}\n{provider_result.reason}\n"
+                       f"Confidence: {provider_result.confidence}")
+            idx = self._find_provider_index(provider_box,
+                                            provider_result.candidate.provider)
+            self._paint_recommended_item(
+                provider_box, idx, tooltip, score=provider_result.score,
+                confidence=provider_result.confidence, badge=provider_result.badge,
+            )
             provider_box.setToolTip(tooltip)
-            self._mark_deviation(
-                provider_box, provider_box.currentText() == rec["provider"]
-            )
 
-        if model_box is not None:
-            idx = self._find_model_index(model_box, rec["model"])
-            self._paint_recommended_item(model_box, idx, tooltip)
-            model_box.setToolTip(tooltip)
-            self._mark_deviation(
-                model_box, idx >= 0 and model_box.currentIndex() == idx
+        if model_box is not None and model_result is not None:
+            tooltip = (f"Best {provider_box.currentText()} model for "
+                       f"{AGENT_PRETTY_NAMES.get(agent_key, agent_key)}: "
+                       f"{model_result.candidate.label}\n{model_result.reason}\n"
+                       f"Confidence: {model_result.confidence}")
+            idx = self._find_model_index(model_box, model_result.candidate.model_id)
+            self._paint_recommended_item(
+                model_box, idx, tooltip, score=model_result.score,
+                confidence=model_result.confidence, badge=model_result.badge,
             )
-            # After the red marking, since _paint_recommended_item resets every
-            # item's colour and would otherwise wipe the grey.
+            model_box.setToolTip(tooltip)
             self.mark_oversized_models(model_box)
 
     def _on_recommended_provider_changed(self, agent_key: str) -> None:
-        """React to the user switching provider on an agent panel.
-
-        Whenever the provider lands back on the recommended one, snap the model
-        box to the recommended model too — otherwise the panel's loader leaves
-        it on whatever happens to be first in the list. A deliberate model change
-        afterwards is left alone.
-        """
-        rec = self._recommendation_for(agent_key)
+        """Select the best model inside a newly chosen provider, then annotate."""
         widgets = AGENT_SETUP_WIDGETS.get(agent_key)
-        if rec and widgets:
+        if widgets:
             provider_box = getattr(self, widgets[0], None)
             model_box = getattr(self, widgets[1], None)
-            if (provider_box is not None and model_box is not None
-                    and provider_box.currentText() == rec["provider"]):
-                idx = self._find_model_index(model_box, rec["model"])
+            if provider_box is not None and model_box is not None:
+                _provider_result, model_result = self._text_recommendations(agent_key)
+                idx = (-1 if model_result is None else
+                       self._find_model_index(model_box,
+                                              model_result.candidate.model_id))
                 if idx >= 0:
                     model_box.setCurrentIndex(idx)
-
         self.refresh_recommendation_marks(agent_key)
 
     def apply_agent_recommendation(self, agent_key: str) -> None:
-        """Pre-select this agent's recommended provider + model, then mark them."""
-        if agent_key == "chat":
-            # Chat has its own apply path that also updates the recommendation
-            # panel and the live cost estimate.
-            self.apply_recommended_setup()
-            self.refresh_recommendation_marks("chat")
-            return
-
-        rec = AGENT_RECOMMENDATIONS.get(agent_key)
+        """Pre-select the current best provider and its best model."""
         widgets = AGENT_SETUP_WIDGETS.get(agent_key)
-        if not rec or not widgets:
+        if not widgets:
             return
-
         provider_box = getattr(self, widgets[0], None)
         model_box = getattr(self, widgets[1], None)
-
-        if provider_box is not None:
-            idx = provider_box.findText(rec["provider"])
+        provider_result, _model_result = self._text_recommendations(agent_key)
+        if provider_box is not None and provider_result is not None:
+            idx = self._find_provider_index(provider_box,
+                                            provider_result.candidate.provider)
             if idx >= 0:
                 provider_box.setCurrentIndex(idx)
-
-        # Populate the model list for the provider we just selected. Setting the
-        # provider fires currentTextChanged -> the panel's loader, but only when
-        # the value actually changed, so call the loader directly to cover the
-        # case where the recommended provider was already selected.
-        loader = getattr(self, AGENT_MODEL_LOADERS.get(agent_key, ""), None)
-        if callable(loader):
-            try:
-                loader()
-            except Exception as exc:
-                self._note_failure("apply recommendation: reload models", exc)
-
-        if model_box is not None:
-            idx = self._find_model_index(model_box, rec["model"])
+        if agent_key == "chat":
+            self.load_provider_models()
+        else:
+            panel = getattr(self, f"{agent_key}_panel_base", None)
+            if panel is not None:
+                panel.load_models()
+        _provider_result, model_result = self._text_recommendations(agent_key)
+        if model_box is not None and model_result is not None:
+            idx = self._find_model_index(model_box, model_result.candidate.model_id)
             if idx >= 0:
                 model_box.setCurrentIndex(idx)
-
         self.refresh_recommendation_marks(agent_key)
 
     def _install_audiobook_recommendation(self) -> None:
-        """Narrator has no provider/model choice — OpenAI TTS is hard-wired — so
-        the only thing to recommend is the narration voice."""
-        rec = AGENT_RECOMMENDATIONS.get("audiobook", {})
+        """Narrator has a voice selector rather than a provider/model pair."""
         voice_box = getattr(self, "audiobook_voice_box", None)
-        voice = rec.get("voice")
-        if voice_box is None or not voice:
+        if voice_box is None:
             return
-
-        tooltip = f"Recommended for Narrator: voice '{voice}'\n{rec['reason']}"
+        voice = "alloy"
+        tooltip = ("Best neutral narration voice for long listening sessions. "
+                   "Voice fit is editorial rather than provider-ranked.")
         idx = voice_box.findText(voice)
         if idx >= 0:
             voice_box.setCurrentIndex(idx)
         self._paint_recommended_item(voice_box, idx, tooltip)
         voice_box.setToolTip(tooltip)
-        voice_box.currentTextChanged.connect(
-            lambda _t: self._mark_deviation(
-                voice_box, voice_box.currentText() == voice
-            )
+
+    def refresh_video_recommendations(self) -> None:
+        provider_box = getattr(self, "video_visual_provider_box", None)
+        model_box = getattr(self, "video_visual_model_box", None)
+        if provider_box is None or model_box is None:
+            return
+        from services.media_catalog import MODELS
+
+        duration_text = self.video_length_box.currentText().rstrip("s")
+        duration = int(duration_text) if duration_text.isdigit() else None
+        candidates = [media_candidate(item, duration) for item in MODELS]
+        candidates = [
+            replace(item, available=bool(
+                item.available and self._provider_permission(item.provider)))
+            if item.provider.casefold() not in {"local", "pexels"} else item
+            for item in candidates
+        ]
+        if self.video_format_box.currentText() == "Long-form":
+            candidates = [item for item in candidates if item.kind != "direct_video"]
+        context = RecommendationContext(
+            agent="video", modality="visual",
+            task=self.video_format_box.currentText(),
+            aspect=self.video_aspect_box.currentText(), duration=duration,
+            budget_remaining=max(0.0, self.session_budget_eur - self.session_cost_total),
         )
+        profile = profile_for("video")
+        overall = self.recommendation_engine.recommend(profile, candidates, context)
+        within = self.recommendation_engine.recommend(
+            profile, candidates,
+            RecommendationContext(**{**context.__dict__,
+                                     "selected_provider": provider_box.currentText()}),
+        )
+        if overall:
+            tip = (f"Best visual provider for this format: {overall.candidate.provider}\n"
+                   f"{overall.reason}\nConfidence: {overall.confidence}")
+            self._paint_recommended_item(
+                provider_box, self._find_provider_index(provider_box,
+                                                        overall.candidate.provider),
+                tip, score=overall.score, confidence=overall.confidence,
+                badge=overall.badge,
+            )
+            provider_box.setToolTip(tip)
+        if within:
+            tip = (f"Best {provider_box.currentText()} visual model for this format: "
+                   f"{within.candidate.label}\n{within.reason}\n"
+                   f"Confidence: {within.confidence}")
+            self._paint_recommended_item(
+                model_box, self._find_model_index(model_box, within.candidate.model_id),
+                tip, score=within.score, confidence=within.confidence,
+                badge=within.badge,
+            )
+            model_box.setToolTip(tip)
+
+    def _refresh_fiverr_image_recommendation(self) -> None:
+        combo = getattr(self, "fiverr_image_model_box", None)
+        if combo is None:
+            return
+        from services.media_catalog import find_model
+        candidates = [media_candidate(found) for i in range(combo.count())
+                      if (found := find_model("OpenAI", combo.itemText(i))) is not None]
+        result = self.recommendation_engine.recommend(
+            profile_for("fiverr"), candidates,
+            RecommendationContext(agent="fiverr", modality="visual", task="client image"),
+        )
+        if result:
+            tip = (f"Best image model for Client Gigs: {result.candidate.label}\n"
+                   f"{result.reason}\nConfidence: {result.confidence}")
+            self._paint_recommended_item(
+                combo, self._find_model_index(combo, result.candidate.model_id), tip,
+                score=result.score, confidence=result.confidence, badge=result.badge,
+            )
+            combo.setToolTip(tip)
+
+    def refresh_all_recommendations(self) -> None:
+        """Recompute after shared constraints such as budget or permissions change."""
+        if not hasattr(self, "recommendation_engine"):
+            return
+        for agent_key in AGENT_SETUP_WIDGETS:
+            self.refresh_recommendation_marks(agent_key)
+        self.refresh_video_recommendations()
+        self._refresh_fiverr_image_recommendation()
 
     def install_agent_recommendations(self) -> None:
-        """Apply every agent's recommended setup once, at startup, and keep the
-        red markings in sync as the user changes providers or models later."""
+        """Bind every visible provider/model selector to the shared engine."""
         self._install_audiobook_recommendation()
-
         for agent_key in AGENT_SETUP_WIDGETS:
             widgets = AGENT_SETUP_WIDGETS[agent_key]
             provider_box = getattr(self, widgets[0], None)
             model_box = getattr(self, widgets[1], None)
-
             try:
                 self.apply_agent_recommendation(agent_key)
             except Exception as e:
                 print(f"[Recommendations] {agent_key}: {e}")
-
-            # Re-mark after the panel's own loader has repopulated the model box.
-            # Connected last, so it runs after the loader already wired up above.
             if provider_box is not None:
                 provider_box.currentTextChanged.connect(
                     lambda _t, k=agent_key: self._on_recommended_provider_changed(k)
@@ -1317,6 +1244,32 @@ class GodAI(QWidget):
                 model_box.currentTextChanged.connect(
                     lambda _t, k=agent_key: self.refresh_recommendation_marks(k)
                 )
+            for name in AGENT_CONTEXT_WIDGETS.get(agent_key, ()):
+                widget = getattr(self, name, None)
+                if widget is not None:
+                    widget.currentTextChanged.connect(
+                        lambda _t, k=agent_key: self.refresh_recommendation_marks(k)
+                    )
+
+        self.refresh_video_recommendations()
+        self._refresh_fiverr_image_recommendation()
+        for widget in (getattr(self, "video_format_box", None),
+                       getattr(self, "video_aspect_box", None),
+                       getattr(self, "video_length_box", None)):
+            if widget is not None:
+                widget.currentTextChanged.connect(self.refresh_video_recommendations)
+        if getattr(self, "video_visual_provider_box", None) is not None:
+            self.video_visual_provider_box.currentTextChanged.connect(
+                self.refresh_video_recommendations)
+        if getattr(self, "video_visual_model_box", None) is not None:
+            self.video_visual_model_box.currentTextChanged.connect(
+                self.refresh_video_recommendations)
+        for provider in ("openai", "deepseek", "kimi", "gemini", "anthropic",
+                         "qwen", "higgsfield"):
+            checkbox = getattr(self, f"allow_{provider}_checkbox", None)
+            if checkbox is not None:
+                checkbox.stateChanged.connect(
+                    lambda *_args: self.refresh_all_recommendations())
 
     def build_ui(self):
         """Header bar over three columns; the outer two are fixed.
@@ -1347,12 +1300,14 @@ class GodAI(QWidget):
         outer_layout.addWidget(header)
         outer_layout.addLayout(body, 1)
 
+        # Apply the stylesheet before installing the custom combo delegate.
+        # Qt replaces item delegates while polishing a new stylesheet.
+        self.apply_global_style()
+
         # After every panel exists: a combo sized to its longest item pins the
         # control columns wider than the panes they live in, which is what cut
         # the fields off down the right-hand edge.
         let_combos_shrink(self)
-
-        self.apply_global_style()
 
     def build_header_bar(self) -> QWidget:
         """Brand, mode tabs, status and utilities on one line.
@@ -1524,11 +1479,10 @@ class GodAI(QWidget):
         top_row_1 = QHBoxLayout()
 
         self.agent_box = QComboBox()
-        agent_items = self.agents_config.get("agents", [])
-        for extra in ("author", "manuscript", "audiobook", "music", "webdesign", "fiverr"):
-            if extra not in agent_items:
-                agent_items = list(agent_items) + [extra]
-        self.agent_box.addItems(agent_items)
+        # Compatibility control for the currently hidden general-chat panel.
+        # The catalog, not config/agents.json plus an accumulating patch list,
+        # defines the real roster.
+        self.agent_box.addItems(WORKSPACE_LABELS)
         self.agent_box.hide()
 
         self.tool_label = QLabel("Tool:")
@@ -1798,26 +1752,35 @@ class GodAI(QWidget):
 
         # ── Source ──────────────────────────────────────────────────────
         page.addWidget(section("Book"))
+        self.audiobook_book_help = QLabel(
+            "Choose a PDF, EPUB, TXT, or MOBI file from the input folder. "
+            "Imprint converts the selected title and remembers completed output.")
+        self.audiobook_book_help.setObjectName("EstimateLine")
+        self.audiobook_book_help.setWordWrap(True)
+        page.addWidget(self.audiobook_book_help)
 
         self.audiobook_book_list = QListWidget()
-        self.audiobook_book_list.setMinimumHeight(150)
+        self.audiobook_book_list.setMinimumHeight(132)
+        self.audiobook_book_list.setMaximumHeight(220)
+        self.audiobook_book_list.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self.audiobook_book_list.currentItemChanged.connect(
             lambda *_: self.estimate_audiobook_cost_from_selection())
-        page.addWidget(self.audiobook_book_list, 1)
+        page.addWidget(self.audiobook_book_list)
 
         # ── Settings ────────────────────────────────────────────────────
+        page.addWidget(rule())
         page.addWidget(section("Conversion settings"))
 
         self.audiobook_input_path = QLineEdit()
         self.audiobook_input_path.setReadOnly(True)
-        self.audiobook_open_input_btn = QPushButton("Open")
-        self.audiobook_open_input_btn.setFixedWidth(96)
+        self.audiobook_open_input_btn = QPushButton("Open input")
+        self.audiobook_open_input_btn.setFixedWidth(116)
         self.audiobook_open_input_btn.clicked.connect(self.open_audiobook_input_folder)
 
         self.audiobook_output_path = QLineEdit()
         self.audiobook_output_path.setReadOnly(True)
-        self.audiobook_change_output_btn = QPushButton("Change")
-        self.audiobook_change_output_btn.setFixedWidth(96)
+        self.audiobook_change_output_btn = QPushButton("Set output")
+        self.audiobook_change_output_btn.setFixedWidth(116)
         self.audiobook_change_output_btn.clicked.connect(self.change_audiobook_output_folder)
 
         folders = QGridLayout()
@@ -1832,13 +1795,18 @@ class GodAI(QWidget):
 
         self.audiobook_voice_box = combo(
             ["alloy", "verse", "aria", "coral", "sage"])
+        self.audiobook_voice_box.setToolTip(
+            "Narration voice. Open the menu to see Imprint's best-fit default.")
         self.audiobook_chunk_input = line_edit("1400", "1400")
+        self.audiobook_chunk_input.setToolTip(
+            "Approximate text sent per narration request. 1400 is a stable default; "
+            "smaller chunks recover more easily if a request fails.")
 
         options = QGridLayout()
         options.setHorizontalSpacing(MD)
         options.setVerticalSpacing(MD)
         options.addWidget(field("Voice", self.audiobook_voice_box), 0, 0, Qt.AlignTop)
-        options.addWidget(field("Chunk tokens", self.audiobook_chunk_input), 0, 1, Qt.AlignTop)
+        options.addWidget(field("Chunk size (tokens)", self.audiobook_chunk_input), 0, 1, Qt.AlignTop)
         for column in range(3):
             options.setColumnStretch(column, 1)
         page.addLayout(options)
@@ -1846,7 +1814,7 @@ class GodAI(QWidget):
         # ── Actions ─────────────────────────────────────────────────────
         actions = QHBoxLayout()
         actions.setSpacing(SM)
-        self.audiobook_start_btn = primary("Start")
+        self.audiobook_start_btn = primary("Convert audiobook")
         self.audiobook_start_btn.setMinimumWidth(160)
         self.audiobook_start_btn.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
         self.audiobook_start_btn.clicked.connect(self.start_selected_audiobook_book)
@@ -3628,7 +3596,7 @@ class GodAI(QWidget):
         aspect and a short length — which is why adding video to social cost a
         brief-writing prompt rather than a second video pipeline.
         """
-        from services import video_studio
+        from agents.video import video_studio
 
         campaign = self.social_current_campaign()
         if not campaign:
@@ -3673,7 +3641,7 @@ class GodAI(QWidget):
         self.social_worker.start()
 
     def _social_on_clip_brief(self, brief: str):
-        from services import video_studio
+        from agents.video import video_studio
         from services.per_unit_pricing import eur_per_usd
 
         self.record_request("social", brief)
@@ -3940,7 +3908,7 @@ class GodAI(QWidget):
         """Topic in, finished video out — vidforge driven in-process.
 
         The pipeline is not vendored. `vidforge` is its own git repository
-        nested at `imprint/vidforge/`, and `services/video_studio.py` imports
+        nested at `imprint/vidforge/`, and `agents/video/studio.py` imports
         it: one checkout, one pipeline, two front doors. See that module for
         why a second copy would have been the worse trade.
 
@@ -3951,7 +3919,7 @@ class GodAI(QWidget):
         what lets the Social mode ask this panel for a clip instead of growing
         a video pipeline of its own.
         """
-        from services import video_studio
+        from agents.video import video_studio
         from services.media_catalog import MEDIA_PROVIDERS
 
         self.video_panel = QWidget()
@@ -4152,7 +4120,7 @@ class GodAI(QWidget):
         self.video_length_box.blockSignals(False)
 
     def _video_visual_model_changed(self, *_args):
-        from services import video_studio
+        from agents.video import video_studio
         from services.media_catalog import SORA_SHUTDOWN_DATE
 
         selection = self._video_media_selection()
@@ -4198,7 +4166,7 @@ class GodAI(QWidget):
         self._video_update_estimate()
 
     def _video_overrides(self) -> dict:
-        from services import video_studio
+        from agents.video import video_studio
         selection = self._video_media_selection()
         overrides = {}
         if self.video_format_box.currentText() == "Social clip":
@@ -4218,7 +4186,7 @@ class GodAI(QWidget):
         return overrides
 
     def _video_estimate(self) -> dict:
-        from services import video_studio
+        from agents.video import video_studio
         from services.media_catalog import direct_video_cost_usd
 
         selection = self._video_media_selection()
@@ -4268,7 +4236,7 @@ class GodAI(QWidget):
                 f"budget reserve ≈ €{eur:.2f}")
 
     def video_render(self):
-        from services import video_studio
+        from agents.video import video_studio
         from services.per_unit_pricing import eur_per_usd
 
         if self.video_worker is not None and self.video_worker.isRunning():
@@ -4331,7 +4299,7 @@ class GodAI(QWidget):
         return seconds, sora_size, provider_aspect
 
     def _video_render_direct(self, selection) -> None:
-        from services import video_studio
+        from agents.video import video_studio
 
         topic = self.video_topic_input.text().strip()
         if not topic:
@@ -4499,7 +4467,7 @@ class GodAI(QWidget):
             self._video_reset("Render not approved.")
             return
         self._video_request_token = token
-        from services import video_studio
+        from agents.video import video_studio
         try:
             slug, output_path = video_studio.external_output_path(
                 context["topic"], context["model"])
@@ -4529,7 +4497,7 @@ class GodAI(QWidget):
             self._video_external_context["provider_completed"] = True
 
     def _video_external_done(self, path: str) -> None:
-        from services import video_studio
+        from agents.video import video_studio
 
         context = self._video_external_context
         try:
@@ -4602,7 +4570,7 @@ class GodAI(QWidget):
                 self.video_status_label.setText("Cancelling after this stage…")
 
     def refresh_video_library(self):
-        from services import video_studio
+        from agents.video import video_studio
         if not hasattr(self, "video_library_table"):
             return
         entries = video_studio.library()
@@ -8062,7 +8030,12 @@ class GodAI(QWidget):
 
         try:
             if provider == "ollama":
-                models = self.ollama.list_models()
+                try:
+                    models = self.ollama.list_models()
+                    self.model_box.setProperty("imprintModelsLive", bool(models))
+                except Exception:
+                    models = []
+                    self.model_box.setProperty("imprintModelsLive", False)
                 if not models:
                     models = list(OllamaClient.KNOWN_MODELS)
 
@@ -8685,8 +8658,10 @@ class GodAI(QWidget):
         self.model_box.clear()
         try:
             models = self.ollama.list_models()
+            self.model_box.setProperty("imprintModelsLive", bool(models))
         except Exception:
             models = []
+            self.model_box.setProperty("imprintModelsLive", False)
         if not models:
             models = list(OllamaClient.KNOWN_MODELS)
         self.model_box.addItems(models)
@@ -9533,15 +9508,25 @@ class GodAI(QWidget):
         }
         doc_key = doc_file_map.get(agent_name, agent_name)
 
-        # Read-only bundled resource (works in dev and in the frozen .app)
+        # The detailed user guide remains the first choice.  Every agent also
+        # owns a package README, which is the architecture-level fallback and
+        # keeps Docs useful for newly added agent projects before a full guide
+        # is written.
         docs_dir = RESOURCE_DIR / "docs" / "agents"
         doc_path = docs_dir / f"{doc_key}.md"
+        project_doc_path = RESOURCE_DIR / "agents" / agent_name / "README.md"
 
         # Read the markdown source
         if doc_path.exists():
             raw_md = doc_path.read_text(encoding="utf-8")
+        elif project_doc_path.exists():
+            raw_md = project_doc_path.read_text(encoding="utf-8")
         else:
-            raw_md = f"# No documentation found\n\nNo documentation file was found for **{agent_name}**.\n\nExpected path: `{doc_path}`"
+            raw_md = (
+                "# No documentation found\n\n"
+                f"No documentation file was found for **{agent_name}**.\n\n"
+                f"Expected either `{doc_path}` or `{project_doc_path}`"
+            )
 
         # Convert markdown to basic HTML (handles headings, bold, tables, code, lists)
         def md_to_html(text: str) -> str:
@@ -9789,7 +9774,7 @@ def _selftest() -> int:
 
     # 3. vidforge, imported rather than vendored — the whole Video mode.
     try:
-        from services import video_studio
+        from agents.video import video_studio
         ok = video_studio.available()
         check("vidforge imports", ok,
               "" if ok else video_studio.unavailable_reason().split("\n")[0])
@@ -9812,7 +9797,7 @@ def _selftest() -> int:
             check(f"{module} importable", False, str(exc))
 
     # 5. Read-only resources that are seeded from the bundle on first run.
-    for name in ("docs/agents", "docs/learn", "config"):
+    for name in ("agents", "docs/agents", "docs/learn", "config"):
         check(f"bundled resource: {name}", (_Path(RESOURCE_DIR) / name).exists())
 
     print()

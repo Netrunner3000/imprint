@@ -14,7 +14,7 @@ hiddenimports = [
     "tiktoken_ext",
     "tiktoken_ext.openai_public",
     "services.narrator.converter",   # invoked via the --narrator-worker sentinel
-    # vidforge is imported through services/video_studio.py at runtime, so
+    # vidforge is imported through agents/video/studio.py at runtime, so
     # static analysis of main.py never sees these.
     "vidforge",
     "vidforge.pipeline",
@@ -33,7 +33,7 @@ for pkg in ("google.genai", "tiktoken", "anthropic", "openai", "certifi",
     hiddenimports += h
 
 # vidforge is a nested sibling repository, not a vendored copy — see
-# services/video_studio.py. The package ships as source so the same checkout
+# agents/video/studio.py. The package ships as source so the same checkout
 # drives both this bundle and the standalone vidforge.app.
 _VIDFORGE = Path("vidforge")
 if (_VIDFORGE / "vidforge").is_dir():
@@ -58,6 +58,17 @@ datas += [
     ("docs/learn", "docs/learn"),     # Learning Centre pages + their screenshots
 ]
 
+# Per-agent project documents are part of the product architecture, not dev-only
+# notes.  Keep their directory identity so the packaged Docs fallback and
+# self-test see the same ownership structure as a source checkout.
+for _agent_project in Path("agents").iterdir():
+    if not _agent_project.is_dir() or _agent_project.name.startswith((".", "__")):
+        continue
+    for _project_doc in ("README.md", "TODO.md", "SUGGESTIONS.md"):
+        _source = _agent_project / _project_doc
+        if _source.is_file():
+            datas.append((str(_source), f"agents/{_agent_project.name}"))
+
 a = Analysis(
     ["main.py"],
     pathex=[],
@@ -69,7 +80,7 @@ a = Analysis(
     runtime_hooks=[],
     excludes=[
         # Not imported by main.py; pulls broken providers.avatar/voice imports.
-        "agents.course_agent",
+        "agents.course.agent",
         # Dev-only weight.
         "pytest", "pip", "setuptools",
     ],

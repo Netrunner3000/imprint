@@ -26,7 +26,7 @@ import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from agents.creator_agent import (
+from agents.creator.agent import (
     ACCOUNT_TYPES, ConsentError, CreatorAgent, require_ready,
 )
 from services.higgsfield_client import (

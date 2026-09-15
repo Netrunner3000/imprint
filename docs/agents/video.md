@@ -1,6 +1,6 @@
 # VIDEO — topic to finished video
 
-`key: video` · pipeline: `vidforge` (nested repo) · direct providers: OpenAI / Gemini / Qwen-Wan / Higgsfield · bridge: `services/video_studio.py` · panel: `build_video_panel()`
+`key: video` · pipeline: `vidforge` (nested repo) · direct providers: OpenAI / Gemini / Qwen-Wan / Higgsfield · bridge: `agents/video/studio.py` · panel: `build_video_panel()`
 
 ## What it does
 Turns a topic into a complete narrated, illustrated video: script, text-to-speech narration, word-aligned captions, generated visuals, Ken Burns motion, background music, loudness normalisation, and a thumbnail. Long-form for YouTube, or a vertical clip for social.
@@ -10,7 +10,7 @@ The pipeline is `vidforge`, a **separate git repository nested at `imprint/vidfo
 
 That is a deliberate trade. The workspace already has one vendored-copy pair — `lab_hub/tools/convert` against `toolbox/convert_epub` — and they have silently drifted apart in four files. A second copy of a twenty-module video pipeline would drift faster and matter more. One checkout, one pipeline, two front doors: `vidforge.app` standalone, and this tab.
 
-The cost of that choice is that a clone of `imprint` alone has no `vidforge`. Every entry point in `services/video_studio.py` answers `available()` first and the panel renders an explanation instead of a dead form, so the failure is legible rather than a crash.
+The cost of that choice is that a clone of `imprint` alone has no `vidforge`. Every entry point in `agents/video/studio.py` answers `available()` first and the panel renders an explanation instead of a dead form, so the failure is legible rather than a crash.
 
 Frozen, the two apps share `~/Library/Application Support/vidforge/` — one config, one output library, one history, whichever front door you came in by.
 
@@ -76,7 +76,7 @@ Pipeline cancellation is cooperative, through the reporter. Higgsfield uses its 
 ## Under the hood — files & functions
 | Location | Role |
 |---|---|
-| `services/video_studio.py` | The bridge: import, availability, config, clip overrides, pre-run estimate, library. |
+| `agents/video/studio.py` | The bridge: import, availability, config, clip overrides, pre-run estimate, library. |
 | `ui/workers.py → VideoWorker` | Runs `produce()` on a thread; bridges vidforge's `Reporter` to Qt signals. |
 | `services/media_catalog.py` | Explicit visual provider/model capabilities, durations, aspects and 720p pricing. |
 | `services/openai_client.py` | GPT Image generation plus Sora create/poll/download. |

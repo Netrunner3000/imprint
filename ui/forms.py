@@ -46,9 +46,10 @@ def micro(text: str) -> QLabel:
 
 
 def section(text: str) -> QLabel:
-    """A group heading. Replaces a QGroupBox title without the box."""
-    label = QLabel(text.upper())
+    """A readable group heading. Field labels alone use small uppercase text."""
+    label = QLabel(text)
     label.setObjectName("SectionLabel")
+    label.setAccessibleName(text)
     return label
 
 
@@ -177,10 +178,10 @@ FORM_STYLES = """
             letter-spacing: 1.1px;
         }}
         QLabel#SectionLabel {{
-            color: {muted};
-            font-size: 10px;
-            font-weight: 700;
-            letter-spacing: 1.4px;
+            color: {text};
+            font-size: 14px;
+            font-weight: 600;
+            letter-spacing: 0.1px;
         }}
         QLabel#StatValue {{
             color: {text};

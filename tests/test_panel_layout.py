@@ -203,6 +203,21 @@ def test_author_workbench_has_no_nested_control_scroller(app, window):
     assert not window.author_panel.findChildren(QScrollArea)
 
 
+def test_section_headings_are_readable_not_field_label_small_caps(app, window):
+    from ui.forms import section
+
+    heading = section("Conversion settings")
+    assert heading.text() == "Conversion settings"
+    assert heading.objectName() == "SectionLabel"
+
+
+def test_audiobook_source_list_does_not_push_settings_below_the_fold(app, window):
+    window.select_agent("audiobook")
+    _settle(app, window, (1400, 900), "audiobook")
+    assert window.audiobook_book_list.maximumHeight() <= 220
+    assert window.audiobook_start_btn.text() == "Convert audiobook"
+
+
 def test_author_compose_remains_whole_with_profile_open(app, window):
     """Opening Book Profile must not crop the command deck below it."""
     from PySide6.QtCore import QPoint
@@ -251,22 +266,106 @@ def test_author_footer_prioritises_primary_actions_when_narrow(app, window):
 
 
 def test_dropdowns_use_the_shared_polished_popup(app, window):
-    """Dropdowns should read as menus, with usable rows and smooth scrolling."""
-    from PySide6.QtWidgets import QAbstractItemView
+    """Dropdowns must not fall back to macOS's plain native text menu."""
+    from PySide6.QtWidgets import QAbstractItemView, QStyle
+    from ui.widgets import DropdownItemDelegate, POPUP_MAX_WIDTH
 
     _settle(app, window, (1760, 820), "author")
     combo = window.author_model_box
     view = combo.view()
 
-    assert view.sizeHintForRow(0) >= 36
-    assert view.minimumWidth() >= 180
+    assert combo.property("imprintModernDropdown") is True
+    assert combo.style().styleHint(QStyle.SH_ComboBox_Popup, None, combo) == 0
+    assert isinstance(view.itemDelegate(), DropdownItemDelegate)
+    assert view.objectName() == "ImprintComboPopup"
+    assert view.sizeHintForRow(0) >= DropdownItemDelegate.ROW_HEIGHT
+    assert view.minimumWidth() == view.maximumWidth()
+    assert view.width() <= POPUP_MAX_WIDTH
     assert combo.maxVisibleItems() == 9
     assert view.verticalScrollMode() == QAbstractItemView.ScrollPerPixel
+    assert "combobox-popup: 0" in window.styleSheet()
     assert "dropdown-chevron.svg" in window.styleSheet()
 
     spec = os.path.join(os.path.dirname(__file__), "..", "Imprint.spec")
     assert '("assets/dropdown-chevron.svg", "assets")' in open(
         spec, encoding="utf-8").read()
+
+
+def test_dropdowns_created_after_startup_are_polished(app, window):
+    """Dialogs created later must receive the same popup as main panels."""
+    from PySide6.QtWidgets import QComboBox, QStyle
+    from ui.widgets import DropdownItemDelegate
+
+    combo = QComboBox()
+    combo.addItems(["First", "Second"])
+    combo.show()
+    for _ in range(3):
+        app.processEvents()
+    try:
+        assert combo.property("imprintModernDropdown") is True
+        assert combo.style().styleHint(QStyle.SH_ComboBox_Popup, None, combo) == 0
+        assert isinstance(combo.itemDelegate(), DropdownItemDelegate)
+    finally:
+        combo.close()
+        combo.deleteLater()
+
+
+def test_short_dropdown_popup_tracks_its_field_instead_of_defaulting_to_640(app, window):
+    """A two-item selector must not span most of the author canvas."""
+    _settle(app, window, (1760, 820), "author")
+    combo = window.author_content_type_box
+    combo.showPopup()
+    for _ in range(3):
+        app.processEvents()
+    try:
+        popup_width = combo.view().window().width()
+        assert popup_width <= combo.width() + 20
+        assert popup_width < 500
+    finally:
+        combo.hidePopup()
+
+
+def test_every_provider_model_selector_has_an_explained_best_fit(app, window):
+    """A newly added panel cannot silently miss recommendation integration."""
+    from main import AGENT_SETUP_WIDGETS
+    from ui.widgets import (
+        RECOMMENDED_ROLE, RECOMMENDATION_CONFIDENCE_ROLE,
+        RECOMMENDATION_REASON_ROLE,
+    )
+
+    for agent, (provider_name, model_name) in AGENT_SETUP_WIDGETS.items():
+        provider = getattr(window, provider_name)
+        model = getattr(window, model_name)
+        window.refresh_recommendation_marks(agent)
+        for kind, combo in (("provider", provider), ("model", model)):
+            marked = [i for i in range(combo.count())
+                      if combo.itemData(i, RECOMMENDED_ROLE)]
+            assert len(marked) == 1, f"{agent} {kind}: {marked}"
+            index = marked[0]
+            assert combo.itemData(index, RECOMMENDATION_REASON_ROLE)
+            assert combo.itemData(index, RECOMMENDATION_CONFIDENCE_ROLE) in {
+                "low", "medium", "high"
+            }
+
+    window.refresh_video_recommendations()
+    for combo in (window.video_visual_provider_box,
+                  window.video_visual_model_box,
+                  window.fiverr_image_model_box):
+        assert sum(bool(combo.itemData(i, RECOMMENDED_ROLE))
+                   for i in range(combo.count())) == 1
+
+
+def test_model_best_fit_recomputes_inside_each_selected_provider(app, window):
+    from ui.widgets import RECOMMENDED_ROLE
+
+    window.select_agent("social")
+    for provider in ("openai", "deepseek", "gemini", "anthropic", "qwen"):
+        window.social_provider_box.setCurrentText(provider)
+        for _ in range(3):
+            app.processEvents()
+        marked = [i for i in range(window.social_model_box.count())
+                  if window.social_model_box.itemData(i, RECOMMENDED_ROLE)]
+        assert len(marked) == 1, provider
 
 
 # ── Conditional fields ───────────────────────────────────────────────────────

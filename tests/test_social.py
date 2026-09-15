@@ -19,7 +19,7 @@ import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from agents.social_agent import (  # noqa: E402
+from agents.social.agent import (  # noqa: E402
     ANGLES, build_clip_brief_messages, build_post_messages, over_limit,
     split_variants,
 )

@@ -27,17 +27,19 @@ nothing can be read at a glance — which is the only thing a status rail is for
 
 ## Direction
 
-### A real type scale — 3 sizes, 2 weights
+### A real type scale
 
 | role | size | weight |
 |---|---:|---:|
 | display (agent title) | 22px | 500 |
-| title (card + section headings) | 15px | 500 |
+| title (card + section headings) | 14px | 600 |
 | body / control | 13px | 400 |
 | caption (units, hints, metadata) | 11px | 400 |
+| field label | 10px | 700 |
 
-Delete 10px and 12px. Two weights only — 400 and 500. Bold-everything is why
-the current UI reads flat.
+Only field labels use tracked uppercase. Section headings use normal title case
+and a larger semibold face; using the same tiny uppercase style for both made
+headings such as “Conversion settings” look like misplaced form labels.
 
 ### One run bar instead of three rows
 
@@ -70,6 +72,43 @@ bar; drop the prose around it.
 `setContentsMargins` appears 75 times with ad-hoc values. Pick 4 / 8 / 16 / 24
 and use nothing else. Most of the "not quite right" feeling in a dense UI is
 inconsistent gaps rather than wrong colours.
+
+### Dropdown component
+
+Imprint uses one custom dropdown system rather than the macOS native combo
+menu. The native path ignores Qt row styling and reduces every selector to a
+plain checkmarked text list.
+
+| State | Visual treatment |
+|---|---|
+| Default | Recessed field, quiet chevron, full-width popup |
+| Hover | Raised row surface without changing the text colour |
+| Selected | Emerald wash, leading rail and circular check |
+| Recommended | Emerald text with a compact `BEST FIT` badge |
+| Disabled | Muted text; selection remains readable |
+
+Popup rows are 42 px high, show at most nine items before scrolling, and keep
+standard keyboard behavior: arrows move, Return chooses and Escape closes.
+`ui.widgets.install_dropdown_system()` also catches selectors created later by
+dialogs, so the component does not depend on individual panels remembering to
+opt in. Popup width follows the visible field, may expand for a longer option,
+and is capped at 480 logical pixels; Qt's pre-layout 640px placeholder is never
+used as a design measurement.
+
+BEST FIT is semantic data rather than a text-colour convention. Dedicated item
+roles carry its explanation, score and confidence; this prevents a grey
+oversized local model from being mistaken for a recommendation. Provider menus
+show the best eligible provider overall, while model menus show the best option
+inside the currently selected provider. See `docs/recommendation_system.md`.
+
+### Decision tables and explanation cards
+
+Wide analytical tables show only the fields needed to compare rows. Evidence,
+freshness, proposed actions and caveats move into a selected-row detail card or
+tooltip. Decision-oriented tabs begin with a short “how to use this” card and
+end in a concrete action or stop/continue rule. The OnlyFans opportunity table
+is the reference implementation: seven stable columns, one selected signal,
+and separate content, monetization and market-strategy explanations.
 
 ## Order of work
 

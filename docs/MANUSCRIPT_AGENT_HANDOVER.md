@@ -386,7 +386,7 @@ There are **five places** to edit in `main.py`. They follow the exact pattern us
 
 ### 6.1 Import (top of file, ~line 47)
 ```python
-from agents.manuscript_agent import ManuscriptAgent
+from agents.manuscript import ManuscriptAgent
 ```
 
 ### 6.2 Agent instance (inside `__init__`, ~line 365, where agent dict is built)

@@ -1,7 +1,7 @@
 """The API Imprint depends on across a repository boundary.
 
 `vidforge` is a separate git repo nested at `imprint/vidforge/`, and Imprint
-imports it rather than vendoring a copy (see `services/video_studio.py` for why
+imports it rather than vendoring a copy (see `agents/video/studio.py` for why
 that trade was made). The cost of that choice is a contract nothing enforces:
 renaming a pipeline stage, changing `produce()`'s signature or dropping a config
 key is a perfectly reasonable change *inside vidforge*, and it silently breaks
@@ -27,7 +27,7 @@ import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from services import video_studio  # noqa: E402
+from agents.video import video_studio  # noqa: E402
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
@@ -152,7 +152,7 @@ class TestImportingVidforgeDoesNotShadowImprint:
     The running app hid it: `main` is in `sys.modules` long before anything
     touches Video, so the shadowed import never happens. The test suite is
     where it showed up, as 132 collection errors the first time a test imported
-    `services.video_studio` at module scope.
+    `agents.video.studio` at module scope.
     """
 
     def test_imprints_main_still_wins_after_vidforge_is_loaded(self):

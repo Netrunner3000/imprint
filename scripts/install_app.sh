@@ -73,8 +73,13 @@ defaults write "$APP_DIR/Contents/Info" CFBundleIdentifier -string "com.netrunne
 defaults write "$APP_DIR/Contents/Info" LSUIElement -bool false
 plutil -convert xml1 "$APP_DIR/Contents/Info.plist"
 
-# Stop a running copy so Launch Services picks up the new bundle.
+# Stop both halves of a running copy so Launch Services picks up the new bundle.
+# The AppleScript applet blocks while Python owns the window. Killing Python
+# alone can leave that applet alive briefly (or indefinitely after a launcher
+# error), and `open Imprint.app` then focuses the stale process instead of
+# starting the replacement bundle.
 pkill -f "${PROJECT_ROOT}/main.py" 2>/dev/null || true
+pkill -f "${INSTALLED}/Contents/MacOS/applet" 2>/dev/null || true
 sleep 1
 
 rm -rf "$INSTALLED"

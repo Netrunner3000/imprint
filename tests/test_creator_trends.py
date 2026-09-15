@@ -7,7 +7,7 @@ import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from services.creator_trends import (
+from agents.onlyfans.trends import (
     Trend, campaign_context, filter_trends, format_creator_brief, load_trends,
 )
 
@@ -87,24 +87,32 @@ def app():
 
 
 def test_dashboard_has_filters_charts_and_ranked_table(app):
-    from ui.creator_trends import OnlyFansDashboard
+    from agents.onlyfans.panel import OnlyFansDashboard
     dashboard = OnlyFansDashboard()
     assert dashboard.category_box.count() > 1
     assert dashboard.geography_box.count() >= 3
     assert dashboard.window_box.count() == 3
     assert dashboard.table.rowCount() > 0
-    assert dashboard.table.columnCount() == 11
+    assert dashboard.table.columnCount() == 7
+    assert [dashboard.table.horizontalHeaderItem(i).text()
+            for i in range(dashboard.table.columnCount())] == [
+        "Fit", "Signal", "Momentum", "Demand", "Competition",
+        "Revenue fit", "Risk",
+    ]
     assert dashboard.velocity_chart.series
     assert dashboard.scatter_chart.trends
     assert [dashboard.sections.tabText(i)
             for i in range(dashboard.sections.count())] == [
-        "Overview", "Trends & Opportunities", "Content Intelligence",
-        "Monetization & Analytics", "Market & Strategy",
+        "Overview", "Opportunities", "Content Intelligence",
+        "Monetization Analytics", "Market Strategy",
     ]
+    assert "Measurement sequence" in dashboard.monetization_detail.text()
+    assert "Bounded strategy" in dashboard.market_detail.text()
+    assert "Creator handoff" in dashboard.content_detail.text()
 
 
 def test_dashboard_emits_selected_campaign_context(app):
-    from ui.creator_trends import OnlyFansDashboard
+    from agents.onlyfans.panel import OnlyFansDashboard
     dashboard = OnlyFansDashboard()
     emitted = []
     dashboard.campaign_requested.connect(emitted.append)
