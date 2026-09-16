@@ -132,7 +132,7 @@ tests run every panel down to that size.
 
 **Mode tabs** — `Write` · `Audio` · `Video` · `Social` · `Web` · `Gigs` · `Creator`. Each opens the
 last tool used in that workspace. Where a workspace holds two related tools
-(Write → Draft / Publish, Audio → Audiobooks / Music) a second tab row appears
+(Author → Book Author / Publishing Manager, Audio + Music → Audiobook Producer / Music Artist Generator) a second tab row appears
 above the page title.
 
 They are underline tabs, not filled pills: they are navigation, and a pill here
@@ -188,30 +188,50 @@ whether it is a paid API, the provider, model and rough token count.
 **Cost History · Run Log · Learning Centre** — utilities that open a window and
 change nothing, so they read as links rather than buttons.
 
-**SYSTEM · ROUTING · API KEYS** — collapsed by default. Reference material,
-wanted only when something looks wrong.
+**System · Routing · API keys** — collapsed by default. Each opens a compact
+status card with separate values and state badges instead of a paragraph of
+diagnostic text.
 
 ### Resource Monitor
 
-Under **SYSTEM**, collapsed by default. A live HTML label updated every second:
+Under **System**, collapsed by default. Four scannable rows update every second:
 
 | Metric | Colour coding |
 |--------|--------------|
-| RAM % and GB used/free | Green < 60%, Yellow < 85%, Red ≥ 85% |
-| CPU % | Same thresholds |
-| Swap % and GB used/total | Same thresholds |
+| RAM % and GB used/free | Green < 70%, Yellow < 85%, Red ≥ 85% |
+| CPU % | Green < 50%, Yellow < 80%, Red ≥ 80% |
+| Swap % and GB used/total | Green < 20%, Yellow < 50%, Red ≥ 50% |
 | Battery % and charging state | Green if charging or > 40%, Yellow > 20%, Red ≤ 20% |
 
 **Realtime Monitor** — reserved button, currently disabled.
 
 ### Routing
 
-Under **ROUTING**, collapsed by default.
+Under **Routing**, collapsed by default. The last observed route and the current
+recommendation are intentionally separate.
 
 | Label | Content |
 |-------|---------|
-| **Router** | Last routing decision: `agent · provider · model` |
-| **Recommendation** | Current recommendation from the engine, updated as you type |
+| **Last decision** | Last routing decision: `agent · provider · model` |
+| **Best fit** | Provider/model, numeric fit, confidence, concise reason, and setup readiness |
+
+Under **API keys**, one row per provider reports **Configured**, **Not
+configured**, or **Check failed**. Secret values are never displayed.
+
+### Documentation centre
+
+The header **Docs** button opens `ui/docs_center.py` at the active agent. The
+general **Docs** button opens the shared-system overview. Both use
+`docs/agents/manifest.json` as the navigation source and provide grouped
+contents, local heading-level search with exact anchors, an on-page outline,
+previous/next navigation, and links into the matching agent and Learning Centre
+lesson. The centre is bundled and does not make a provider call.
+
+`docs/agents/overview.md` defines the relationship between the technical
+reference and the task-first Learning Centre, plus shared routing, key, cost,
+storage, evidence, and recovery boundaries. Individual agent sheets remain the
+canonical control and execution reference so workflow teaching is linked, not
+duplicated.
 
 ### API Key Status
 
@@ -820,7 +840,7 @@ Five-section release plan:
 2. **RELEASE SETUP** — release title options, track listing, track descriptions, release date recommendation, cover art spec, ISRC/UPC explainer, file-prep checklist.
 3. **DISTRIBUTION GUIDE** — comparison of DistroKid / TuneCore / CD Baby with prices/royalty/pros/cons, recommended choice with reasoning, step-by-step signup walkthrough.
 4. **SPOTIFY STRATEGY** — Editorial Playlist Pitch (≤500 chars), Spotify Canvas brief, profile optimisation checklist, 5 independent playlist curator targets, plus how to submit pitches and upload Canvas.
-5. **INCOME ROADMAP** — streaming revenue projections at 1k/10k/100k streams, revenue streams beyond streaming (sync, merch, live, Patreon/Bandcamp, Content ID), 1/3/6-month priorities, tools to track earnings, PRO/SoundExchange registration steps.
+5. **INCOME ROADMAP** — user-supplied, source-dated payout scenarios clearly labelled hypothetical; complete cost/rights-split inputs; revenue-route experiments beyond streaming; dependency-based priorities; and owned-report reconciliation. It does not forecast earnings or assume a universal per-stream rate.
 
 ---
 
@@ -863,6 +883,23 @@ One tab per section: **Artist Profile**, **Release Setup**, **Distribution**, **
 
 ---
 
+#### Songs & Albums (Suno handoff)
+
+A second Music tab, `agents/music/suno_panel.py`, is a production workflow for
+actual songs rather than the release/marketing plan above: enter a title,
+track count and creative brief, draft lyrics and Suno-ready style prompts
+through the same budget/permission-gated request path as every other agent
+call, edit the result, then copy the selected style prompt or lyrics block
+into Suno. Song generation, review and downloading happen in the user's own
+Suno account — **there is no Suno API key and no automatic generation**, and
+those costs are not tracked by Imprint. Imported audio is copied (not moved)
+into `data/music_library`, one folder per album holding the audio files plus
+an `album.json` recording title, brief, lyrics/prompts and track order; saved
+albums reappear in the dropdown on reopen. See `SUNO_WORKFLOW.md` for the
+full step-by-step.
+
+---
+
 #### How to Use — Step by Step
 
 1. Click **Music** under **Creative**.
@@ -894,7 +931,7 @@ One tab per section: **Artist Profile**, **Release Setup**, **Distribution**, **
 
 > The editorial-playlist pitch is capped at 500 characters (Spotify's actual limit); the bio sections cap at the lengths Spotify accepts. Don't expand them or pitches will be truncated.
 
-> Streaming revenue estimates use $0.003–$0.005/stream — real per-stream payouts vary by country and account type.
+> Streaming payout scenarios require a current source/date and user-supplied range. They remain hypothetical—not forecasts—and must include territory, listener/account mix, rights splits, distributor/payment fees, promotion, production cost, and human time.
 
 > Monetisation strategy in depth — see Chapter 18.
 
@@ -1461,7 +1498,10 @@ publishing, music, AltMerch, OnlyFans, and future projects. It turns a saved
 voice plus platform context into concepts, captions, campaigns, posting plans,
 promotional asset briefs, and a reviewable calendar. OnlyFans-specific business
 intelligence lives in its own top-level workspace and hands selected
-opportunities into Creator as structured campaign briefs.
+opportunities into Creator as structured campaign briefs. A third handoff,
+**Generate SFW Teaser**, skips the campaign brief and requests a real,
+safe-for-work promotional clip directly through Creator's Higgsfield pipeline
+(below) for the same selected opportunity.
 
 **It has no posting path, by design.** OnlyFans has no public API — the limited
 access introduced in 2024 is for verified business partners only, and every
@@ -2052,7 +2092,10 @@ imprint/
 │   │                              #   show_cost_history / show_run_log
 │   ├── book_widgets.py            # Shared theme/size/voice controls + asset paths
 │   ├── host.py                    # AgentHost protocol (Phase 3)
-│   ├── learning_center.py         # Learning Centre dialog (docs/learn renderer)
+│   ├── docs_center.py             # Searchable technical reference browser
+│   ├── learning_center.py         # Learning Centre compatibility entry point
+│   ├── learning_center_v2.py      # Manifest-driven academy and contextual help
+│   ├── status_cards.py            # Structured System / Routing / API-key cards
 │   └── panels/
 │       ├── __init__.py
 │       └── base.py                # AgentPanel — one instance per agent, owns that
@@ -2101,6 +2144,8 @@ imprint/
 │   └── manual_test_cases.md
 │
 ├── docs/
+│   ├── agents/manifest.json       # Canonical Docs navigation and metadata
+│   ├── agents/overview.md         # Shared-system and recovery reference
 │   ├── agents/*.md                # One reference page per agent (the Docs button)
 │   ├── agent_project_structure.md # Package ownership, contracts, extraction order
 │   ├── refactor_plan.md           # main.py split — phases, measurements, decisions
@@ -2330,18 +2375,20 @@ The Audiobook agent reads its paths and defaults from `services/tool_runner.py`,
 
 ## 20. Learning Centre
 
-`ACTIONS → 🎓 Learning Centre` in the right rail opens a five-page guide
-rendered from `docs/learn/`:
+**Learning Centre** in the right rail opens a 26-lesson operating academy
+rendered from `docs/learn/manifest.json` and `docs/learn/modules/`:
 
-| Page | Covers |
+| Section | Covers |
 |---|---|
-| Getting started | The four regions, first-run setup, a first end-to-end run |
-| The agents | Each agent's controls and the working method that suits it |
-| Making money | Which income path to start with, and realistic expectations |
-| Workflows | Cross-agent recipes — novel → audiobook → landing page |
-| Best practices | Money, prompting, publishing, and the traps specific to this app |
+| Start & paths | Readiness, a first verified result, and a narrow operating path |
+| Foundations | Navigation, projects, Best Fit, access/privacy, costs, files, and recovery |
+| Agent Academy | A control-by-control guide and acceptance checklist for every visible agent |
+| Income Lab | Evidence passports, fair experiments, economics, attribution, uncertainty, decisions, and automation gates |
 
-The pages are plain markdown, so they can be read on disk or in the app.
+The lessons are plain Markdown and the manifest is the canonical navigation
+source. Search indexes headings and excerpts locally, opens the matching anchor,
+and makes no paid provider call. Guided completion and the last lesson are saved
+locally; reference use does not require completing lessons in order.
 
 **Screenshots are generated, not pasted.** `scripts/make_learning_shots.py`
 drives the real window offscreen and writes `docs/learn/img/`:
@@ -2353,16 +2400,39 @@ drives the real window offscreen and writes `docs/learn/img/`:
 Re-run it after any UI change and commit what moves — otherwise the guide
 slowly starts describing an app that no longer exists.
 
-`tests/test_learning_center.py` guards the parts that rot silently: every page
-listed exists, every page on disk is reachable, every image reference and
-internal link resolves, every referenced screenshot is one the generator
-actually produces, and `docs/learn` is in the PyInstaller `datas` list — without
-that last one the Learning Centre is empty in the installed `.app` while working
-perfectly from a source checkout.
+`tests/test_learning_center.py` guards the parts that rot silently: manifest and
+module coverage, lesson contracts, anchored search, evidence taxonomy, Best Fit
+semantics, image/link resolution, reproducible screenshots, agent coverage, and
+packaging. Without the PyInstaller data entry the Learning Centre is empty in
+the installed `.app` while working perfectly from a source checkout.
 
 ---
 
-## 21. Earning Income with Imprint
+## 21. Income experiments with Imprint
+
+Imprint does not provide earnings forecasts or a guaranteed/passive-income
+path. The canonical operating method is the **Income Lab** inside the Learning
+Centre:
+
+1. [Label the evidence](docs/learn/modules/30-evidence.md).
+2. [Define one measurable offer](docs/learn/modules/31-offer.md).
+3. [Pre-register a fair experiment](docs/learn/modules/32-experiment.md).
+4. [Calculate cash and economic contribution](docs/learn/modules/33-unit-economics.md).
+5. [Keep funnel, source, cohort, period, and currency definitions honest](docs/learn/modules/34-funnels-attribution.md).
+6. [Choose stop, repair, repeat, or scale under uncertainty](docs/learn/modules/35-uncertainty-decisions.md).
+7. [Automate only after the promotion gates pass](docs/learn/modules/36-automation-review.md).
+
+The interactive worksheets perform deterministic arithmetic on user-supplied
+observations or explicitly hypothetical scenarios. They do not fetch market
+data, fill missing denominators, predict demand, or project lifetime value.
+
+<!--
+Legacy pre-v2 income examples retained temporarily in source history for the
+documentation migration. They are intentionally hidden because their dated
+platform prices and broad earnings ranges do not meet the Income Lab evidence
+standard.
+
+## 21. Earning Income with Imprint (legacy)
 
 Imprint's agents are designed to produce **deliverables you can sell** — logos, websites, books, music, audiobooks, courses. This chapter is the practical, no-nonsense guide to converting agent output into income, broken down by income type.
 
@@ -2658,3 +2728,4 @@ Diversification matters more than maximising a single channel. The agents are to
 > ⚠️ **Tax & legal:** Treat all income as taxable. Register a sole trader / LLC / limited company if it grows. Set aside 20–30% of revenue for taxes. Keep receipts for API costs, software, hosting — they are deductible business expenses in most jurisdictions.
 
 ---
+-->

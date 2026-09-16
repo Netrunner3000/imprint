@@ -79,7 +79,7 @@ acceptance, and final delivery human-controlled.
 
 ### B. Owned catalogue
 
-**Use:** Write → Publish → Audiobooks → Social.
+**Use:** Author → Publishing Manager → Audiobook Producer → Social Media Campaign Manager.
 
 Build several related products for the same demonstrated reader need. A book,
 audiobook, or music release has a longer feedback cycle and more discovery
@@ -98,7 +98,7 @@ approval, fact checking, rights, store submission, and pricing decisions human.
 
 ### C. Content-to-offer funnel
 
-**Use:** Social → Video → Web, leading to one service or product.
+**Use:** Social Media Campaign Manager → Video & Ad Generator → Web Developer, leading to one service or product.
 
 Content is distribution, not the business model. Every post should map to a
 single next action you can observe: qualified reply, email signup, sample
@@ -116,7 +116,7 @@ claims, replies, and publishing approval human.
 
 ### D. Creator subscription or managed venture
 
-**Use:** OnlyFans signals → Creator → Earnings.
+**Use:** OnlyFans signals → Brand Creator → Earnings.
 
 Test one clearly disclosed content proposition for an owned, authorised, or
 synthetic profile. Directional trend data can suggest a test; only imported or

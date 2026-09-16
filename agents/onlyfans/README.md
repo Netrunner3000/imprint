@@ -52,7 +52,12 @@ and dashboard (`panel.py`).  User guidance: `docs/agents/onlyfans.md`.
   produce/measure/continue-or-stop plan per selected signal). Selecting a
   row and clicking "Create Campaign in Creator" (or double-clicking the row)
   emits a `campaign_requested` signal carrying the `campaign_context()`
-  payload. Keeps a compatibility alias `CreatorTrendsDashboard =
+  payload; "Build this test in Creator" emits the same signal. A third
+  action, **Generate SFW Teaser**, emits a separate `teaser_requested`
+  signal instead — Imprint's main window routes it straight into Creator's
+  Higgsfield promotional-video pipeline to produce a real safe-for-work clip
+  for the same selected opportunity, rather than only a drafted campaign
+  brief. Keeps a compatibility alias `CreatorTrendsDashboard =
   OnlyFansDashboard` for any code still importing the original name.
 - `recommendations.py` — registers this agent's `RECOMMENDATION_PROFILE` (an
   `AgentProfile` from `services.recommendations`) with the provider

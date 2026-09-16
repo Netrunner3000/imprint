@@ -2,7 +2,7 @@ import json
 import sqlite3
 from pathlib import Path
 
-from services.runtime_paths import user_data_base
+from services.runtime_paths import resource_base, user_data_base
 
 # Writable base: project root in dev, ~/Library/Application Support/Imprint when frozen.
 BASE_DIR = user_data_base()
@@ -420,6 +420,7 @@ def init_db() -> None:
     _add_missing_columns(conn)
     _seed_missing_pricing(conn)
     _seed_pricing_from_json(conn)
+    _purge_non_token_pricing_rows(conn)
     _correct_stale_pricing(conn)
     _seed_default_agents(conn)
     _purge_split_agents(conn)
@@ -466,31 +467,53 @@ def _seed_pricing_from_json(conn: sqlite3.Connection) -> None:
     Two idempotent passes, neither of which overwrites a rate edited in
     Settings: insert rows that are missing, then fill cached rates still at 0.
     """
-    data = _load_json(BASE_DIR / "config" / "pricing.json", {})
-    for backend, models in data.items():
-        if backend == "eur_per_usd" or not isinstance(models, dict):
-            continue
-        for model, prices in models.items():
-            if not isinstance(prices, dict):
+    # In a frozen build BASE_DIR points at the user's persistent data folder.
+    # That copy intentionally survives upgrades, so it can be older than the
+    # catalog bundled with the current app. Read both: bundled defaults add new
+    # providers/models, while INSERT OR IGNORE keeps every database edit made
+    # through Settings authoritative.
+    sources = [resource_base() / "config" / "pricing.json"]
+    editable = BASE_DIR / "config" / "pricing.json"
+    if editable not in sources:
+        sources.append(editable)
+
+    for source in sources:
+        data = _load_json(source, {})
+        for backend, models in data.items():
+            if backend in {"eur_per_usd", "per_unit_usd"} or not isinstance(models, dict):
                 continue
-            cached = float(prices.get("cached_input_per_1m_usd", 0.0))
-            conn.execute("""
-                INSERT OR IGNORE INTO pricing
-                  (backend, model, input_per_1m_usd, output_per_1m_usd,
-                   cached_input_per_1m_usd)
-                VALUES (?,?,?,?,?)
-            """, (
-                backend, model,
-                float(prices.get("input_per_1m_usd", 0.0)),
-                float(prices.get("output_per_1m_usd", 0.0)),
-                cached,
-            ))
-            if cached > 0:
-                conn.execute(
-                    "UPDATE pricing SET cached_input_per_1m_usd = ? "
-                    "WHERE backend = ? AND model = ? AND cached_input_per_1m_usd = 0",
-                    (cached, backend, model),
-                )
+            for model, prices in models.items():
+                if not isinstance(prices, dict):
+                    continue
+                cached = float(prices.get("cached_input_per_1m_usd", 0.0))
+                conn.execute("""
+                    INSERT OR IGNORE INTO pricing
+                      (backend, model, input_per_1m_usd, output_per_1m_usd,
+                       cached_input_per_1m_usd)
+                    VALUES (?,?,?,?,?)
+                """, (
+                    backend, model,
+                    float(prices.get("input_per_1m_usd", 0.0)),
+                    float(prices.get("output_per_1m_usd", 0.0)),
+                    cached,
+                ))
+                if cached > 0:
+                    conn.execute(
+                        "UPDATE pricing SET cached_input_per_1m_usd = ? "
+                        "WHERE backend = ? AND model = ? AND cached_input_per_1m_usd = 0",
+                        (cached, backend, model),
+                    )
+    conn.commit()
+
+
+def _purge_non_token_pricing_rows(conn: sqlite3.Connection) -> None:
+    """Remove a legacy migration artefact from the token pricing table.
+
+    Older migrations interpreted the nested ``per_unit_usd`` section as a
+    token provider and produced a bogus ``per_unit_usd/openai_image`` row.
+    Per-unit prices have their own settings surface and cost path.
+    """
+    conn.execute("DELETE FROM pricing WHERE backend = 'per_unit_usd'")
     conn.commit()
 
 
@@ -515,14 +538,16 @@ def _purge_split_agents(conn: sqlite3.Connection) -> None:
 def _sync_agent_labels(conn: sqlite3.Connection) -> None:
     """Ensure built-in agents' DB labels match the current brand names shown in the GUI."""
     rename_map = {
-        "fiverr":      "Client Gigs",
-        "author":      "Draft",
-        "manuscript":  "Publish",
-        "music":       "Music",
-        "webdesign":   "Site Builder",
-        "audiobook":   "Audiobooks",
-        "creator":     "Creator",
-        "onlyfans":    "OnlyFans",
+        "fiverr":      "Brand & Logo Designer",
+        "author":      "Book Author",
+        "manuscript":  "Publishing Manager",
+        "music":       "Music Artist Generator",
+        "webdesign":   "Web Developer",
+        "audiobook":   "Audiobook Producer",
+        "creator":     "Brand Creator",
+        "video":       "Video & Ad Generator",
+        "social":      "Social Media Campaign Manager",
+        "onlyfans":    "OF Agent",
     }
     for name, label in rename_map.items():
         conn.execute("UPDATE agents SET label = ? WHERE name = ?", (label, name))
@@ -614,7 +639,7 @@ def _seed_default_agents(conn: sqlite3.Connection) -> None:
     agents = [
         {
             "name": "author",
-            "label": "Author",
+            "label": "Book Author",
             "description": "Long-form creative writing agent for fiction drafting, outlining, character development, and storytelling.",
             "allowed_providers": json.dumps([]),
             "allowed_tools": None,
@@ -625,7 +650,7 @@ def _seed_default_agents(conn: sqlite3.Connection) -> None:
         },
         {
             "name": "webdesign",
-            "label": "Web Design",
+            "label": "Web Developer",
             "description": "HTML/CSS/JS generation, layout advice, and front-end design guidance.",
             "allowed_providers": json.dumps([]),
             "allowed_tools": None,
@@ -636,7 +661,7 @@ def _seed_default_agents(conn: sqlite3.Connection) -> None:
         },
         {
             "name": "music",
-            "label": "Music",
+            "label": "Music Artist Generator",
             "description": "Music analysis, mood-based recommendations, genre exploration, artist deep-dives, and discovery.",
             "allowed_providers": json.dumps([]),
             "allowed_tools": None,
@@ -647,7 +672,7 @@ def _seed_default_agents(conn: sqlite3.Connection) -> None:
         },
         {
             "name": "fiverr",
-            "label": "Fiverr",
+            "label": "Brand & Logo Designer",
             "description": "Fiverr freelancer agent — generates logo concepts via current OpenAI GPT Image models, writes professional delivery messages, and creates Fiverr gig descriptions.",
             "allowed_providers": json.dumps([]),
             "allowed_tools": None,
@@ -658,7 +683,7 @@ def _seed_default_agents(conn: sqlite3.Connection) -> None:
         },
         {
             "name": "audiobook",
-            "label": "Audiobooks",
+            "label": "Audiobook Producer",
             "description": "Turn PDF, EPUB, TXT and MOBI books into MP3 audiobooks with OpenAI text-to-speech, and play them back with resume.",
             "allowed_providers": json.dumps([]),
             "allowed_tools": None,
@@ -669,7 +694,7 @@ def _seed_default_agents(conn: sqlite3.Connection) -> None:
         },
         {
             "name": "social",
-            "label": "Social",
+            "label": "Social Media Campaign Manager",
             "description": "Public-funnel promotion for anything the studio made — per-platform drafting, a posting schedule, and direct posting where the platform's API allows it.",
             "allowed_providers": json.dumps([]),
             "allowed_tools": None,
@@ -680,7 +705,7 @@ def _seed_default_agents(conn: sqlite3.Connection) -> None:
         },
         {
             "name": "video",
-            "label": "Video",
+            "label": "Video & Ad Generator",
             "description": "Topic to finished video — script, narration, captions, generated visuals, Ken Burns motion, music and thumbnail. Runs the vidforge pipeline in-process. Long-form for YouTube or a vertical clip for social.",
             "allowed_providers": json.dumps([]),
             "allowed_tools": None,
@@ -691,7 +716,7 @@ def _seed_default_agents(conn: sqlite3.Connection) -> None:
         },
         {
             "name": "creator",
-            "label": "Creator",
+            "label": "Brand Creator",
             "description": "Shared content production for every venture — concepts, captions, campaigns, posting plans, promotional assets, calendars, and performance feedback.",
             # higgsfield is the video renderer, not a chat provider, but it is a paid
             # backend the guard authorises against and so has to be permitted here.
@@ -705,7 +730,7 @@ def _seed_default_agents(conn: sqlite3.Connection) -> None:
         },
         {
             "name": "onlyfans",
-            "label": "OnlyFans",
+            "label": "OF Agent",
             "description": "OnlyFans venture intelligence — trends, opportunities, monetization hypotheses, owned analytics, market context, and strategy. No automated posting.",
             "allowed_providers": json.dumps([]),
             "allowed_tools": None,
@@ -873,7 +898,7 @@ def _migrate_pricing(conn: sqlite3.Connection) -> None:
     )
 
     for backend, models in data.items():
-        if backend == "eur_per_usd" or not isinstance(models, dict):
+        if backend in {"eur_per_usd", "per_unit_usd"} or not isinstance(models, dict):
             continue
         for model, prices in models.items():
             if not isinstance(prices, dict):

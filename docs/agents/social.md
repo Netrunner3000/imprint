@@ -1,4 +1,4 @@
-# SOCIAL — the public funnel
+# SOCIAL MEDIA CAMPAIGN MANAGER — the public funnel
 
 `key: social` · class: `agents/social_agent.py → build_post_messages()` · panel: `build_social_panel()` · storage: `services/social_store.py` · posting: `services/social_publishing.py`
 

@@ -364,3 +364,13 @@ def show_learning_center(app, resource_dir: Path,
 
     dialog.exec()
     return dialog
+
+
+# Learning Centre 2.0 lives in a separate implementation module while this
+# import path remains stable for callers, tests, and packaged builds.
+from ui.learning_center_v2 import (  # noqa: E402,F401
+    LearnPage, LearningCentreDialog, PAGES, SECTIONS, SearchHit,
+    build_search_index, install_learning_targets, learn_dir,
+    learning_target_for_widget, search_index,
+    show_learning_center,
+)

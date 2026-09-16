@@ -1,4 +1,4 @@
-# Creator agent
+# Brand Creator
 
 Owns shared content production for Imprint ventures: voice profiles, concepts,
 captions, campaigns, promotional assets, calendars, account consent and

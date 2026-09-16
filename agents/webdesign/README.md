@@ -1,4 +1,4 @@
-# Site Builder agent
+# Web Developer
 
 Owns responsive HTML, CSS and JavaScript generation plus front-end layout and
 accessibility guidance. Imprint imports `WebdesignAgent` from

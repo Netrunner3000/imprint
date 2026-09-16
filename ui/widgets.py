@@ -321,24 +321,33 @@ class FlowLayout(QLayout):
 
 
 class CollapsibleSection(QWidget):
-    """Modern accordion-style section with header button and toggleable content."""
+    """Quiet accordion with a readable label and a contained content region.
+
+    Section headings used to reuse the tiny, tracked field-label style.  In a
+    narrow rail that made the hierarchy disappear and left the expanded body
+    looking detached from its title.  This is navigation, so it uses sentence
+    case, a full-width target, and an explicit open/closed state.
+    """
 
     HEADER_STYLE = """
         QPushButton#CollapsibleHeader {
             text-align: left;
-            padding: 4px 10px;
+            padding: 9px 10px;
             background-color: transparent;
-            border: none;
-            color: #707070;
-            font-weight: bold;
-            font-size: 10px;
-            letter-spacing: 1.5px;
+            border: 1px solid transparent;
+            border-radius: 7px;
+            color: #9aa5b4;
+            font-weight: 600;
+            font-size: 12px;
         }
         QPushButton#CollapsibleHeader:hover {
-            color: #ffffff;
+            color: #e8ecf1;
+            background-color: #1a1f29;
+            border-color: rgba(255, 255, 255, 0.09);
         }
         QPushButton#CollapsibleHeader:checked {
-            color: #999999;
+            color: #e8ecf1;
+            background-color: rgba(255, 255, 255, 0.035);
         }
     """
 
@@ -346,7 +355,7 @@ class CollapsibleSection(QWidget):
         super().__init__()
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(2)
+        layout.setSpacing(4)
 
         self._expanded = expanded
         self._title = title
@@ -356,12 +365,15 @@ class CollapsibleSection(QWidget):
         self.header_btn.setCheckable(True)
         self.header_btn.setChecked(expanded)
         self.header_btn.setStyleSheet(self.HEADER_STYLE)
+        self.header_btn.setAccessibleName(title)
+        self.header_btn.setAccessibleDescription(
+            f"Show or hide the {title} section")
         self.header_btn.clicked.connect(self._toggle)
         layout.addWidget(self.header_btn)
 
         self.content = QWidget()
         self.content_layout = QVBoxLayout(self.content)
-        self.content_layout.setContentsMargins(0, 4, 0, 10)
+        self.content_layout.setContentsMargins(0, 0, 0, 10)
         self.content_layout.setSpacing(3)
         layout.addWidget(self.content)
 
@@ -377,12 +389,12 @@ class CollapsibleSection(QWidget):
         self._update_header()
 
     def _update_header(self):
-        arrow = "▾" if self._expanded else "▸"
+        arrow = "⌄" if self._expanded else "›"
         # QPushButton reads "&" as a mnemonic marker, which silently turned
         # "Finance & Business" into "FINANCE _BUSINESS". Double it to render a
         # literal ampersand.
-        title = self._title.upper().replace("&", "&&")
-        self.header_btn.setText(f"  {arrow}   {title}")
+        title = self._title.replace("&", "&&")
+        self.header_btn.setText(f"{arrow}   {title}")
         self.header_btn.setChecked(self._expanded)
 
 

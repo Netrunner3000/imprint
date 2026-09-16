@@ -67,7 +67,7 @@ connected production line and a pile of unrelated generations.
 
 Do this before designing a large automation:
 
-1. Choose **Write → Draft**.
+1. Choose **Author → Book Author**.
 2. Create a project named `Learning test`.
 3. Set a session limit you are comfortable spending.
 4. Click **Use Recommended**, then **Estimate Cost**.

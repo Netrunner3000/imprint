@@ -47,9 +47,9 @@ def test_every_workspace_agent_has_a_panel():
 def test_onlyfans_is_a_venture_and_creator_stays_shared():
     import main
 
-    assert main.WORKSPACES["OnlyFans"] == ("onlyfans",)
-    assert main.WORKSPACES["Creator"] == ("creator",)
-    assert "onlyfans" not in main.WORKSPACES["Creator"]
+    assert main.WORKSPACES["OF Agent"] == ("onlyfans",)
+    assert main.WORKSPACES["Brand Creator"] == ("creator",)
+    assert "onlyfans" not in main.WORKSPACES["Brand Creator"]
 
 
 def test_registry_exposes_only_focused_agents():

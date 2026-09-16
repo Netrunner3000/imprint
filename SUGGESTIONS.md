@@ -52,6 +52,11 @@ consequences of what just landed rather than new ideas.
 | 49 | **Sleep timer and keyboard control for the player.** Resume was the ask and it works; space-to-pause and a sleep timer are what make it something you would actually listen to a novel on. | feature | S | IDEA |
 | 50 | DONE — **Make Video's visual provider/model choice real.** Current GPT Image models run through the scene pipeline; Sora, Gemini Omni/Veo, Qwen/Wan and Higgsfield create direct clips; Pexels and Local select their actual visual sources. Retired DALL·E IDs and providers without a video-output API are not offered. | feature | M | DONE |
 | 51 | **Migrate Sora before its provider shutdown.** The route is useful for the remaining compatibility window, but the API closes on 24 September 2026. Keep the direct-video adapter boundary and swap in OpenAI's successor when one is published. | maintenance | M | IDEA |
+| 52 | DONE — **Documentation centre.** Searchable technical reference browser (`ui/docs_center.py`) driven by `docs/agents/manifest.json`, opened from both the header Docs button (active agent) and the right rail's general Docs button (shared-system overview). | docs | M | DONE |
+| 53 | DONE — **Learning Centre v2 / Income Lab.** Replaced the five-page guide with a 26-lesson manifest-driven academy built around an evidence-gated income methodology (label evidence → pre-register a fair experiment → unit economics → honest attribution → decide under uncertainty → automate only after the gates pass), rather than dated per-stream/platform earnings figures. | docs | L | DONE |
+| 54 | DONE — **Structured status cards.** `ui/status_cards.py` replaced the collapsed System/Routing/API-key panels' prose with scannable rows, state badges and a separate "last decision" vs. "best fit recommendation" view. | design | M | DONE |
+| 55 | DONE — **Suno-assisted Songs & Albums.** A new Music tab drafts lyrics and Suno-ready style prompts, hands off to the user's own Suno account for generation (no API key, no auto-generation), and imports the downloaded audio into the music library. | feature | M | DONE |
+| 56 | DONE — **OnlyFans → Creator direct teaser handoff.** A third OnlyFans action, Generate SFW Teaser, requests a real safe-for-work promotional clip through Creator's Higgsfield pipeline instead of only drafting a campaign brief. | feature | S | DONE |
 
 ## v3 — bigger swings
 
@@ -66,6 +71,9 @@ consequences of what just landed rather than new ideas.
 
 | Suggestion | When |
 |---|---|
+| Documentation centre + Learning Centre v2 / Income Lab — searchable technical reference browser, and a 26-lesson evidence-gated income academy replacing dated forecast-style earnings guidance | Sep 2026 |
+| Structured System/Routing/API-key status cards replacing collapsed diagnostic paragraphs | Sep 2026 |
+| Suno-assisted Songs & Albums workflow in the Music agent, and an OnlyFans → Creator direct "Generate SFW Teaser" handoff | Sep 2026 |
 | Video mode — vidforge as an eighth agent, imported from its nested repo rather than vendored; long-form and social clips are one pipeline | Sep 2026 |
 | Social mode — the public funnel: campaigns, per-platform drafting, cadence scheduling, and posting for YouTube/Reddit/Pinterest | Sep 2026 |
 | Per-unit billing — images, renders and TTS count against the budget caps instead of pricing a $0.04 image at €0.000001 | Sep 2026 |

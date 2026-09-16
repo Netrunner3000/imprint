@@ -12,7 +12,10 @@ Monetization Analytics, and Market Strategy. **Create Campaign in Creator** or
 risk, suggested format, pricing hypothesis, and concrete deliverables into the
 shared Creator workspace. Creator can use the same workflow for publishing,
 music, AltMerch, and future ventures without inheriting OnlyFans-specific
-assumptions.
+assumptions. A third button, **Generate SFW Teaser**, bypasses the campaign
+brief and sends the selected signal straight into Creator's Higgsfield
+pipeline to produce a real safe-for-work promotional clip for that
+opportunity.
 
 ## What the numbers mean
 

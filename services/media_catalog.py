@@ -136,13 +136,21 @@ def sora_cost_usd(model: str, seconds: int) -> float:
 
 def direct_video_cost_usd(model: str, seconds: int) -> float:
     """Return the configured 720p cost/reserve for a selectable direct model."""
-    rate = DIRECT_VIDEO_USD_PER_SECOND.get(model)
+    rate = direct_video_rate_usd(model)
     selection = next((item for item in MODELS if item.model_id == model), None)
     if rate is None or selection is None or selection.kind != "direct_video":
         raise ValueError(f"No direct-video price is configured for {model}")
     if selection.durations and int(seconds) not in selection.durations:
         raise ValueError(f"{model} does not support a {seconds}-second clip.")
     return round(rate * int(seconds), 2)
+
+
+def direct_video_rate_usd(model: str) -> float | None:
+    """Effective per-second reserve, including a Settings override."""
+    from services.per_unit_pricing import rate_usd
+
+    override = rate_usd("direct_video", model)
+    return override if override is not None else DIRECT_VIDEO_USD_PER_SECOND.get(model)
 
 
 def sora_is_retired(today: date | None = None) -> bool:

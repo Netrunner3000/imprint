@@ -318,6 +318,30 @@ def test_onlyfans_handoff_loads_a_structured_creator_campaign(window):
     assert "posting plan" in brief
 
 
+def test_onlyfans_teaser_uses_creator_higgsfield_pipeline(window, monkeypatch):
+    context = {
+        "venture": "OnlyFans", "platform": "OnlyFans",
+        "signal": "POV mini-series", "category": "Story-led",
+        "geography": "Global", "window": "30 days",
+        "opportunity_index": 77, "momentum_index": 82,
+        "demand_index": 76, "saturation_index": 54,
+        "monetization_index": 84, "suggested_format": "3-part vertical video",
+        "pricing_experiment": "$12–18 bundle", "risk": "Low",
+        "source": "Demonstration dataset", "observed_at": "2026-09-09",
+        "confidence": "sample",
+        "deliverables": ("three concepts", "captions", "posting plan", "assets"),
+    }
+    calls = []
+    monkeypatch.setattr(window, "creator_generate_video", lambda: calls.append(True))
+
+    window._onlyfans_generate_teaser(context)
+
+    assert window._current_agent == "creator"
+    assert window.creator_platform_box.currentText() == "OnlyFans"
+    assert "POV mini-series" in window.creator_brief_input.toPlainText()
+    assert calls == [True]
+
+
 def test_consent_fields_appear_only_for_managed_accounts(window):
     window._creator_type_changed("own")
     assert not window.creator_consent_input.isVisible()

@@ -5,3 +5,4 @@
 - [x] `P2` Add evidence and freshness context to market-intelligence inputs and selected-signal detail.
 - [x] `P1` Replace the 11-column opportunity grid with a focused comparison table and guided decision cards.
 - [ ] `P2` Define a read-only connector boundary before adding platform data.
+- [x] `P2` Add a direct-to-Creator handoff ("Generate SFW Teaser") that requests a real Higgsfield clip instead of only a campaign brief.

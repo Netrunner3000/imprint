@@ -35,7 +35,7 @@ load_dotenv(user_data_base() / ".env")
 import markdown
 
 from PySide6.QtCore import Qt, QTimer, QProcess, QUrl, QThread, Signal, QEvent, QRect, QPoint, QSize
-from PySide6.QtGui import QTextCursor, QDesktopServices, QColor
+from PySide6.QtGui import QTextCursor, QDesktopServices, QColor, QKeySequence, QShortcut
 from PySide6.QtNetwork import QLocalServer, QLocalSocket
 from PySide6.QtWidgets import (
     QApplication, QSizePolicy, QWidget, QVBoxLayout, QHBoxLayout, QGridLayout, QGroupBox,
@@ -170,7 +170,7 @@ from ui.workers import (
     VideoGenerationWorker,
 )
 from ui.forms import (
-    CONTENT_MAX_WIDTH, HEADER_HEIGHT, LG, MD, RAIL_LEFT_WIDTH,
+    CONTENT_MAX_WIDTH, CONTROL_HEIGHT, HEADER_HEIGHT, LG, MD, RAIL_LEFT_WIDTH,
     RAIL_RIGHT_WIDTH, SM, XS, Meter, StatBlock, combo, field, form_grid,
     line_edit, micro, nav_tab, primary, quiet, rail, rule, section, stat,
 )
@@ -179,6 +179,10 @@ from ui.widgets import (
     let_combos_shrink, RECOMMENDED_ROLE, RECOMMENDATION_REASON_ROLE,
     RECOMMENDATION_SCORE_ROLE, RECOMMENDATION_CONFIDENCE_ROLE,
     RECOMMENDATION_BADGE_ROLE,
+)
+from ui.status_cards import (
+    ApiKeysStatusCard, ResourceStatusCard, RoutingStatusCard,
+    STATUS_CARD_STYLES,
 )
 from agents.onlyfans import OnlyFansDashboard, format_creator_brief
 from agents.social import (
@@ -300,6 +304,11 @@ class GodAI(QWidget):
         self.tooltips_enabled = True
 
         self.build_ui()
+        from ui.learning_center import install_learning_targets
+        install_learning_targets(self, RESOURCE_DIR)
+        self.learning_shortcut = QShortcut(QKeySequence("F1"), self)
+        self.learning_shortcut.setContext(Qt.ApplicationShortcut)
+        self.learning_shortcut.activated.connect(self.show_learning_center)
         self._polish_tab_widgets()
         self._seed_tooltips()
         # Install global event filter so we can suppress ToolTip events when disabled
@@ -697,6 +706,9 @@ class GodAI(QWidget):
                 "provider": self.provider_box.currentText(),
                 "model": self.model_box.currentText(),
                 "reason": "No eligible model is currently listed.",
+                "score": None,
+                "confidence": "",
+                "setup_needed": True,
             }
         winner = provider_result.candidate
         return {
@@ -704,7 +716,22 @@ class GodAI(QWidget):
             "provider": winner.provider,
             "model": winner.model_id,
             "reason": provider_result.reason,
+            "score": round(provider_result.score * 100),
+            "confidence": provider_result.confidence,
+            "setup_needed": provider_result.fallback,
         }
+
+    def _show_recommended_setup(self, rec: dict) -> None:
+        """Render the recommendation as structured evidence in the rail."""
+        if hasattr(self, "routing_status_card"):
+            self.routing_status_card.set_recommendation(
+                rec["provider"], rec["model"], rec["reason"],
+                rec.get("score"), rec.get("confidence", ""),
+                rec.get("setup_needed", False),
+            )
+        elif hasattr(self, "recommendation_label"):
+            self.recommendation_label.setText(
+                f"{rec['provider']} · {rec['model']}\n{rec['reason']}")
 
     def apply_recommended_setup(self):
         rec = self.get_recommended_setup()
@@ -726,12 +753,7 @@ class GodAI(QWidget):
             if index >= 0:
                 self.model_box.setCurrentIndex(index)
 
-        if hasattr(self, "recommendation_label"):
-            self.recommendation_label.setText(
-                f"Recommendation:\n"
-                f"{rec['provider']} · {rec['model']}\n"
-                f"{rec['reason']}"
-            )
+        self._show_recommended_setup(rec)
 
         self.update_live_cost_estimate()
 
@@ -741,11 +763,7 @@ class GodAI(QWidget):
 
         rec = self.get_recommended_setup()
 
-        self.recommendation_label.setText(
-            f"Recommendation:\n"
-            f"{rec['provider']} · {rec['model']}\n"
-            f"{rec['reason']}"
-        )
+        self._show_recommended_setup(rec)
         # Chat's recommendation moves with the tool/command/prompt, so repaint
         # the red dropdown markings whenever the label is refreshed.
         self.refresh_recommendation_marks("chat")
@@ -1344,6 +1362,13 @@ class GodAI(QWidget):
         self.workspace_tabs.setObjectName("WorkspaceTabs")
         self.workspace_tabs.setExpanding(False)
         self.workspace_tabs.setDrawBase(False)
+        # These are product areas, not disposable document tabs. Qt's default
+        # ElideRight turned "Audio & Music" and "Video & Ads" into ambiguous
+        # labels even when the header had enough room. Keep the complete names
+        # and fall back to the native scroll affordance only at narrow widths.
+        self.workspace_tabs.setElideMode(Qt.ElideNone)
+        self.workspace_tabs.setUsesScrollButtons(True)
+        self.workspace_tabs.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Fixed)
         for workspace_name in WORKSPACES:
             self.workspace_tabs.addTab(workspace_name)
         # Connected only after every tab exists: addTab on an empty bar sets the
@@ -1760,12 +1785,27 @@ class GodAI(QWidget):
         page.addWidget(self.audiobook_book_help)
 
         self.audiobook_book_list = QListWidget()
-        self.audiobook_book_list.setMinimumHeight(132)
-        self.audiobook_book_list.setMaximumHeight(220)
-        self.audiobook_book_list.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self.audiobook_book_list.setMaximumHeight(
+            CONTROL_HEIGHT * 5 + MD)
+        self.audiobook_book_list.setSizePolicy(
+            QSizePolicy.Expanding, QSizePolicy.Expanding)
         self.audiobook_book_list.currentItemChanged.connect(
             lambda *_: self.estimate_audiobook_cost_from_selection())
-        page.addWidget(self.audiobook_book_list)
+
+        self.audiobook_empty_state = QLabel(
+            "No supported books found yet. Add a PDF, EPUB, TXT, or MOBI file "
+            "to the input folder, then refresh the list.")
+        self.audiobook_empty_state.setObjectName("InlineEmptyState")
+        self.audiobook_empty_state.setWordWrap(True)
+        self.audiobook_empty_state.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        self.audiobook_empty_state.setAccessibleName("No audiobook source files")
+
+        self.audiobook_source_stack = QStackedWidget()
+        self.audiobook_source_stack.setObjectName("AudiobookSourceStack")
+        self.audiobook_source_stack.addWidget(self.audiobook_empty_state)
+        self.audiobook_source_stack.addWidget(self.audiobook_book_list)
+        self.audiobook_source_stack.setFixedHeight(CONTROL_HEIGHT * 2 + SM)
+        page.addWidget(self.audiobook_source_stack)
 
         # ── Settings ────────────────────────────────────────────────────
         page.addWidget(rule())
@@ -1848,7 +1888,16 @@ class GodAI(QWidget):
         self.audiobook_status_label.setWordWrap(True)
         page.addWidget(self.audiobook_status_label)
 
-        self.audiobook_tabs.addTab(convert_page, "Convert")
+        # The complete form is one scrolling surface.  Without this wrapper Qt
+        # compressed the folder-field containers below their controls' minimum
+        # height on shorter windows, so the line edits painted over one another.
+        self.audiobook_convert_scroll = scrollable(convert_page)
+        self.audiobook_convert_scroll.setObjectName("AudiobookConvertScroll")
+        self.audiobook_convert_scroll.setHorizontalScrollBarPolicy(
+            Qt.ScrollBarAlwaysOff)
+        self.audiobook_convert_scroll.setAccessibleName(
+            "Audiobook conversion controls")
+        self.audiobook_tabs.addTab(self.audiobook_convert_scroll, "Convert")
         self.audiobook_tabs.addTab(self._build_audiobook_library_tab(), "Listen")
         self.audiobook_panel.hide()
 
@@ -1862,10 +1911,11 @@ class GodAI(QWidget):
         header = QHBoxLayout()
         header.addWidget(section("Audiobooks in your output folder"))
         header.addStretch()
-        self.audiobook_refresh_btn = QPushButton("Rescan")
-        self.audiobook_refresh_btn.setObjectName("ChipBtn")
-        self.audiobook_refresh_btn.clicked.connect(self.refresh_audiobook_library)
-        header.addWidget(self.audiobook_refresh_btn)
+        self.audiobook_library_refresh_btn = QPushButton("Rescan")
+        self.audiobook_library_refresh_btn.setObjectName("ChipBtn")
+        self.audiobook_library_refresh_btn.clicked.connect(
+            self.refresh_audiobook_library)
+        header.addWidget(self.audiobook_library_refresh_btn)
         layout.addLayout(header)
 
         self.audiobook_library_table = QTableWidget(0, 4)
@@ -2649,6 +2699,9 @@ class GodAI(QWidget):
         self.music_tabs.addTab(self.music_strategy_box, "Spotify Strategy")
         self.music_income_box = QTextBrowser()
         self.music_tabs.addTab(self.music_income_box, "Income Roadmap")
+        from agents.music.suno_panel import SunoPanel
+        self.music_suno_panel = SunoPanel(self)
+        self.music_tabs.addTab(self.music_suno_panel, "Songs & Albums")
         layout.addWidget(self.music_tabs, 1)
 
         self.music_panel.hide()
@@ -4630,6 +4683,8 @@ class GodAI(QWidget):
         self.onlyfans_dashboard = OnlyFansDashboard()
         self.onlyfans_dashboard.campaign_requested.connect(
             self._onlyfans_create_campaign)
+        self.onlyfans_dashboard.teaser_requested.connect(
+            self._onlyfans_generate_teaser)
         layout.addWidget(self.onlyfans_dashboard)
         self.onlyfans_panel.hide()
 
@@ -4643,6 +4698,11 @@ class GodAI(QWidget):
         self.creator_status_label.setText(
             "OnlyFans opportunity loaded — choose an account, review the brief, then Draft.")
         self.creator_brief_input.setFocus()
+
+    def _onlyfans_generate_teaser(self, context: dict) -> None:
+        """Generate a real SFW clip through Creator's Higgsfield pipeline."""
+        self._onlyfans_create_campaign(context)
+        self.creator_generate_video()
 
     # ── Creator (shared content production) ──────────────────────────────────
     def build_creator_panel(self):
@@ -7887,7 +7947,11 @@ class GodAI(QWidget):
         rail_outer.setContentsMargins(0, 0, 0, 0)
         rail_body = QWidget()
         rail_body.setObjectName("Transparent")
-        rail_outer.addWidget(scrollable(rail_body))
+        rail_scroll = scrollable(rail_body)
+        # This rail has a fixed width and every component is designed for it;
+        # a one-pixel size-hint mismatch must not create a horizontal scrollbar.
+        rail_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        rail_outer.addWidget(rail_scroll)
         layout = QVBoxLayout(rail_body)
         layout.setContentsMargins(MD + XS, LG, MD + XS, LG)
         layout.setSpacing(MD)
@@ -7963,54 +8027,63 @@ class GodAI(QWidget):
         reference = QVBoxLayout()
         reference.setSpacing(0)
 
-        system_card = CollapsibleSection("SYSTEM", expanded=False)
+        system_card = CollapsibleSection("System", expanded=False)
         system_body = QWidget()
         system_body.setObjectName("Transparent")
         system_layout = QVBoxLayout(system_body)
         system_layout.setContentsMargins(SM, XS, SM, SM)
         system_layout.setSpacing(SM)
-        self.resource_label = QLabel()
-        self.resource_label.setTextFormat(Qt.RichText)
-        self.resource_label.setWordWrap(True)
-        self.resource_label.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Minimum)
-        self.resource_label.setObjectName("ResourceLabel")
-        system_layout.addWidget(self.resource_label)
+        self.resource_status_card = ResourceStatusCard()
+        self.resource_status_card.setStyleSheet(STATUS_CARD_STYLES)
+        # Compatibility alias for tooltips and existing extensions.  The old
+        # object was one long rich-text QLabel; the new card owns four rows.
+        self.resource_label = self.resource_status_card
+        system_layout.addWidget(self.resource_status_card)
         self.realtime_monitor_btn = QPushButton("Realtime Monitor")
         self.realtime_monitor_btn.setEnabled(False)
         system_layout.addWidget(self.realtime_monitor_btn)
         system_card.addWidget(system_body)
         reference.addWidget(system_card)
 
-        routing_card = CollapsibleSection("ROUTING", expanded=False)
+        routing_card = CollapsibleSection("Routing", expanded=False)
         routing_body = QWidget()
         routing_body.setObjectName("Transparent")
         routing_layout = QVBoxLayout(routing_body)
         routing_layout.setContentsMargins(SM, XS, SM, SM)
         routing_layout.setSpacing(XS)
-        self.route_result_label = QLabel("Router: not yet computed")
-        self.route_result_label.setWordWrap(True)
-        routing_layout.addWidget(self.route_result_label)
-        self.recommendation_label = QLabel("Recommendation: not yet calculated")
-        self.recommendation_label.setWordWrap(True)
-        routing_layout.addWidget(self.recommendation_label)
+        self.routing_status_card = RoutingStatusCard()
+        self.routing_status_card.setStyleSheet(STATUS_CARD_STYLES)
+        # These aliases retain the public widget attributes used by tooltips
+        # and integrations while avoiding the original paragraph-style UI.
+        self.route_result_label = self.routing_status_card.route_value
+        self.recommendation_label = self.routing_status_card.reason_label
+        routing_layout.addWidget(self.routing_status_card)
         routing_card.addWidget(routing_body)
         reference.addWidget(routing_card)
 
-        keys_card = CollapsibleSection("API KEYS", expanded=False)
+        keys_card = CollapsibleSection("API keys", expanded=False)
         keys_body = QWidget()
         keys_body.setObjectName("Transparent")
         keys_layout = QVBoxLayout(keys_body)
         keys_layout.setContentsMargins(SM, XS, SM, SM)
         keys_layout.setSpacing(XS)
-        self.openai_key_label = QLabel(f"OpenAI: {self.safe_key_status(OpenAIClientWrapper)}")
-        self.deepseek_key_label = QLabel(f"DeepSeek: {self.safe_key_status(DeepSeekClientWrapper)}")
-        self.kimi_key_label = QLabel(f"Kimi: {self.safe_key_status(KimiClientWrapper)}")
-        self.gemini_key_label = QLabel(f"Gemini: {self.safe_key_status(GeminiClientWrapper)}")
-        self.anthropic_key_label = QLabel(f"Anthropic: {self.safe_key_status(AnthropicClientWrapper)}")
-        for key_label in (self.openai_key_label, self.deepseek_key_label,
-                          self.kimi_key_label, self.gemini_key_label,
-                          self.anthropic_key_label):
-            keys_layout.addWidget(key_label)
+        self.api_keys_status_card = ApiKeysStatusCard(
+            ("OpenAI", "DeepSeek", "Kimi", "Gemini", "Anthropic"))
+        self.api_keys_status_card.setStyleSheet(STATUS_CARD_STYLES)
+        key_classes = {
+            "OpenAI": OpenAIClientWrapper, "DeepSeek": DeepSeekClientWrapper,
+            "Kimi": KimiClientWrapper, "Gemini": GeminiClientWrapper,
+            "Anthropic": AnthropicClientWrapper,
+        }
+        for provider, wrapper in key_classes.items():
+            self.api_keys_status_card.set_status(
+                provider, self.safe_key_status(wrapper))
+        self.openai_key_label = self.api_keys_status_card.status_labels["openai"]
+        self.deepseek_key_label = self.api_keys_status_card.status_labels["deepseek"]
+        self.kimi_key_label = self.api_keys_status_card.status_labels["kimi"]
+        self.gemini_key_label = self.api_keys_status_card.status_labels["gemini"]
+        self.anthropic_key_label = self.api_keys_status_card.status_labels["anthropic"]
+        keys_layout.addWidget(self.api_keys_status_card)
         keys_card.addWidget(keys_body)
         reference.addWidget(keys_card)
 
@@ -8231,17 +8304,18 @@ class GodAI(QWidget):
         self._current_agent = agent_name  # track for show_agent_docs()
         # ── Update the agent header bar (title + subtitle + status pill) ─
         agent_titles = {
-            "chat": "Studio Assistant", "fiverr": "Client Gigs",
-            "author": "Draft", "manuscript": "Publish", "music": "Music",
-            "webdesign": "Site Builder", "audiobook": "Audiobooks",
-            "creator": "Creator", "video": "Video",
-            "social": "Social", "onlyfans": "OnlyFans", }
+            "chat": "Studio Assistant", "fiverr": "Brand & Logo Designer",
+            "author": "Book Author", "manuscript": "Publishing Manager",
+            "music": "Music Artist Generator", "webdesign": "Web Developer",
+            "audiobook": "Audiobook Producer", "creator": "Brand Creator",
+            "video": "Video & Ad Generator",
+            "social": "Social Media Campaign Manager", "onlyfans": "OF Agent", }
         agent_subtitles = {
             "chat":        "General-purpose conversation. Pick a tool, pick a model, talk.",
             "fiverr":      "Create client-ready logo concepts, gig listings, and polished delivery messages.",
             "author":      "Plan, draft, revise, and export long-form fiction and non-fiction.",
             "manuscript":  "Prepare a finished book for distribution, marketing, and ongoing sales tracking.",
-            "music":       "Plan releases, distribution, promotion, and sustainable artist income.",
+            "music":       "Develop songs, albums, artist identities, releases, promotion, and sustainable income plans.",
             "webdesign":   "Modern HTML, CSS, and JavaScript generation with responsive layout and design advice.",
             "audiobook":   "Turn PDF, EPUB, TXT, and MOBI books into production-ready MP3 audiobooks.",
             "creator":     "Create reusable concepts, captions, posting plans, and promotional assets for any venture or platform.",
@@ -8304,6 +8378,30 @@ class GodAI(QWidget):
             "chunk_tokens": tool.get("default_chunk_tokens", 1400),
         }
 
+    def _update_audiobook_source_state(self, empty_message: str = "") -> None:
+        """Keep the source selector compact while leaving several books visible."""
+        count = self.audiobook_book_list.count()
+        if count == 0:
+            if empty_message:
+                self.audiobook_empty_state.setText(empty_message)
+            self.audiobook_source_stack.setCurrentWidget(
+                self.audiobook_empty_state)
+            self.audiobook_source_stack.setFixedHeight(
+                CONTROL_HEIGHT * 2 + SM)
+            return
+
+        self.audiobook_source_stack.setCurrentWidget(
+            self.audiobook_book_list)
+        rows = min(4, count)
+        row_height = self.audiobook_book_list.sizeHintForRow(0)
+        if row_height <= 0:
+            row_height = CONTROL_HEIGHT
+        height = min(
+            CONTROL_HEIGHT * 5 + MD,
+            max(CONTROL_HEIGHT * 2 + SM, rows * row_height + MD),
+        )
+        self.audiobook_source_stack.setFixedHeight(height)
+
     def refresh_audiobook_books(self):
         defaults = self.get_audiobook_defaults()
         input_folder = Path(defaults["input"]).expanduser()
@@ -8317,6 +8415,9 @@ class GodAI(QWidget):
         self.tool_progress.setValue(0)
 
         if not input_folder.exists():
+            self._update_audiobook_source_state(
+                "The input folder does not exist yet. Set it up, add a PDF, "
+                "EPUB, TXT, or MOBI file, then refresh the list.")
             self.output_box.setPlainText(f"[Error] Input folder does not exist:\n{input_folder}")
             self.audiobook_status_label.setText("Choose an input folder to add your first book.")
             return
@@ -8324,6 +8425,9 @@ class GodAI(QWidget):
         books = sorted(f for f in input_folder.iterdir() if f.is_file() and f.suffix.lower() in SUPPORTED_EBOOKS)
 
         if not books:
+            self._update_audiobook_source_state(
+                "No supported books found in the input folder. Add a PDF, "
+                "EPUB, TXT, or MOBI file, then refresh the list.")
             self.output_box.setPlainText(f"[Info] No supported ebooks found in:\n{input_folder}")
             self.audiobook_status_label.setText("No books yet — add a PDF, EPUB, TXT, or MOBI file.")
             return
@@ -8332,6 +8436,8 @@ class GodAI(QWidget):
             item = QListWidgetItem(book.name)
             item.setData(Qt.UserRole, str(book))
             self.audiobook_book_list.addItem(item)
+
+        self._update_audiobook_source_state()
 
         if len(books) == 1:
             self.audiobook_book_list.setCurrentRow(0)
@@ -8676,6 +8782,20 @@ class GodAI(QWidget):
             {"role": "user", "content": full_prompt},
         ]
 
+    def _set_route_result(self, agent: str = "", provider: str = "",
+                          model: str = "") -> None:
+        """Update the structured last-decision card from every run path."""
+        if hasattr(self, "routing_status_card"):
+            if agent or provider or model:
+                self.routing_status_card.set_route(agent, provider, model)
+            else:
+                self.routing_status_card.reset_route()
+            return
+        if hasattr(self, "route_result_label"):
+            self.route_result_label.setText(
+                f"Router: {agent} · {provider} · {model}"
+                if agent or provider or model else "Router: not yet computed")
+
     def auto_route_agent(self):
         raw_text = self.input_box.toPlainText().strip()
         if not raw_text:
@@ -8685,7 +8805,7 @@ class GodAI(QWidget):
         selected_agent = self.agent_box.currentText()
         selected_tool = self.tool_box.currentText() if hasattr(self, "tool_box") else "General Chat"
         backend, model = self.resolve_backend_model()
-        self.route_result_label.setText(f"Router: {selected_agent} · {backend} · {model}")
+        self._set_route_result(selected_agent, backend, model)
 
     def resolve_backend_model(self):
         provider = self.provider_box.currentText()
@@ -8819,7 +8939,7 @@ class GodAI(QWidget):
             self.output_box.append("")
             self.output_box.append("Starting background worker...\n")
 
-            self.route_result_label.setText(f"Router: {selected_agent} · {final_backend} · {final_model}")
+            self._set_route_result(selected_agent, final_backend, final_model)
 
             self.send_btn.setEnabled(False)
             self.stop_chat_btn.setEnabled(True)
@@ -9194,7 +9314,8 @@ class GodAI(QWidget):
         )
 
         self.load_history_list()
-        self.route_result_label.setText(f"Router: {self.pending_agent} · {self.pending_backend} · {self.pending_model}")
+        self._set_route_result(
+            self.pending_agent, self.pending_backend, self.pending_model)
 
     def handle_chat_error(self, error):
         self.stop_chat_timer()
@@ -9277,30 +9398,15 @@ class GodAI(QWidget):
 
     def update_resource_label(self):
         stats = self.monitor.snapshot()
+        if hasattr(self, "resource_status_card"):
+            self.resource_status_card.set_snapshot(stats)
+            return
 
-        def colorize(text: str, level: str):
-            color_map = {"green": "#1a7f37", "yellow": "#b07d00", "red": "#b42318"}
-            return f"<span style='color:{color_map.get(level, '#ffffff')}; font-weight:600;'>{text}</span>"
-
-        cpu_text = colorize(f"{stats['cpu_percent']:5.1f}%", stats["cpu_level"])
-        ram_text = colorize(f"{stats['ram_percent']:5.1f}%", stats["ram_level"])
-        swap_text = colorize(f"{stats['swap_percent']:5.1f}%", stats["swap_level"])
-
-        if stats["battery_percent"] is None:
-            battery_text = "<span style='color:#666;'>n/a</span>"
-        else:
-            battery_text = colorize(f"{stats['battery_percent']:5.1f}% {stats['battery_note']}", stats["battery_level"])
-
-        html = f"""
-        <b>RAM</b> {ram_text}<br>
-        <small>Used: {stats['ram_used_gb']:.1f} GB · Free: {stats['ram_available_gb']:.1f} GB</small><br>
-        <b>CPU</b> {cpu_text}<br>
-        <b>SWAP</b> {swap_text}<br>
-        <small>Used: {stats['swap_used_gb']:.1f} / {stats['swap_total_gb']:.1f} GB</small><br>
-        <b>BATTERY</b> {battery_text}
-        """.strip()
-
-        self.resource_label.setText(html)
+        # Compatibility for lightweight hosts that still expose the old label.
+        self.resource_label.setText(
+            f"Memory {stats['ram_percent']:.0f}% · "
+            f"Processor {stats['cpu_percent']:.0f}% · "
+            f"Swap {stats['swap_percent']:.0f}%")
 
     def update_usage_labels(self):
         """Push spend into the stat blocks and the two budget bars."""
@@ -9451,9 +9557,9 @@ class GodAI(QWidget):
                     break
 
             self.input_box.setPlainText(first_user_message)
-            self.route_result_label.setText(
-                f"Router: {data.get('agent')} · {data.get('backend')} · {data.get('model')}"
-            )
+            self._set_route_result(
+                data.get("agent", ""), data.get("backend", ""),
+                data.get("model", ""))
 
             agent_name = data.get("agent", "chat")
             if self.agent_box.findText(agent_name) >= 0:
@@ -9484,7 +9590,7 @@ class GodAI(QWidget):
         self.input_box.clear()
         self.output_box.clear()
         self.hide_output_area()
-        self.route_result_label.setText("Router: not yet computed")
+        self._set_route_result()
 
     def export_report(self):
         content = self.output_box.toPlainText().strip()
@@ -9495,8 +9601,8 @@ class GodAI(QWidget):
         filepath = self.report_exporter.export_text_report(title, content)
         QMessageBox.information(self, "Export Complete", f"Report saved to:\n{filepath}")
 
-    def show_agent_docs(self):
-        """Open the documentation dialog for the currently active agent."""
+    def _show_agent_docs_legacy(self):
+        """Legacy single-article renderer retained for bundle recovery only."""
         agent_name = getattr(self, "_current_agent", "chat")
 
         # Map agent key → doc filename (same as the key for most)
@@ -9653,42 +9759,41 @@ class GodAI(QWidget):
 
         dialog.exec()
 
+    def show_agent_docs(self):
+        """Open the searchable reference at the currently active agent."""
+        from ui.docs_center import show_docs_center
+        agent = getattr(self, "_current_agent", "overview")
+        return show_docs_center(self, RESOURCE_DIR, start_page=agent)
+
     def show_model_guide(self):
         from ui.dialogs import show_model_guide as _show_model_guide
         return _show_model_guide(self)
     def show_learning_center(self):
-        """Guides, workflows and the money chapter, rendered from docs/learn/."""
-        from ui.learning_center import show_learning_center as _show
-        return _show(self, RESOURCE_DIR)
+        """Open the operating lesson for the active agent (F1 does the same)."""
+        from ui.learning_center import (
+            learning_target_for_widget, show_learning_center as _show,
+        )
+        contextual = learning_target_for_widget(QApplication.focusWidget())
+        agent = getattr(self, "_current_agent", "")
+        start_page = {
+            "author": "draft", "manuscript": "publish",
+            "audiobook": "audiobooks", "music": "music",
+            "video": "video", "social": "social",
+            "webdesign": "site-builder", "fiverr": "client-gigs",
+            "creator": "creator", "onlyfans": "onlyfans",
+        }.get(agent)
+        start_anchor = ""
+        if contextual:
+            start_page, start_anchor = contextual
+        return _show(
+            self, RESOURCE_DIR, start_page=start_page,
+            start_anchor=start_anchor)
 
     def show_docs(self, anchor: str = ""):
-        dialog = QDialog(self)
-        dialog.setWindowTitle("Documentation")
-        dialog.resize(950, 700)
-        layout = QVBoxLayout(dialog)
-        browser = QTextBrowser()
-        browser.setOpenLinks(False)
-
-        if README_FILE.exists():
-            text = README_FILE.read_text(encoding="utf-8")
-            html = markdown.markdown(text, extensions=["toc", "tables"])
-        else:
-            html = "<h2>No README.md found</h2><p>Create README.md in the project root.</p>"
-
-        browser.setHtml(html)
-
-        def on_anchor_clicked(url):
-            fragment = url.fragment()
-            if fragment:
-                browser.scrollToAnchor(fragment)
-
-        browser.anchorClicked.connect(on_anchor_clicked)
-
-        if anchor:
-            QTimer.singleShot(50, lambda: browser.scrollToAnchor(anchor))
-
-        layout.addWidget(browser)
-        dialog.exec()
+        """Open the complete searchable technical reference."""
+        from ui.docs_center import show_docs_center
+        return show_docs_center(
+            self, RESOURCE_DIR, start_page="overview", start_anchor=anchor)
 
     def closeEvent(self, event):
         try:

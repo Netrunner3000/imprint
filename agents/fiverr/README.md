@@ -1,4 +1,4 @@
-# Client Gigs agent
+# Brand & Logo Designer
 
 Owns client-service workflows: brief interpretation, logo concepts, gig listing
 copy and professional delivery messages.  Its public API is
@@ -37,7 +37,7 @@ User guidance: `docs/agents/fiverr.md`.  Run focused coverage with
     task fixed to "build an image-generation prompt for the selected GPT
     Image model to create a logo for this business."
 
-- **`recommendations.py`** — registers Client Gigs' `RECOMMENDATION_PROFILE`
+- **`recommendations.py`** — registers Brand & Logo Designer's `RECOMMENDATION_PROFILE`
   (an `AgentProfile` from `services.recommendations.models`) with the shared
   model-recommendation engine: task tags `marketing` / `creative` /
   `structured`, `cost_weight=.22` and `speed_weight=.16` — both raised above

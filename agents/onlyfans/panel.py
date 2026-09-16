@@ -93,6 +93,7 @@ class OnlyFansDashboard(QWidget):
     """Business surface for OnlyFans, intentionally separate from Creator."""
 
     campaign_requested = Signal(dict)
+    teaser_requested = Signal(dict)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -225,8 +226,13 @@ class OnlyFansDashboard(QWidget):
         content_actions = QHBoxLayout()
         content_actions.addStretch()
         self.build_test_btn = QPushButton("Build this test in Creator")
-        self.build_test_btn.setObjectName("PrimaryAction")
         content_actions.addWidget(self.build_test_btn)
+        self.generate_teaser_btn = QPushButton("Generate SFW Teaser")
+        self.generate_teaser_btn.setObjectName("PrimaryAction")
+        self.generate_teaser_btn.setToolTip(
+            "Send this opportunity to Creator and generate a real promotional "
+            "video with Higgsfield AI. Paid and safe-for-work only.")
+        content_actions.addWidget(self.generate_teaser_btn)
         content_layout.addLayout(content_actions)
         content_layout.addStretch()
         self.sections.addTab(content, "Content Intelligence")
@@ -285,6 +291,7 @@ class OnlyFansDashboard(QWidget):
         self.table.itemDoubleClicked.connect(lambda _item: self._emit_campaign())
         self.create_campaign_btn.clicked.connect(self._emit_campaign)
         self.build_test_btn.clicked.connect(self._emit_campaign)
+        self.generate_teaser_btn.clicked.connect(self._emit_teaser)
 
     @staticmethod
     def _chart_card(title: str, chart: QWidget) -> QWidget:
@@ -395,6 +402,7 @@ class OnlyFansDashboard(QWidget):
         trend = self._selected_trend()
         self.create_campaign_btn.setEnabled(trend is not None)
         self.build_test_btn.setEnabled(trend is not None)
+        self.generate_teaser_btn.setEnabled(trend is not None)
         if trend is None:
             self.selection_note.setText("Select a signal to inspect or hand off.")
             for label in (self.content_detail, self.monetization_detail,
@@ -466,6 +474,14 @@ class OnlyFansDashboard(QWidget):
         if trend is None:
             return
         self.campaign_requested.emit(campaign_context(
+            trend, self.geography_box.currentText(), self.window_box.currentText()))
+
+    def _emit_teaser(self) -> None:
+        """Request the shared Creator/Higgsfield production path."""
+        trend = self._selected_trend()
+        if trend is None:
+            return
+        self.teaser_requested.emit(campaign_context(
             trend, self.geography_box.currentText(), self.window_box.currentText()))
 
     @staticmethod

@@ -78,3 +78,36 @@ Each step logs as it goes when `verbose=True`, which `run_course.py` sets.
   small smoke test; a 12 × 10 course is 120 lessons of generation and media.
 - Because it has no panel, it is not in the registry and does not appear in the
   sidebar or in Settings.
+
+## Before you run
+
+Start with one module and one lesson using the mock avatar and voice. This
+checks content generation, slides, packaging, and local media tools without
+buying avatar or voice minutes. Confirm the output folder is writable and the
+Anthropic key is available in the source environment. Only increase the course
+shape after this smoke test opens successfully.
+
+## Verify the result
+
+Open `index.html`, follow every lesson link, download one slide deck, and play
+one complete lesson. Check that learning objectives, narration, slides, and quiz
+agree; asset existence alone is not a quality check. Mock audio or avatar files
+prove orchestration only and are not release-ready media.
+
+## Storage, cost, and recovery
+
+The output directory is created before generation, so an interrupted run can
+leave a valid outline and partial lesson folders. Keep those files for
+diagnosis, but rerun into a new output location rather than presenting a partial
+package as complete. Anthropic, HeyGen, Synthesia, and ElevenLabs charges are
+external to Imprint's GUI budget controls. Calculate the intended lesson count
+before switching from mock providers.
+
+## Common failures
+
+| Symptom | Check |
+|---|---|
+| Exits before the outline | `ANTHROPIC_API_KEY`, network access, and provider quota. |
+| Slides exist but video fails | Avatar/voice credentials and local media dependencies. |
+| `index.html` is missing | A lesson failed before the final packaging stage; inspect the last log line. |
+| Packaged app cannot find Course | Expected: Course runs only from a source checkout. |

@@ -17,6 +17,7 @@ Run with:  pytest tests/test_learning_center.py -v
 """
 
 import os
+import json
 import re
 import sys
 from pathlib import Path
@@ -48,9 +49,10 @@ def test_every_listed_page_exists():
 
 
 def test_no_orphan_pages_on_disk():
-    """A page nobody can reach is the same as no page."""
+    """Every task-sized v2 module must be reachable from the manifest."""
     listed = {page.filename for page in _pages()}
-    on_disk = {p.name for p in LEARN_DIR.glob("*.md")}
+    on_disk = {str(p.relative_to(LEARN_DIR))
+               for p in (LEARN_DIR / "modules").glob("*.md")}
     assert not (on_disk - listed), f"not listed in PAGES: {sorted(on_disk - listed)}"
 
 
@@ -59,7 +61,8 @@ def test_every_image_reference_resolves(filename):
     """A missing screenshot renders as a broken-image box, not an error."""
     text = (LEARN_DIR / filename).read_text(encoding="utf-8")
     refs = re.findall(r"!\[[^\]]*\]\(([^)]+)\)", text)
-    broken = [r for r in refs if not (LEARN_DIR / r).exists()]
+    parent = (LEARN_DIR / filename).parent
+    broken = [r for r in refs if not (parent / r).resolve().exists()]
     assert not broken, f"{filename} references missing images: {broken}"
 
 
@@ -68,7 +71,8 @@ def test_internal_links_point_at_real_pages(filename):
     """The pages navigate between themselves by filename."""
     text = (LEARN_DIR / filename).read_text(encoding="utf-8")
     links = re.findall(r"\[[^\]]*\]\(([^)]+\.md)(?:#[^)]*)?\)", text)
-    broken = [l for l in links if not (LEARN_DIR / l.split("#")[0]).exists()]
+    parent = (LEARN_DIR / filename).parent
+    broken = [l for l in links if not (parent / l.split("#")[0]).resolve().exists()]
     assert not broken, f"{filename} links to missing pages: {broken}"
 
 
@@ -100,13 +104,14 @@ def test_screenshot_generator_covers_the_referenced_images():
     referenced = set()
     for page in _pages():
         text = (LEARN_DIR / page.filename).read_text(encoding="utf-8")
-        for ref in re.findall(r"!\[[^\]]*\]\(img/([^)]+)\)", text):
-            referenced.add(ref)
+        for ref in re.findall(r"!\[[^\]]*\]\(([^)]+\.png)\)", text):
+            referenced.add(Path(ref).name)
     assert referenced <= produced, \
         f"referenced but never generated: {sorted(referenced - produced)}"
 
 
 def test_dialog_opens_and_lists_the_pages(app, monkeypatch):
+    from PySide6.QtCore import Qt
     from PySide6.QtWidgets import QDialog
     import main
     from ui import learning_center
@@ -118,16 +123,19 @@ def test_dialog_opens_and_lists_the_pages(app, monkeypatch):
     dialog = learning_center.show_learning_center(window, main.RESOURCE_DIR)
 
     from PySide6.QtWidgets import QListWidget, QLineEdit, QTextBrowser
-    contents = dialog.findChild(QListWidget)
-    browser = dialog.findChild(QTextBrowser)
+    contents = dialog.findChild(QListWidget, "LearnContents")
+    browser = dialog.findChild(QTextBrowser, "LearnBrowser")
     search = dialog.findChild(QLineEdit, "LearnSearch")
     assert contents is not None and browser is not None
     assert search is not None
-    assert contents.count() == len(_pages())
+    listed_page_ids = [contents.item(row).data(Qt.UserRole)
+                       for row in range(contents.count())
+                       if contents.item(row).data(Qt.UserRole)]
+    assert len(listed_page_ids) == len(_pages())
     assert browser.toPlainText().strip(), "first page rendered empty"
 
 
-def test_search_filters_the_complete_handbook(app, monkeypatch):
+def test_search_returns_anchored_sections_from_the_complete_handbook(app, monkeypatch):
     from PySide6.QtCore import Qt
     from PySide6.QtWidgets import QDialog, QLineEdit, QListWidget
     import main
@@ -140,27 +148,34 @@ def test_search_filters_the_complete_handbook(app, monkeypatch):
     contents = dialog.findChild(QListWidget, "LearnContents")
 
     search.setText("launcher")
-    assert contents.count() == 1
-    assert contents.item(0).data(Qt.UserRole) == "07-troubleshooting.md"
+    assert contents.count() >= 1
+    assert any(contents.item(row).data(Qt.UserRole) == "files-recovery"
+               for row in range(contents.count()))
+    assert all(contents.item(row).data(Qt.UserRole + 2)
+               for row in range(contents.count()))
     search.clear()
-    assert contents.count() == len(_pages())
+    assert sum(bool(contents.item(row).data(Qt.UserRole))
+               for row in range(contents.count())) == len(_pages())
 
 
 def test_every_workspace_agent_has_a_learning_guide():
     """Adding a workspace must also add searchable operating guidance."""
     import main
 
-    text = (LEARN_DIR / "02-agents.md").read_text(encoding="utf-8")
     listed = {agent for agents in main.WORKSPACES.values() for agent in agents}
-    missing_sections = [agent for agent in listed if f"(`{agent}`)" not in text]
+    covered = {page.agent for page in _pages() if page.agent}
+    missing_sections = sorted(listed - covered)
     missing_sheets = [agent for agent in listed
                       if not (PROJECT_ROOT / "docs" / "agents" / f"{agent}.md").exists()]
     assert not missing_sections, f"agents missing Learning Centre section: {missing_sections}"
     assert not missing_sheets, f"agents missing technical guide: {missing_sheets}"
 
 
-def test_income_page_uses_measured_unit_economics_not_income_forecasts():
-    text = (LEARN_DIR / "03-profit.md").read_text(encoding="utf-8").casefold()
+def test_income_pages_use_measured_unit_economics_not_income_forecasts():
+    text = "\n".join(
+        (LEARN_DIR / page.filename).read_text(encoding="utf-8")
+        for page in _pages() if page.section == "income"
+    ).casefold()
     required = (
         "contribution margin", "conversion rate", "human hour",
         "qualified opportunities", "scale rule", "stop rule",
@@ -168,5 +183,94 @@ def test_income_page_uses_measured_unit_economics_not_income_forecasts():
     )
     assert all(term in text for term in required)
     assert "what to expect, honestly" not in text
-    assert "/mo" not in text
+    assert re.search(r"\b\d+(?:\.\d+)?\s*/mo\b", text) is None
     assert "month 6" not in text
+
+
+def test_manifest_defines_the_complete_v2_curriculum():
+    assert len(_pages()) == 26
+    assert {page.section for page in _pages()} == {
+        "home", "foundations", "agents", "income"}
+    assert len({page.id for page in _pages()}) == len(_pages())
+    assert len({page.order for page in _pages()}) == len(_pages())
+
+
+@pytest.mark.parametrize("page", _pages(), ids=lambda page: page.id)
+def test_operational_lesson_contract(page):
+    text = (LEARN_DIR / page.filename).read_text(encoding="utf-8").casefold()
+    assert "outcome" in text
+    assert "prerequisite" in text
+    assert "verification" in text
+    assert "common failures" in text
+    assert "next action" in text
+
+
+def test_best_fit_lesson_explains_both_recommendation_scopes():
+    text = (LEARN_DIR / "modules/12-best-fit.md").read_text(encoding="utf-8").casefold()
+    assert "provider best fit" in text
+    assert "model best fit" in text
+    assert "inside the provider currently selected" in text
+    assert "setup-target" in text or "setup target" in text
+
+
+def test_income_evidence_taxonomy_is_complete():
+    text = (LEARN_DIR / "modules/30-evidence.md").read_text(encoding="utf-8")
+    for label in ("OBSERVED", "DERIVED", "ESTIMATE", "PROXY", "HYPOTHESIS",
+                  "MODEL-GENERATED", "DEMO", "UNAVAILABLE"):
+        assert label in text
+
+
+def test_heading_search_returns_snippets_and_anchors():
+    from ui.learning_center import build_search_index, search_index
+    index = build_search_index(LEARN_DIR, _pages())
+    hits = search_index(index, "cancel teaser")
+    assert hits
+    assert all(hit.anchor and hit.snippet for hit in hits)
+    assert any(hit.page.id == "creator" for hit in hits)
+
+
+def test_income_claims_policy_covers_learning_and_agent_prompts():
+    income_text = "\n".join(
+        (LEARN_DIR / page.filename).read_text(encoding="utf-8")
+        for page in _pages() if page.section == "income"
+    ).casefold()
+    music_prompt = (PROJECT_ROOT / "agents/music/agent.py").read_text(
+        encoding="utf-8").casefold()
+    assert "never present" in music_prompt and "forecast" in music_prompt
+    assert "universal per-stream payout" in music_prompt
+    prohibited = ("guaranteed income", "passive income is", "realistic monthly projections")
+    assert not any(phrase in income_text for phrase in prohibited)
+    assert not any(phrase in music_prompt for phrase in prohibited)
+
+
+def test_every_agent_lesson_has_decision_and_safety_boundaries():
+    for page in (page for page in _pages() if page.section == "agents"):
+        text = (LEARN_DIR / page.filename).read_text(encoding="utf-8").casefold()
+        for term in ("control", "how to read", "acceptance checklist",
+                     "cost", "gate", "done when"):
+                assert term in text, f"{page.id} missing {term!r}"
+
+
+def test_context_help_map_targets_real_lessons_and_anchors():
+    from ui.learning_center_v2 import _document_sections
+
+    mapping = json.loads((LEARN_DIR / "help_map.json").read_text(encoding="utf-8"))
+    pages = {page.id: page for page in _pages()}
+    assert len(mapping) >= 120
+    for attribute, target in mapping.items():
+        page_id, separator, anchor = target.partition("#")
+        assert page_id in pages, f"{attribute} targets missing page {page_id}"
+        assert separator and anchor, f"{attribute} has no exact anchor"
+        text = (LEARN_DIR / pages[page_id].filename).read_text(encoding="utf-8")
+        anchors = {item[1] for item in _document_sections(text)}
+        assert anchor in anchors, f"{attribute} targets missing anchor {target}"
+
+
+def test_focused_control_resolves_to_contextual_help(app):
+    from PySide6.QtWidgets import QPushButton, QWidget
+    from ui.learning_center import learning_target_for_widget
+
+    parent = QWidget()
+    parent.setProperty("imprintLearnTarget", "draft#control-atlas")
+    child = QPushButton(parent)
+    assert learning_target_for_widget(child) == ("draft", "control-atlas")

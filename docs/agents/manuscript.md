@@ -1,8 +1,8 @@
-# PUBLISHER — Publishing metrics, marketing content, and launch tracking
+# PUBLISHING MANAGER — Publishing metrics, marketing content, and launch tracking
 
 `key: manuscript` · class: `agents/manuscript_agent.py → ManuscriptAgent` · panel: `build_manuscript_panel()` · handlers: `manuscript_refresh()`, `manuscript_ingest_kdp()`, `manuscript_ask()`, `quote_finder_suggest()`, `manuscript_generate_quote_graphic()`, `manuscript_generate_short()`, `manuscript_generate_calendar()`, `manuscript_add_todo()`
 
-> Not to be confused with the **Manuscript** left-panel button (`key: author`, see [author.md](author.md)) — that's the writing studio. This agent, labelled **Publisher** in the UI, picks up once a draft exists: sales data, launch content, and the publishing checklist.
+> The **Book Author** (`key: author`, see [author.md](author.md)) owns the writing studio. Publishing Manager picks up once a draft exists: sales data, launch content, and the publishing checklist.
 
 ## What it does
 Five tabs covering the post-draft, pre/post-launch side of publishing a book:
