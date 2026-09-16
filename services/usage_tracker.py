@@ -60,7 +60,10 @@ class UsageTracker:
             eur_per_usd = float(eur_row["value"]) if eur_row else 0.92
 
             row = conn.execute(
-                "SELECT input_per_1m_usd, output_per_1m_usd, cached_input_per_1m_usd FROM pricing WHERE backend = ? AND model IN (?, 'default') ORDER BY CASE model WHEN ? THEN 0 ELSE 1 END LIMIT 1",
+                "SELECT input_per_1m_usd, output_per_1m_usd, cached_input_per_1m_usd "
+                "FROM pricing WHERE backend = ? AND model IN (?, 'default') "
+                "AND input_per_1m_usd > 0 AND output_per_1m_usd > 0 "
+                "ORDER BY CASE model WHEN ? THEN 0 ELSE 1 END LIMIT 1",
                 (backend, model, model)
             ).fetchone()
 

@@ -1,5 +1,5 @@
 # Studio Assistant — TODO
 
-- [ ] `P1` Decide whether Studio Assistant becomes a visible workspace or is removed.
-- [ ] `P2` If retained, give it an explicit creative-studio scope and guide.
-- [ ] `P2` Remove legacy controls that exist only for an unreachable chat panel.
+- [x] `P1` Studio Assistant is a visible workspace using the shared normal panel.
+- [x] `P2` Its creative-studio scope, checks and recovery path are in the Learning Centre and Docs.
+- [x] `P2` The registry no longer removes the chat agent, and the hidden selector now exists only to carry the active agent key for the shared panel.

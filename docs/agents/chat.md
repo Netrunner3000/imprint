@@ -1,9 +1,9 @@
 # CHAT — General-purpose conversation
 
-`key: chat` · class: `agents/chat_agent.py → ChatAgent` · panel: standard `normal_panel` (no custom panel) · handler: `send_prompt()`
+`key: chat` · class: `agents/chat/agent.py → ChatAgent` · panel: standard `normal_panel` (no custom panel) · handler: `send_prompt()`
 
 ## What it does
-The default agent. Plain text in, plain text out, with full multi-turn conversation history. It has no domain framing of its own — instead it wears whichever **Tool** you pick (General Chat, Writing, Coding, Summarize, Rewrite), each supplying a different system prompt. Use it for anything without a dedicated specialist agent.
+The Assistant workspace's agent. Plain text in, plain text out, with full multi-turn conversation history. It has no domain framing of its own — instead it wears whichever **Tool** you pick (General Chat, Writing, Coding, Summarize, Rewrite), each supplying a different system prompt. Use it for anything without a dedicated specialist agent.
 
 ## Inputs (panel controls)
 | Control | Purpose |
@@ -23,7 +23,7 @@ Streaming text into the **Output** box (auto-hidden until there's content). Each
 ## Under the hood — files & functions
 | Location | Role |
 |---|---|
-| `agents/chat_agent.py` | `ChatAgent` — message builder. |
+| `agents/chat/agent.py` | `ChatAgent` — message builder. |
 | `main.py: send_prompt()` | Builds request, spawns `ChatWorker`, streams tokens. |
 | `main.py: ChatWorker` (QThread) | Runs the backend call off the UI thread. |
 | DB `tools` table / `config/tool_prompts.json` | The actual system prompts per Tool. |

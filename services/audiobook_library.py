@@ -13,6 +13,7 @@ stops being listed, and its progress row is harmless if it comes back.
 
 from __future__ import annotations
 
+import json
 import subprocess
 from dataclasses import dataclass
 from datetime import datetime
@@ -46,6 +47,65 @@ class Audiobook:
     @property
     def started(self) -> bool:
         return self.position_ms > 0 and not self.finished
+
+
+@dataclass(frozen=True)
+class ChapterMark:
+    title: str
+    position_ms: int
+    source: str  # embedded | saved
+
+
+def embedded_chapters(path: Path) -> list[ChapterMark]:
+    """Read actual chapter timestamps from the audio container, if present."""
+    try:
+        result = subprocess.run(
+            ["ffprobe", "-v", "error", "-show_chapters", "-of", "json", str(path)],
+            capture_output=True, text=True, timeout=10, check=True,
+        )
+        raw = json.loads(result.stdout or "{}")
+    except (OSError, subprocess.SubprocessError, ValueError):
+        return []
+    chapters = []
+    for index, row in enumerate(raw.get("chapters") or [], start=1):
+        try:
+            position = max(0, int(float(row["start_time"]) * 1000))
+        except (KeyError, TypeError, ValueError):
+            continue
+        title = (row.get("tags") or {}).get("title") or f"Chapter {index}"
+        chapters.append(ChapterMark(str(title), position, "embedded"))
+    return chapters
+
+
+def saved_marks(path: Path) -> list[ChapterMark]:
+    with get_connection() as conn:
+        rows = conn.execute(
+            "SELECT title, position_ms FROM audiobook_marks "
+            "WHERE path = ? ORDER BY position_ms", (str(path),)
+        ).fetchall()
+    return [ChapterMark(row["title"], int(row["position_ms"]), "saved")
+            for row in rows]
+
+
+def save_mark(path: Path, position_ms: int, title: str) -> None:
+    if position_ms < 0 or not title.strip():
+        raise ValueError("A mark needs a non-negative position and a title.")
+    with get_connection() as conn:
+        conn.execute("""
+            INSERT INTO audiobook_marks (path, position_ms, title, created_at)
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT(path, position_ms) DO UPDATE SET title = excluded.title
+        """, (str(path), int(position_ms), title.strip(),
+              datetime.now().isoformat(timespec="seconds")))
+        conn.commit()
+
+
+def delete_mark(path: Path, position_ms: int) -> None:
+    with get_connection() as conn:
+        conn.execute(
+            "DELETE FROM audiobook_marks WHERE path = ? AND position_ms = ?",
+            (str(path), int(position_ms)))
+        conn.commit()
 
 
 def scan(folder: Path) -> list[Audiobook]:

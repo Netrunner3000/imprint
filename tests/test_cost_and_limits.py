@@ -328,13 +328,67 @@ def test_a_backend_without_a_cached_rate_bills_at_full_input(tracker):
     ("kimi", "kimi-k2.7-code"),
     ("openai", "gpt-4o-mini"),
     ("deepseek", "deepseek-chat"),
+    ("gemini", "gemini-2.5-flash"),
+    ("gemini", "gemini-2.5-pro"),
 ])
 def test_every_priced_provider_actually_bills(tracker, backend, model):
-    """Regression: these four had no pricing rows at all, so every request
-    through them cost EUR 0.00 — invisible to the budget caps and the spend
-    counters. Gemini is excluded: its rates are genuinely 0.0 in
-    config/pricing.json and still need filling in."""
+    """Every priced cloud provider must count against budgets and spend."""
     assert tracker.calculate_cost_eur(backend, model, 10**6, 10**6) > 0
+
+
+def test_legacy_zero_gemini_row_uses_priced_default(tracker):
+    """A stale 1.5/2.0 row must not shadow the nonzero provider reserve."""
+    cost = tracker.calculate_cost_eur("gemini", "gemini-1.5-flash", 10**6, 10**6)
+    assert cost > 0
+
+
+def test_gemini_zero_price_migration_preserves_user_override():
+    import sqlite3
+    from services import database
+
+    conn = sqlite3.connect(":memory:")
+    conn.executescript(database.SCHEMA)
+    conn.execute(
+        "INSERT INTO pricing (backend, model, input_per_1m_usd, output_per_1m_usd) "
+        "VALUES ('gemini', 'default', 0, 0)"
+    )
+    conn.execute(
+        "INSERT INTO pricing (backend, model, input_per_1m_usd, output_per_1m_usd) "
+        "VALUES ('gemini', 'gemini-2.5-flash', 7, 8)"
+    )
+    database._correct_gemini_zero_pricing(conn)
+    rows = dict(conn.execute(
+        "SELECT model, input_per_1m_usd FROM pricing WHERE backend = 'gemini'"
+    ))
+    assert rows["default"] == 4.0
+    assert rows["gemini-2.5-flash"] == 7
+    assert rows["gemini-2.5-pro"] == 2.5
+
+
+def test_gemini_legacy_reserve_is_updated_but_custom_reserve_survives():
+    import sqlite3
+    from services import database
+
+    conn = sqlite3.connect(":memory:")
+    conn.executescript(database.SCHEMA)
+    conn.execute(
+        "INSERT INTO pricing (backend, model, input_per_1m_usd, output_per_1m_usd) "
+        "VALUES ('gemini', 'default', 2.5, 15)"
+    )
+    database._correct_gemini_zero_pricing(conn)
+    assert conn.execute(
+        "SELECT input_per_1m_usd, output_per_1m_usd FROM pricing "
+        "WHERE backend = 'gemini' AND model = 'default'"
+    ).fetchone() == (4.0, 18.0)
+    conn.execute(
+        "UPDATE pricing SET input_per_1m_usd = 7, output_per_1m_usd = 8 "
+        "WHERE backend = 'gemini' AND model = 'default'"
+    )
+    database._correct_gemini_zero_pricing(conn)
+    assert conn.execute(
+        "SELECT input_per_1m_usd, output_per_1m_usd FROM pricing "
+        "WHERE backend = 'gemini' AND model = 'default'"
+    ).fetchone() == (7.0, 8.0)
 
 
 # ─────────────────────────────────────────────────────────────────────────────

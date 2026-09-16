@@ -136,6 +136,14 @@ CREATE TABLE IF NOT EXISTS audiobook_progress (
     last_played   TEXT NOT NULL DEFAULT ''
 );
 
+CREATE TABLE IF NOT EXISTS audiobook_marks (
+    path          TEXT NOT NULL,
+    position_ms   INTEGER NOT NULL,
+    title         TEXT NOT NULL,
+    created_at    TEXT NOT NULL,
+    PRIMARY KEY (path, position_ms)
+);
+
 CREATE TABLE IF NOT EXISTS creator_accounts (
     id            INTEGER PRIMARY KEY AUTOINCREMENT,
     handle        TEXT NOT NULL UNIQUE,
@@ -157,6 +165,16 @@ CREATE TABLE IF NOT EXISTS creator_accounts (
     created_at    TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS creator_platform_policies (
+    platform      TEXT PRIMARY KEY,
+    synthetic_persona TEXT NOT NULL DEFAULT 'unknown',
+    verified_owner_required TEXT NOT NULL DEFAULT 'unknown',
+    ai_disclosure TEXT NOT NULL DEFAULT '',
+    publishing_method TEXT NOT NULL DEFAULT 'manual_only',
+    source_url    TEXT NOT NULL DEFAULT '',
+    reviewed_on   TEXT NOT NULL DEFAULT ''
+);
+
 CREATE TABLE IF NOT EXISTS creator_content (
     id           INTEGER PRIMARY KEY AUTOINCREMENT,
     account_id   INTEGER NOT NULL,
@@ -170,6 +188,17 @@ CREATE TABLE IF NOT EXISTS creator_content (
     -- user marking that they sent it by hand.
     status       TEXT NOT NULL DEFAULT 'draft',
     media_path   TEXT NOT NULL DEFAULT '',
+    campaign     TEXT NOT NULL DEFAULT '',
+    channel      TEXT NOT NULL DEFAULT '',
+    permalink    TEXT NOT NULL DEFAULT '',
+    reach        INTEGER NOT NULL DEFAULT 0,
+    clicks       INTEGER NOT NULL DEFAULT 0,
+    subscriptions INTEGER NOT NULL DEFAULT 0,
+    ppv_purchases INTEGER NOT NULL DEFAULT 0,
+    generation_cost_eur REAL NOT NULL DEFAULT 0.0,
+    attributable_cost_usd REAL NOT NULL DEFAULT 0.0,
+    metric_source TEXT NOT NULL DEFAULT '',
+    metric_window TEXT NOT NULL DEFAULT '',
     FOREIGN KEY (account_id) REFERENCES creator_accounts(id)
 );
 
@@ -208,6 +237,11 @@ CREATE TABLE IF NOT EXISTS social_posts (
     status       TEXT NOT NULL DEFAULT 'draft',
     posted_at    TEXT NOT NULL DEFAULT '',
     permalink    TEXT NOT NULL DEFAULT '',
+    angle        TEXT NOT NULL DEFAULT '',
+    reach        INTEGER NOT NULL DEFAULT 0,
+    clicks       INTEGER NOT NULL DEFAULT 0,
+    metric_source TEXT NOT NULL DEFAULT '',
+    metric_window TEXT NOT NULL DEFAULT '',
     last_error   TEXT NOT NULL DEFAULT '',
     FOREIGN KEY (campaign_id) REFERENCES social_campaigns(id)
 );
@@ -422,6 +456,7 @@ def init_db() -> None:
     _seed_pricing_from_json(conn)
     _purge_non_token_pricing_rows(conn)
     _correct_stale_pricing(conn)
+    _correct_gemini_zero_pricing(conn)
     _seed_default_agents(conn)
     _purge_split_agents(conn)
     _sync_agent_labels(conn)
@@ -440,6 +475,24 @@ def _add_missing_columns(conn: sqlite3.Connection) -> None:
             ("segment", "TEXT NOT NULL DEFAULT ''"),
             ("posted_at", "TEXT NOT NULL DEFAULT ''"),
             ("revenue_usd", "REAL NOT NULL DEFAULT 0.0"),
+            ("campaign", "TEXT NOT NULL DEFAULT ''"),
+            ("channel", "TEXT NOT NULL DEFAULT ''"),
+            ("permalink", "TEXT NOT NULL DEFAULT ''"),
+            ("reach", "INTEGER NOT NULL DEFAULT 0"),
+            ("clicks", "INTEGER NOT NULL DEFAULT 0"),
+            ("subscriptions", "INTEGER NOT NULL DEFAULT 0"),
+            ("ppv_purchases", "INTEGER NOT NULL DEFAULT 0"),
+            ("generation_cost_eur", "REAL NOT NULL DEFAULT 0.0"),
+            ("attributable_cost_usd", "REAL NOT NULL DEFAULT 0.0"),
+            ("metric_source", "TEXT NOT NULL DEFAULT ''"),
+            ("metric_window", "TEXT NOT NULL DEFAULT ''"),
+        ],
+        "social_posts": [
+            ("angle", "TEXT NOT NULL DEFAULT ''"),
+            ("reach", "INTEGER NOT NULL DEFAULT 0"),
+            ("clicks", "INTEGER NOT NULL DEFAULT 0"),
+            ("metric_source", "TEXT NOT NULL DEFAULT ''"),
+            ("metric_window", "TEXT NOT NULL DEFAULT ''"),
         ],
     }
     for table, columns in wanted.items():
@@ -528,7 +581,7 @@ def _purge_split_agents(conn: sqlite3.Connection) -> None:
     Safe to run on every launch: it names only agents this app does not build,
     so it cannot delete one a user has since added through the registry.
     """
-    gone = ("chat", "osint", "osint_heavy", "wifi", "bug_bounty", "nfl_bet", "manager")
+    gone = ("osint", "osint_heavy", "wifi", "bug_bounty", "nfl_bet", "manager")
     conn.executemany(
         "DELETE FROM agents WHERE name = ?", [(n,) for n in gone]
     )
@@ -538,6 +591,7 @@ def _purge_split_agents(conn: sqlite3.Connection) -> None:
 def _sync_agent_labels(conn: sqlite3.Connection) -> None:
     """Ensure built-in agents' DB labels match the current brand names shown in the GUI."""
     rename_map = {
+        "chat":        "Studio Assistant",
         "fiverr":      "Brand & Logo Designer",
         "author":      "Book Author",
         "manuscript":  "Publishing Manager",
@@ -591,6 +645,42 @@ def _correct_stale_pricing(conn: sqlite3.Connection) -> None:
     conn.commit()
 
 
+def _correct_gemini_zero_pricing(conn: sqlite3.Connection) -> None:
+    """Replace only the old zero-valued Gemini placeholders.
+
+    A zero price was never a real free-tier declaration in this app. Existing
+    nonzero Settings overrides remain untouched. The provider default is a
+    conservative reserve for API-discovered models without a dedicated row;
+    2.5 Pro and 3.1 Pro use Google's >200k-token paid tier for the same reason.
+    """
+    rates = (
+        ("default", 4.0, 18.0, 0.0),
+        ("gemini-2.5-flash", 0.3, 2.5, 0.03),
+        ("gemini-2.5-pro", 2.5, 15.0, 0.25),
+    )
+    for model, input_rate, output_rate, cached_rate in rates:
+        conn.execute("""
+            INSERT OR IGNORE INTO pricing
+              (backend, model, input_per_1m_usd, output_per_1m_usd,
+               cached_input_per_1m_usd)
+            VALUES ('gemini', ?, ?, ?, ?)
+        """, (model, input_rate, output_rate, cached_rate))
+        conn.execute("""
+            UPDATE pricing SET input_per_1m_usd = ?, output_per_1m_usd = ?,
+                cached_input_per_1m_usd = ?
+            WHERE backend = 'gemini' AND model = ?
+              AND input_per_1m_usd = 0 AND output_per_1m_usd = 0
+        """, (input_rate, output_rate, cached_rate, model))
+    # This reserve was introduced as 2.5/15 in an earlier v2 build. Correct
+    # only that exact shipped value; a different nonzero rate is a user edit.
+    conn.execute("""
+        UPDATE pricing SET input_per_1m_usd = 4.0, output_per_1m_usd = 18.0
+        WHERE backend = 'gemini' AND model = 'default'
+          AND input_per_1m_usd = 2.5 AND output_per_1m_usd = 15.0
+    """)
+    conn.commit()
+
+
 def _seed_missing_pricing(conn: sqlite3.Connection) -> None:
     """Insert default pricing rows that may not exist yet (e.g. new providers)."""
     # Anthropic list prices per 1M tokens, from the official pricing table.
@@ -637,6 +727,17 @@ def _seed_default_agents(conn: sqlite3.Connection) -> None:
     # this app is the creative/publishing half of the Sentinel split, and those
     # four stayed behind with the security half.
     agents = [
+        {
+            "name": "chat",
+            "label": "Studio Assistant",
+            "description": "General-purpose conversation with saved project history and budgeted provider routing.",
+            "allowed_providers": json.dumps([]),
+            "allowed_tools": None,
+            "budget_limit_eur": None,
+            "requires_approval": 0,
+            "log_path": "data/logs/runs.jsonl",
+            "auto_generated": 0,
+        },
         {
             "name": "author",
             "label": "Book Author",

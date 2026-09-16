@@ -1,6 +1,6 @@
 # BRAND CREATOR — shared identity and content production
 
-`key: creator` · class: `agents/creator_agent.py → CreatorAgent` · panel: `build_creator_panel()` · handler: `creator_generate()`
+`key: creator` · class: `agents/creator/agent.py → CreatorAgent` · panel: `build_creator_panel()` · handler: `creator_generate()`
 
 ## What it does
 Creates concepts, captions, campaigns, posting plans, promotional asset briefs,
@@ -16,15 +16,11 @@ format, pricing hypothesis, and requested deliverables.
 ## What it deliberately does not do
 **It does not publish unattended, and it has no direct send path.**
 
-OnlyFans has no public API — the limited access introduced in 2024 is for
-verified business partners only. Every third-party "OnlyFans API" is browser
-automation or a reverse-engineered private endpoint, which their Terms of
-Service prohibit; the documented outcome is a permanent ban and lost earnings.
-For an account that *is* the income, that is not a trade worth making.
-
-Their terms draw the line themselves, and it is a sensible one: automation that
-**assists** a human is fine, automation that **replaces** one is not. So this
-agent produces drafts you review and send yourself.
+Imprint has no authorised OnlyFans posting integration. It does not use browser
+automation or a private endpoint. Platform rules change and may only be
+available inside a logged-in creator account, so this agent produces drafts
+you review and publish manually rather than claiming an unverified rule allows
+automation.
 
 It also will not write a message posing as a specific real person in a live
 conversation with a paying subscriber. The drafts are captions, promos and
@@ -37,7 +33,7 @@ Recorded per account, because the three carry different obligations.
 |---|---|---|
 | `own` | Your own account | — |
 | `managed` | Someone else's, run on their behalf | An **authorisation record** — who approved it and when. Drafting is refused without it. |
-| `persona` | A synthetic character you operate | A **disclosure line**. Drafts stay fictional in framing and never assert the persona is a real named human. |
+| `persona` | A synthetic character you operate | A **disclosure line** and a dated, source-backed platform policy expressly allowing it. Unknown blocks generation. |
 
 The managed-account check lives on the drafting path (`require_ready()`), not
 just in the dialog — a rule enforced only by a UI prompt is not enforced.
@@ -48,16 +44,18 @@ just in the dialog — a rule enforced only by a UI prompt is not enforced.
 | Profile / Handle or project / Platform or venture | What is being created for and where it will be used. |
 | Authorised by | Managed accounts only. Who consented. |
 | Disclosure | Personas only. How the account discloses itself. |
+| Review platform policy | Dated source, synthetic-permission state, verified-owner rule, AI disclosure, and publishing route. A saved `official_api` note does not enable posting. |
 | Draft | post · caption · campaign · posting plan · promo assets · hooks · bio · PPV · welcome · promo. |
 | Price (USD) | PPV only — shapes the value argument in the copy. |
-| Promo channel | Promo only — X, Reddit, TikTok, Instagram, Threads. |
+| Campaign / Channel | Attach an asset to a test and destination for later comparison. |
 | Brief | What it is about. Concrete briefs give non-generic drafts. |
 | Provider / Model | Routed through the normal budget guard. |
 
 ## Outputs
-Three tabs: **Draft** (editable output), **Calendar** (scheduled items you post
-by hand — `draft → approved → posted` is a status you set yourself), and
-**Earnings** (imported statements).
+The **Draft** tab has editable output; **Calendar** holds items you post by
+hand, and **Earnings** joins imported statements to manually recorded asset
+outcomes without adding overlapping receipts. Voice, Media, Agency and Records
+remain separate tabs.
 
 ## Higgsfield promo video
 `Generate Teaser` sends a safe-for-work prompt to the Higgsfield API for a
@@ -98,6 +96,14 @@ double-counting.
 
 Column names differ per platform and change over time, so the parser matches
 header substrings and stores the raw rows alongside the totals.
+
+Select a Calendar asset, then use **Record outcome** to enter its real post
+link, source/window, reach, clicks, subscriptions, PPV purchases, attributed
+revenue, and all-in cost in USD. The drafting request's model cost is saved in
+EUR; the dashboard never adds it to USD without a user-provided conversion.
+ROI is shown only for an entered cost and is a descriptive return on that
+cost, not proof of causation or profit. The chosen hook and campaign/channel
+remain visible for like-for-like comparisons.
 
 ## Under the hood — files & functions
 | Location | Role |

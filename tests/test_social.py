@@ -207,6 +207,23 @@ def test_a_failed_post_records_why(store):
     assert "self-promotion" in post["last_error"]
 
 
+def test_post_metrics_require_posted_state_and_provenance(store):
+    campaign_id = store.create_campaign("c", "subject")
+    post_id = store.add_post(campaign_id, "x", "body", angle="value")
+    with pytest.raises(ValueError, match="posted"):
+        store.record_metrics(post_id, reach=100, clicks=8,
+                             source="X analytics", window="week 1")
+    store.mark_posted(post_id, "https://example.test/post")
+    with pytest.raises(ValueError, match="source"):
+        store.record_metrics(post_id, reach=100, clicks=8,
+                             source="", window="week 1")
+    store.record_metrics(post_id, reach=100, clicks=8,
+                         source="X analytics", window="week 1")
+    post = store.get_post(post_id)
+    assert (post["angle"], post["reach"], post["clicks"]) == ("value", 100, 8)
+    assert post["metric_source"] == "X analytics"
+
+
 # ── The posting gate ─────────────────────────────────────────────────────────
 def test_no_publisher_claims_to_be_ready_without_its_credentials(monkeypatch):
     """`configured` is what gates the Post button. A publisher that reports

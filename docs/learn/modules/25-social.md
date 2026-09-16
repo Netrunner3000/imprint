@@ -21,6 +21,7 @@
 | Schedule Drafts / Stop | Prepares calendar rows or requests local cancellation | Scheduled is not necessarily posted |
 | Draft | Editable generated variants; Save to Schedule | Review length, links, claims, tone, and platform fit |
 | Schedule | Copy Text, Mark Posted, Post Now | Direct posting exists only for configured supported accounts |
+| Analytics | Record metrics for a selected posted item; compare observed reach, clicks, and click rate | Source and measurement window are required; clicks do not prove sales |
 | Accounts | Shows connection/readiness and platform limits | Status is not a guarantee that current rules permit content |
 
 ## Worked run
@@ -35,7 +36,10 @@
 5. In Accounts, distinguish **drafting available** from **posting ready**.
 6. Use Post Now only on a supported, authorised integration. Otherwise Copy Text
    and publish manually, then Mark Posted with the real state.
-7. Record platform outcome counts later; “posted” is not reach or sale.
+7. Select the posted item in Schedule and use **Record metrics**. Copy reach and
+   link clicks from the platform's own report, naming the report and time window.
+   The Analytics tab shows the post's saved angle and click-through rate.
+   “Posted” alone is not reach or sale.
 
 ## How to read the output
 

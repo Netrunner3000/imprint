@@ -48,6 +48,13 @@ def test_catalog_is_unique_and_drives_visible_workspaces():
     assert listed == [spec.key for spec in AGENT_SPECS if spec.workspace]
 
 
+def test_general_assistant_is_reachable_without_a_custom_panel():
+    chat = AGENTS_BY_KEY["chat"]
+    assert chat.workspace == "Assistant"
+    assert not chat.panel
+    assert workspace_map()["Assistant"] == ("chat",)
+
+
 def test_router_only_returns_catalog_agent_keys():
     from agents.router import ROUTES, RouterAgent
 

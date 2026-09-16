@@ -6,6 +6,11 @@
   "delete_chat_btn": "projects#persistence-boundaries",
   "save_budget_btn": "costs-limits#walkthrough",
   "learn_btn": "home#start-from-your-goal",
+  "tool_box": "assistant#control-atlas",
+  "command_box": "assistant#control-atlas",
+  "input_box": "assistant#worked-run",
+  "send_btn": "assistant#worked-run",
+  "stop_chat_btn": "assistant#cost-cancellation-and-gates",
 
   "author_title_input": "draft#control-atlas",
   "author_name_input": "draft#control-atlas",
@@ -85,6 +90,8 @@
   "social_save_draft_btn": "social#worked-run",
   "social_copy_btn": "social#worked-run",
   "social_mark_posted_btn": "social#how-to-read-the-output",
+  "social_metrics_btn": "social#worked-run",
+  "social_analytics_table": "social#how-to-read-the-output",
   "social_post_btn": "social#cost-cancellation-and-gates",
 
   "webdesign_provider_box": "best-fit#the-two-recommendations",
@@ -106,6 +113,7 @@
   "fiverr_tabs": "client-gigs#control-atlas",
 
   "creator_account_box": "creator#profile-and-compose-controls",
+  "creator_policy_btn": "creator#profile-and-compose-controls",
   "creator_handle_input": "creator#profile-and-compose-controls",
   "creator_platform_box": "creator#profile-and-compose-controls",
   "creator_type_box": "creator#profile-and-compose-controls",
@@ -114,6 +122,7 @@
   "creator_save_account_btn": "creator#worked-run",
   "creator_delete_account_btn": "creator#profile-and-compose-controls",
   "creator_kind_box": "creator#profile-and-compose-controls",
+  "creator_campaign_input": "creator#profile-and-compose-controls",
   "creator_price_input": "creator#profile-and-compose-controls",
   "creator_segment_box": "creator#profile-and-compose-controls",
   "creator_channel_box": "creator#profile-and-compose-controls",

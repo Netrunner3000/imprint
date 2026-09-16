@@ -74,6 +74,7 @@ consequences of what just landed rather than new ideas.
 | Documentation centre + Learning Centre v2 / Income Lab — searchable technical reference browser, and a 26-lesson evidence-gated income academy replacing dated forecast-style earnings guidance | Sep 2026 |
 | Structured System/Routing/API-key status cards replacing collapsed diagnostic paragraphs | Sep 2026 |
 | Suno-assisted Songs & Albums workflow in the Music agent, and an OnlyFans → Creator direct "Generate SFW Teaser" handoff | Sep 2026 |
+| Agents renamed to role-based, self-explanatory labels — `Draft`/`Publish` → `Book Author`/`Publishing Manager`, `Music` → `Music Artist Generator`, `Site Builder` → `Web Developer`, `Audiobooks` → `Audiobook Producer`, `Client Gigs` → `Brand & Logo Designer`, `Creator` → `Brand Creator`, `Social` → `Social Media Campaign Manager`, `OnlyFans` → `OF Agent` — and matching workspace groupings (`Write` → `Author`, `Audio` → `Audio + Music`, `Video` → `Video + Ads`, `Gigs` → `Brand Design`) in `agents/catalog.py`'s `AgentSpec`. Resolves the `Write`/`Draft`/`Publish` naming collision tracked in TODO. | Sep 2026 |
 | Video mode — vidforge as an eighth agent, imported from its nested repo rather than vendored; long-form and social clips are one pipeline | Sep 2026 |
 | Social mode — the public funnel: campaigns, per-platform drafting, cadence scheduling, and posting for YouTube/Reddit/Pinterest | Sep 2026 |
 | Per-unit billing — images, renders and TTS count against the budget caps instead of pricing a $0.04 image at €0.000001 | Sep 2026 |
