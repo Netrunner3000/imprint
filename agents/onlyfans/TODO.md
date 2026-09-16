@@ -1,6 +1,7 @@
 # OnlyFans — TODO
 
 - [x] `P1` Move the OnlyFans dashboard and handlers into this package.
+- [ ] `P1` `@me` Verify the current OnlyFans AI-content rules inside the logged-in Creator Help/Terms before launching a virtual creator. Publicly surfaced guidance is not the same as the operative terms, and the penalty for getting it wrong is the account. *(moved from imprint/TODO.md)*
 - [ ] `P1` Keep collaborator consent/records requirements explicit in workflows.
 - [x] `P2` Add evidence and freshness context to market-intelligence inputs and selected-signal detail.
 - [x] `P1` Replace the 11-column opportunity grid with a focused comparison table and guided decision cards.

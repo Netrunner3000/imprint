@@ -47,11 +47,9 @@ consequences of what just landed rather than new ideas.
 | 44 | DONE — **Social mode.** Campaigns, per-platform drafting, cadence scheduling, and real posting for the three platforms where that is possible from a personal account. | feature | L | DONE |
 | 45 | **Charts, not monospace.** Three panels now compute genuinely interesting numbers (KDP royalties, creator price points, cost history) and all three render them as aligned text. One small charting layer would serve all of them. | design | M | IDEA |
 | 46 | **A "what should I do today" view.** The app knows the publishing todos, the content calendar, which drafts are unposted and which books are part-listened. Nothing assembles that into the one screen a person actually opens in the morning. | feature | M | IDEA |
-| 47 | **Retire or rehome the chat agent.** It is still constructed and still owns `normal_panel`, but the tabbed shell reaches no part of it. Either it becomes a real mode or it goes, and with it a meaningful amount of machinery. | infra | M | IDEA |
 | 48 | **Back up the writable directory.** Everything that matters — database, keys, chats, logs — lives in one Application Support folder that nothing in this workspace backs up, while `_Admin/backup/` exists and is good at exactly this. One line in `backup_folders.txt`. | infra | XS | IDEA |
 | 49 | **Sleep timer and keyboard control for the player.** Resume was the ask and it works; space-to-pause and a sleep timer are what make it something you would actually listen to a novel on. | feature | S | IDEA |
 | 50 | DONE — **Make Video's visual provider/model choice real.** Current GPT Image models run through the scene pipeline; Sora, Gemini Omni/Veo, Qwen/Wan and Higgsfield create direct clips; Pexels and Local select their actual visual sources. Retired DALL·E IDs and providers without a video-output API are not offered. | feature | M | DONE |
-| 51 | **Migrate Sora before its provider shutdown.** The route is useful for the remaining compatibility window, but the API closes on 24 September 2026. Keep the direct-video adapter boundary and swap in OpenAI's successor when one is published. | maintenance | M | IDEA |
 | 52 | DONE — **Documentation centre.** Searchable technical reference browser (`ui/docs_center.py`) driven by `docs/agents/manifest.json`, opened from both the header Docs button (active agent) and the right rail's general Docs button (shared-system overview). | docs | M | DONE |
 | 53 | DONE — **Learning Centre v2 / Income Lab.** Replaced the five-page guide with a 26-lesson manifest-driven academy built around an evidence-gated income methodology (label evidence → pre-register a fair experiment → unit economics → honest attribution → decide under uncertainty → automate only after the gates pass), rather than dated per-stream/platform earnings figures. | docs | L | DONE |
 | 54 | DONE — **Structured status cards.** `ui/status_cards.py` replaced the collapsed System/Routing/API-key panels' prose with scannable rows, state badges and a separate "last decision" vs. "best fit recommendation" view. | design | M | DONE |
@@ -62,7 +60,6 @@ consequences of what just landed rather than new ideas.
 
 | # | Suggestion | Category | Effort | Status |
 |---|---|---|---|---|
-| 7 | Streaming responses in the chat panel rather than wait-then-dump | feature | L | IDEA |
 | 8 | Local model provider (Ollama) as a zero-cost fallback when the budget cap is hit | feature | L | IDEA |
 | 9 | Retry-with-backoff wrapper shared by every provider client, instead of per-client handling | infra | M | IDEA |
 | 10 | Export a run (prompt + response + usage + cost) as a single markdown file for archiving | feature | S | IDEA |
