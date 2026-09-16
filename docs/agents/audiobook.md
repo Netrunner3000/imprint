@@ -1,4 +1,4 @@
-# NARRATOR — Ebook → MP3 audiobook
+# AUDIOBOOK PRODUCER — Ebook → MP3 audiobook
 
 `key: audiobook` · converter: `services/narrator/converter.py` · panel: `build_audiobook_panel()` · handler: `start_selected_audiobook_book()`
 

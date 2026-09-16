@@ -6,9 +6,11 @@ parent and to read the handful of members it needs — and shows the dialog. The
 bodies are moved verbatim; only the receiver was renamed from `self` to `app`.
 """
 
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
-    QCheckBox, QComboBox, QDialog, QFileDialog, QGridLayout, QHBoxLayout,
-    QLabel, QLineEdit, QMessageBox, QPushButton, QTabWidget, QTextBrowser,
+    QAbstractItemView, QCheckBox, QComboBox, QDialog, QFileDialog, QFrame,
+    QGridLayout, QHeaderView, QHBoxLayout, QLabel, QLineEdit, QMessageBox,
+    QPushButton, QTabWidget, QTableWidget, QTableWidgetItem, QTextBrowser,
     QVBoxLayout, QWidget,
 )
 
@@ -17,9 +19,18 @@ from services.database import get_connection, get_setting, save_setting
 from services.deepseek_client import DeepSeekClientWrapper
 from services.gemini_client import GeminiClientWrapper
 from services.kimi_client import KimiClientWrapper
+from services.media_catalog import DIRECT_VIDEO_USD_PER_SECOND, MODELS as MEDIA_MODELS
 from services.openai_client import OpenAIClientWrapper
+from services.per_unit_pricing import rate_usd
+from services.pricing_catalog import (
+    PROVIDER_LABELS, build_token_price_catalog,
+)
 from services.registry import Registry
 from services.validator import Validator
+from ui.style import (
+    ACCENT, ACCENT_WASH, BG, BORDER, ELEVATED, SUNKEN, SURFACE, TEXT,
+    TEXT_DIM, TEXT_MUTE,
+)
 
 
 def show_cost_history(app):
@@ -263,133 +274,375 @@ def show_run_log(app):
 def show_settings(app):
     dialog = QDialog(app)
     dialog.setWindowTitle("Settings")
-    dialog.resize(720, 560)
+    dialog.setObjectName("SettingsDialog")
+    dialog.resize(1040, 720)
+    dialog.setMinimumSize(820, 600)
 
     outer = QVBoxLayout(dialog)
+    outer.setContentsMargins(24, 22, 24, 20)
+    outer.setSpacing(16)
+
+    title = QLabel("Settings")
+    title.setObjectName("SettingsTitle")
+    title.setFixedHeight(34)
+    outer.addWidget(title)
+    subtitle = QLabel(
+        "Control budgets, agents, tools, and the cost estimates Imprint uses before paid work runs."
+    )
+    subtitle.setObjectName("SettingsSubtitle")
+    subtitle.setWordWrap(True)
+    subtitle.setMinimumHeight(20)
+    outer.addWidget(subtitle)
+
     tabs = QTabWidget()
-    outer.addWidget(tabs)
+    tabs.setObjectName("SettingsTabs")
+    outer.addWidget(tabs, 1)
 
     btn_row = QHBoxLayout()
+    btn_row.setSpacing(10)
     save_all_btn = QPushButton("Save All")
-    save_all_btn.setFixedHeight(32)
+    save_all_btn.setObjectName("SettingsSave")
+    save_all_btn.setFixedHeight(38)
     cancel_btn = QPushButton("Cancel")
-    cancel_btn.setFixedHeight(32)
+    cancel_btn.setFixedHeight(38)
     cancel_btn.clicked.connect(dialog.reject)
     btn_row.addStretch()
-    btn_row.addWidget(save_all_btn)
     btn_row.addWidget(cancel_btn)
+    btn_row.addWidget(save_all_btn)
     outer.addLayout(btn_row)
+
+    def page_intro(layout, heading, copy):
+        heading_label = QLabel(heading)
+        heading_label.setObjectName("SettingsSectionTitle")
+        layout.addWidget(heading_label)
+        copy_label = QLabel(copy)
+        copy_label.setObjectName("SettingsHelp")
+        copy_label.setWordWrap(True)
+        layout.addWidget(copy_label)
+
+    def readonly_item(text, tooltip=""):
+        item = QTableWidgetItem(text)
+        item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+        if tooltip:
+            item.setToolTip(tooltip)
+        return item
+
+    def prepare_table(table):
+        table.setAlternatingRowColors(True)
+        table.setShowGrid(False)
+        table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        table.verticalHeader().setVisible(False)
+        table.verticalHeader().setDefaultSectionSize(46)
+        table.horizontalHeader().setMinimumSectionSize(80)
 
     # ── Tab 1: General ────────────────────────────────────────────
     general_tab = QWidget()
-    gl = QGridLayout(general_tab)
-    gl.setSpacing(10)
-    gl.setContentsMargins(16, 16, 16, 16)
+    general_tab.setObjectName("SettingsPage")
+    general_page = QVBoxLayout(general_tab)
+    general_page.setContentsMargins(18, 20, 18, 18)
+    general_page.setSpacing(14)
+    page_intro(
+        general_page,
+        "Budget defaults",
+        "These safeguards apply across agents. Prices are stored in USD and converted before Imprint checks your euro limits.",
+    )
+    general_card = QFrame()
+    general_card.setObjectName("SettingsCard")
+    gl = QGridLayout(general_card)
+    gl.setSpacing(14)
+    gl.setContentsMargins(18, 18, 18, 18)
 
-    gl.addWidget(QLabel("EUR / USD rate:"), 0, 0)
+    gl.addWidget(QLabel("EUR per USD"), 0, 0)
     eur_input = QLineEdit(get_setting("eur_per_usd", "0.92"))
+    eur_input.setObjectName("EurUsdRate")
+    eur_input.setPlaceholderText("0.92")
     gl.addWidget(eur_input, 0, 1)
 
-    gl.addWidget(QLabel("Default session budget (€):"), 1, 0)
+    gl.addWidget(QLabel("Session budget (€)"), 1, 0)
     sess_input = QLineEdit(get_setting("session_budget_eur", str(app.session_budget_eur)))
+    sess_input.setObjectName("SessionBudget")
     gl.addWidget(sess_input, 1, 1)
 
-    gl.addWidget(QLabel("Default daily budget (€):"), 2, 0)
+    gl.addWidget(QLabel("Daily budget (€)"), 2, 0)
     daily_input = QLineEdit(get_setting("daily_budget_eur", str(app.daily_budget_eur)))
+    daily_input.setObjectName("DailyBudget")
     gl.addWidget(daily_input, 2, 1)
-
-    gl.setRowStretch(3, 1)
+    gl.setColumnStretch(1, 1)
+    general_page.addWidget(general_card)
+    general_page.addStretch()
     tabs.addTab(general_tab, "General")
 
     # ── Tab 2: Agents ─────────────────────────────────────────────
     agents_tab = QWidget()
+    agents_tab.setObjectName("SettingsPage")
     al = QVBoxLayout(agents_tab)
-    al.setContentsMargins(8, 8, 8, 8)
+    al.setContentsMargins(18, 20, 18, 18)
+    al.setSpacing(14)
+    page_intro(
+        al,
+        "Agent access and limits",
+        "Disable an agent without removing its work. A blank cap means it uses only the global session and daily budgets.",
+    )
 
-    agents_grid = QGridLayout()
-    agents_grid.setSpacing(6)
-    agents_grid.addWidget(QLabel("<b>Agent</b>"), 0, 0)
-    agents_grid.addWidget(QLabel("<b>Enabled</b>"), 0, 1)
-    agents_grid.addWidget(QLabel("<b>Budget cap (€, blank = none)</b>"), 0, 2)
+    agent_rows = app.registry.list_agents()
+    agents_table = QTableWidget(len(agent_rows), 3)
+    agents_table.setObjectName("SettingsAgentsTable")
+    agents_table.setHorizontalHeaderLabels(["Agent", "Enabled", "Agent budget (€)"])
+    prepare_table(agents_table)
+    agents_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+    agents_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
+    agents_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.Fixed)
+    agents_table.setColumnWidth(2, 190)
 
     agent_widgets = {}
-    for i, agent in enumerate(app.registry.list_agents(), start=1):
-        lbl = QLabel(agent["label"] or agent["name"])
+    for i, agent in enumerate(agent_rows):
+        label = agent["label"] or agent["name"]
+        agents_table.setItem(i, 0, readonly_item(label, agent.get("description", "")))
         chk = QCheckBox()
         chk.setChecked(agent.get("enabled", True))
+        chk.setAccessibleName(f"Enable {label}")
         budget_val = agent.get("budget_limit_eur")
         budget_edit = QLineEdit("" if budget_val is None else str(budget_val))
-        budget_edit.setPlaceholderText("no limit")
-        budget_edit.setMaximumWidth(120)
-        agents_grid.addWidget(lbl, i, 0)
-        agents_grid.addWidget(chk, i, 1)
-        agents_grid.addWidget(budget_edit, i, 2)
+        budget_edit.setPlaceholderText("No agent-specific limit")
+        agents_table.setCellWidget(i, 1, chk)
+        agents_table.setCellWidget(i, 2, budget_edit)
         agent_widgets[agent["name"]] = (chk, budget_edit)
 
-    al.addLayout(agents_grid)
-    al.addStretch()
+    al.addWidget(agents_table)
     tabs.addTab(agents_tab, "Agents")
 
     # ── Tab 3: Tools ──────────────────────────────────────────────
     tools_tab = QWidget()
+    tools_tab.setObjectName("SettingsPage")
     tl = QVBoxLayout(tools_tab)
-    tl.setContentsMargins(8, 8, 8, 8)
+    tl.setContentsMargins(18, 20, 18, 18)
+    tl.setSpacing(14)
+    page_intro(
+        tl,
+        "Tool availability",
+        "Tools are shared capabilities used by agents. Hover a prompt preview to read the full instruction.",
+    )
 
-    tools_grid = QGridLayout()
-    tools_grid.setSpacing(6)
-    tools_grid.addWidget(QLabel("<b>Tool</b>"), 0, 0)
-    tools_grid.addWidget(QLabel("<b>Enabled</b>"), 0, 1)
-    tools_grid.addWidget(QLabel("<b>System Prompt (first 80 chars)</b>"), 0, 2)
+    tool_rows = app.registry.list_tools()
+    tools_table = QTableWidget(len(tool_rows), 3)
+    tools_table.setObjectName("SettingsToolsTable")
+    tools_table.setHorizontalHeaderLabels(["Tool", "Enabled", "Instruction preview"])
+    prepare_table(tools_table)
+    tools_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
+    tools_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
+    tools_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
 
     tool_widgets = {}
-    for i, tool in enumerate(app.registry.list_tools(), start=1):
-        lbl = QLabel(tool["name"])
+    for i, tool in enumerate(tool_rows):
+        tools_table.setItem(i, 0, readonly_item(tool.get("label") or tool["name"]))
         chk = QCheckBox()
         chk.setChecked(tool.get("enabled", True))
-        prompt_preview = QLabel((tool.get("system_prompt") or "")[:80])
-        prompt_preview.setStyleSheet("color: #888; font-size: 11px;")
-        tools_grid.addWidget(lbl, i, 0)
-        tools_grid.addWidget(chk, i, 1)
-        tools_grid.addWidget(prompt_preview, i, 2)
+        prompt = tool.get("system_prompt") or "No system instruction"
+        preview = prompt.replace("\n", " ")
+        if len(preview) > 110:
+            preview = preview[:107].rstrip() + "…"
+        tools_table.setCellWidget(i, 1, chk)
+        tools_table.setItem(i, 2, readonly_item(preview, prompt))
         tool_widgets[tool["name"]] = chk
 
-    tl.addLayout(tools_grid)
-    tl.addStretch()
+    tl.addWidget(tools_table)
     tabs.addTab(tools_tab, "Tools")
 
     # ── Tab 4: Pricing ────────────────────────────────────────────
     pricing_tab = QWidget()
+    pricing_tab.setObjectName("SettingsPage")
     pl = QVBoxLayout(pricing_tab)
-    pl.setContentsMargins(8, 8, 8, 8)
+    pl.setContentsMargins(18, 20, 18, 18)
+    pl.setSpacing(12)
+    page_intro(
+        pl,
+        "Pricing catalog",
+        "Imprint uses these estimates for budget checks. Provider defaults cover newly discovered models; “Unknown” never means free.",
+    )
 
-    pl.addWidget(QLabel("Model pricing (USD per 1M tokens):"))
+    pricing_modes = QTabWidget()
+    pricing_modes.setObjectName("PricingModes")
+    token_page = QWidget()
+    token_layout = QVBoxLayout(token_page)
+    token_layout.setContentsMargins(0, 12, 0, 0)
+    token_layout.setSpacing(10)
 
-    pricing_grid = QGridLayout()
-    pricing_grid.setSpacing(6)
-    for col, hdr in enumerate(["Provider", "Model", "Input /1M USD", "Output /1M USD"]):
-        pricing_grid.addWidget(QLabel(f"<b>{hdr}</b>"), 0, col)
+    filter_row = QHBoxLayout()
+    pricing_search = QLineEdit()
+    pricing_search.setObjectName("PricingSearch")
+    pricing_search.setPlaceholderText("Search models")
+    provider_filter = QComboBox()
+    provider_filter.setObjectName("PricingProviderFilter")
+    provider_filter.addItem("All providers", "")
+    filter_row.addWidget(pricing_search, 1)
+    filter_row.addWidget(provider_filter)
+    token_layout.addLayout(filter_row)
+
+    with get_connection() as conn:
+        pricing_entries = build_token_price_catalog(conn)
+
+    present_providers = []
+    for entry in pricing_entries:
+        if entry.provider not in present_providers:
+            present_providers.append(entry.provider)
+    for provider in present_providers:
+        provider_filter.addItem(PROVIDER_LABELS.get(provider, provider.title()), provider)
+
+    pricing_table = QTableWidget(len(pricing_entries), 6)
+    pricing_table.setObjectName("SettingsPricingTable")
+    pricing_table.setHorizontalHeaderLabels([
+        "Provider", "Model", "Input / 1M", "Cached input / 1M", "Output / 1M", "Coverage"
+    ])
+    prepare_table(pricing_table)
+    pricing_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Fixed)
+    pricing_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
+    pricing_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.Fixed)
+    pricing_table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeMode.Fixed)
+    pricing_table.horizontalHeader().setSectionResizeMode(4, QHeaderView.ResizeMode.Fixed)
+    pricing_table.horizontalHeader().setSectionResizeMode(5, QHeaderView.ResizeMode.Fixed)
+    pricing_table.setColumnWidth(0, 110)
+    pricing_table.setColumnWidth(2, 115)
+    pricing_table.setColumnWidth(3, 145)
+    pricing_table.setColumnWidth(4, 115)
+    pricing_table.setColumnWidth(5, 165)
 
     pricing_widgets = {}
-    with get_connection() as conn:
-        pricing_rows = conn.execute(
-            "SELECT backend, model, input_per_1m_usd, output_per_1m_usd FROM pricing ORDER BY backend, model"
-        ).fetchall()
+    pricing_row_meta = []
+    for i, entry in enumerate(pricing_entries):
+        pricing_table.setItem(i, 0, readonly_item(entry.provider_label))
+        pricing_table.setItem(i, 1, readonly_item(entry.model))
 
-    for i, row in enumerate(pricing_rows, start=1):
-        key = (row["backend"], row["model"])
-        pricing_grid.addWidget(QLabel(row["backend"]), i, 0)
-        pricing_grid.addWidget(QLabel(row["model"]), i, 1)
-        in_edit = QLineEdit(str(row["input_per_1m_usd"]))
-        in_edit.setMaximumWidth(100)
-        out_edit = QLineEdit(str(row["output_per_1m_usd"]))
-        out_edit.setMaximumWidth(100)
-        pricing_grid.addWidget(in_edit, i, 2)
-        pricing_grid.addWidget(out_edit, i, 3)
-        pricing_widgets[key] = (in_edit, out_edit)
+        edits = []
+        for value in (entry.input_usd, entry.cached_input_usd, entry.output_usd):
+            edit = QLineEdit("" if value is None else f"{value:g}")
+            edit.setPlaceholderText("Unknown")
+            if entry.source == "local":
+                edit.setEnabled(False)
+            edits.append(edit)
+        pricing_table.setCellWidget(i, 2, edits[0])
+        pricing_table.setCellWidget(i, 3, edits[1])
+        pricing_table.setCellWidget(i, 4, edits[2])
 
-    pl.addLayout(pricing_grid)
-    pl.addStretch()
+        status_item = readonly_item(entry.status)
+        status_item.setData(Qt.ItemDataRole.UserRole, entry.source)
+        pricing_table.setItem(i, 5, status_item)
+        key = (entry.provider, entry.model)
+        original = tuple(0.0 if value is None else value for value in (
+            entry.input_usd, entry.cached_input_usd, entry.output_usd
+        ))
+        pricing_widgets[key] = (edits, entry.source, original)
+        pricing_row_meta.append((i, entry.provider, entry.model))
+
+    pricing_summary = QLabel()
+    pricing_summary.setObjectName("PricingSummary")
+    token_layout.addWidget(pricing_summary)
+    token_layout.addWidget(pricing_table)
+
+    def filter_pricing():
+        wanted_provider = provider_filter.currentData() or ""
+        needle = pricing_search.text().strip().casefold()
+        visible = 0
+        visible_providers = set()
+        for row, provider, model in pricing_row_meta:
+            show = (not wanted_provider or provider == wanted_provider) and (
+                not needle or needle in model.casefold() or needle in provider.casefold()
+            )
+            pricing_table.setRowHidden(row, not show)
+            if show:
+                visible += 1
+                visible_providers.add(provider)
+        pricing_summary.setText(
+            f"{visible} model{'s' if visible != 1 else ''} · "
+            f"{len(visible_providers)} provider{'s' if len(visible_providers) != 1 else ''} · USD"
+        )
+
+    provider_filter.currentIndexChanged.connect(filter_pricing)
+    pricing_search.textChanged.connect(filter_pricing)
+    filter_pricing()
+    pricing_modes.addTab(token_page, "Token models")
+
+    unit_page = QWidget()
+    unit_layout = QVBoxLayout(unit_page)
+    unit_layout.setContentsMargins(0, 12, 0, 0)
+    unit_layout.setSpacing(10)
+    unit_help = QLabel(
+        "Per-unit work is billed differently from chat tokens. Leave a value blank when the rate is unknown; Imprint will warn before spending."
+    )
+    unit_help.setObjectName("SettingsHelp")
+    unit_help.setWordWrap(True)
+    unit_layout.addWidget(unit_help)
+
+    unit_specs = [
+        (("openai_image", "gpt-image-2.5-sunburst"), "OpenAI", "GPT Image 2.5 Sunburst", "per image", None),
+        (("openai_image", "gpt-image-2.5-flare"), "OpenAI", "GPT Image 2.5 Flare", "per image", None),
+        (("openai_image", "gpt-image-2"), "OpenAI", "GPT Image 2", "per image", None),
+        (("openai_tts_per_1k_chars",), "OpenAI", "Text to speech", "per 1,000 characters", None),
+        (("openai_whisper_per_minute",), "OpenAI", "Whisper transcription", "per audio minute", None),
+    ]
+    unit_specs.extend(
+        (("direct_video", model.model_id), model.provider, model.label,
+         "per generated second", DIRECT_VIDEO_USD_PER_SECOND[model.model_id])
+        for model in MEDIA_MODELS
+        if model.kind == "direct_video" and model.model_id in DIRECT_VIDEO_USD_PER_SECOND
+    )
+    unit_specs.append(
+        (("higgsfield_render",), "Higgsfield", "Video render", "per render", None)
+    )
+    unit_table = QTableWidget(len(unit_specs), 5)
+    unit_table.setObjectName("SettingsPerUnitTable")
+    unit_table.setHorizontalHeaderLabels(["Provider", "Service", "Unit", "USD", "Coverage"])
+    prepare_table(unit_table)
+    unit_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
+    unit_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
+    unit_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
+    unit_table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeMode.Fixed)
+    unit_table.horizontalHeader().setSectionResizeMode(4, QHeaderView.ResizeMode.Fixed)
+    unit_table.setColumnWidth(3, 130)
+    unit_table.setColumnWidth(4, 130)
+    per_unit_widgets = {}
+    for row, (path, provider, service, unit, fallback) in enumerate(unit_specs):
+        value = rate_usd(*path)
+        if value is None:
+            value = fallback
+        unit_table.setItem(row, 0, readonly_item(provider))
+        unit_table.setItem(row, 1, readonly_item(service))
+        unit_table.setItem(row, 2, readonly_item(unit))
+        edit = QLineEdit("" if value is None else f"{value:g}")
+        edit.setPlaceholderText("Unknown")
+        unit_table.setCellWidget(row, 3, edit)
+        unit_table.setItem(row, 4, readonly_item("Configured" if value is not None else "Unknown"))
+        per_unit_widgets[path] = (edit, value)
+    unit_layout.addWidget(unit_table)
+    pricing_modes.addTab(unit_page, "Images, audio + video")
+    pl.addWidget(pricing_modes)
     tabs.addTab(pricing_tab, "Pricing")
+
+    dialog.setStyleSheet(f"""
+        QDialog#SettingsDialog {{ background: {BG}; }}
+        QLabel#SettingsTitle {{ color: {TEXT}; font-size: 24px; font-weight: 700; }}
+        QLabel#SettingsSubtitle, QLabel#SettingsHelp, QLabel#PricingSummary {{
+            color: {TEXT_DIM}; font-size: 12px;
+        }}
+        QLabel#SettingsSectionTitle {{ color: {TEXT}; font-size: 16px; font-weight: 650; }}
+        QFrame#SettingsCard {{ background: {SURFACE}; border: 1px solid {BORDER}; border-radius: 10px; }}
+        QTabWidget#SettingsTabs::pane, QTabWidget#PricingModes::pane {{
+            border: 1px solid {BORDER}; border-radius: 10px; background: {SURFACE};
+        }}
+        QTableWidget#SettingsAgentsTable, QTableWidget#SettingsToolsTable,
+        QTableWidget#SettingsPricingTable, QTableWidget#SettingsPerUnitTable {{
+            background: {SUNKEN}; alternate-background-color: {SURFACE};
+            border: 1px solid {BORDER}; border-radius: 8px; gridline-color: transparent;
+        }}
+        QHeaderView::section {{
+            background: {SURFACE}; color: {TEXT_MUTE}; border: none;
+            border-bottom: 1px solid {BORDER}; padding: 9px 8px;
+            font-size: 11px; font-weight: 700;
+        }}
+        QTableWidget::item {{ padding: 7px; }}
+        QTableWidget::item:selected {{ background: {ACCENT_WASH}; color: {TEXT}; }}
+        QPushButton#SettingsSave {{ background: {ACCENT}; color: {BG}; font-weight: 700; }}
+    """)
 
     # ── Save handler ──────────────────────────────────────────────
     def save_all():
@@ -438,16 +691,63 @@ def show_settings(app):
 
         # Pricing
         with get_connection() as conn:
-            for (backend, model), (in_edit, out_edit) in pricing_widgets.items():
+            for (backend, model), (edits, source, original) in pricing_widgets.items():
+                if source == "local":
+                    continue
+                values = []
+                valid = True
+                for edit in edits:
+                    raw = edit.text().strip()
+                    try:
+                        value = float(raw) if raw else 0.0
+                        if value < 0:
+                            raise ValueError
+                    except ValueError:
+                        errors.append(f"Pricing {backend}/{model}: use a positive number or leave it blank.")
+                        valid = False
+                        break
+                    values.append(value)
+                if not valid:
+                    continue
+                # Inherited catalog rows stay inherited until the user changes
+                # one of their fields. This preserves future provider-default
+                # updates instead of materialising dozens of stale copies.
+                changed = any(abs(a - b) > 1e-12 for a, b in zip(values, original))
+                if source in {"default", "unknown"} and not changed:
+                    continue
+                conn.execute("""
+                    INSERT INTO pricing
+                      (backend, model, input_per_1m_usd, cached_input_per_1m_usd,
+                       output_per_1m_usd)
+                    VALUES (?,?,?,?,?)
+                    ON CONFLICT(backend, model) DO UPDATE SET
+                      input_per_1m_usd = excluded.input_per_1m_usd,
+                      cached_input_per_1m_usd = excluded.cached_input_per_1m_usd,
+                      output_per_1m_usd = excluded.output_per_1m_usd
+                """, (backend, model, values[0], values[1], values[2]))
+            conn.commit()
+
+        with get_connection() as conn:
+            for path, (edit, original) in per_unit_widgets.items():
+                key = "pricing.per_unit." + ".".join(path)
+                raw = edit.text().strip()
+                if not raw:
+                    conn.execute("DELETE FROM settings WHERE key = ?", (key,))
+                    continue
                 try:
-                    in_val = float(in_edit.text().strip())
-                    out_val = float(out_edit.text().strip())
-                    conn.execute(
-                        "UPDATE pricing SET input_per_1m_usd = ?, output_per_1m_usd = ? WHERE backend = ? AND model = ?",
-                        (in_val, out_val, backend, model)
-                    )
+                    value = float(raw)
+                    if value <= 0:
+                        raise ValueError
                 except ValueError:
-                    errors.append(f"Pricing {backend}/{model}: invalid number.")
+                    errors.append(f"Per-unit pricing {' / '.join(path)}: use a number above zero or leave it blank.")
+                    continue
+                if original is not None and abs(value - original) <= 1e-12:
+                    continue
+                conn.execute(
+                    "INSERT INTO settings (key, value) VALUES (?, ?) "
+                    "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                    (key, str(value)),
+                )
             conn.commit()
 
         app.update_usage_labels()
@@ -462,6 +762,7 @@ def show_settings(app):
 
     save_all_btn.clicked.connect(save_all)
     dialog.exec()
+    return dialog
 
 
 def show_model_guide(app):
@@ -732,4 +1033,3 @@ def show_model_guide(app):
     search_box.textChanged.connect(apply_search)
 
     dialog.exec()
-

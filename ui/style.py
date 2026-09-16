@@ -102,6 +102,13 @@ GLOBAL_STYLESHEET = f"""
             color: {TEXT_DIM};
             font-size: 13px;
         }}
+        QLabel#InlineEmptyState {{
+            background-color: {SURFACE};
+            color: {TEXT_DIM};
+            border: 1px solid {BORDER};
+            border-radius: {RADIUS};
+            padding: 12px 14px;
+        }}
         QTableWidget#OpportunityTable {{
             background-color: {SUNKEN};
             alternate-background-color: {SURFACE};
@@ -536,8 +543,9 @@ GLOBAL_STYLESHEET = f"""
             border: none;
             border-bottom: 2px solid transparent;
             border-radius: 0;
-            padding: 0 4px;
-            margin: 0 12px;
+            padding: 0 3px;
+            margin: 0 7px;
+            font-size: 12px;
             font-weight: 550;
         }}
         QTabBar#WorkspaceTabs::tab:hover {{ color: {TEXT_DIM}; }}

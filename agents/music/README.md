@@ -1,4 +1,4 @@
-# Music agent
+# Music Artist Generator
 
 Owns artist positioning, release setup, distribution planning, Spotify strategy
 and income-roadmap generation.  Its public API is `agents.music.MusicAgent`.
@@ -6,6 +6,10 @@ Provider execution and project persistence stay in the umbrella.
 
 User guidance: `docs/agents/music.md`.  Run focused coverage with
 `pytest tests/test_agents_scenarios.py -k music`.
+
+The package also owns the **Songs & Albums** tab (`suno_panel.py`, wired into
+Imprint's Music workspace from `main.py`), a user-assisted Suno handoff — see
+`SUNO_WORKFLOW.md`.
 
 ## Files
 
@@ -49,6 +53,16 @@ User guidance: `docs/agents/music.md`.  Run focused coverage with
   - `build_messages(prompt)` — wraps a prompt with `SYSTEM_PROMPT`. There
     are no specialised builder methods (unlike Creator or Publish); the
     entire five-section behaviour lives in the one static system prompt.
+
+- **`suno_panel.py`** — the "Songs & Albums" tab: drafts lyrics and
+  Suno-ready style prompts from a title/track-count/brief through the shared
+  budget/permission-gated request path, lets the user edit and copy them into
+  their own Suno account (no API key, no auto-generation — Suno's own
+  generation/download costs are not tracked here), then imports the
+  downloaded audio into `data/music_library` (via
+  `services.runtime_paths.user_data_base()`) without moving the originals.
+  Each album folder holds its audio plus an `album.json` recording title,
+  brief, lyrics/prompts and track order. See `SUNO_WORKFLOW.md`.
 
 - **`recommendations.py`** — registers Music's `RECOMMENDATION_PROFILE` (an
   `AgentProfile` from `services.recommendations.models`) with the shared

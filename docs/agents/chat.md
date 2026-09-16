@@ -36,3 +36,38 @@ Streaming text into the **Output** box (auto-hidden until there's content). Each
 
 ## Requirements
 Any provider. Ollama is free/local; cloud providers need an API key (app `.env`).
+
+## Before you run
+
+Choose the narrowest Tool that matches the deliverable, then state the desired
+format and acceptance criteria in the prompt. In Hybrid or Cloud mode, confirm
+that the provider is permitted and the right rail says the key is configured.
+Long saved conversations send more prior context and can cost more; start a new
+chat when old turns are no longer relevant.
+
+## Verify the result
+
+- Check factual claims against a named source when accuracy matters.
+- Confirm the response followed the requested format and did not silently omit
+  constraints from an earlier turn.
+- Treat code, financial reasoning, platform rules, and publishable copy as a
+  draft until the relevant specialist agent or a human review passes it.
+- Verify that the conversation appears under Saved Chats before relying on it
+  as the only copy.
+
+## Storage, cost, and privacy
+
+Prompts and responses are stored locally in `data/chats/`. A cloud run sends
+the current conversation context to the selected provider; a local Ollama run
+does not. Imprint checks the request against session and daily limits before
+starting, then records measured usage when available. Deleting a saved chat is
+separate from clearing the visible prompt and requires confirmation.
+
+## Common failures
+
+| Symptom | Check |
+|---|---|
+| Send does nothing | Prompt, selected model, API permission, and remaining budget. |
+| Model menu is empty | Refresh Models; confirm the provider is reachable or Ollama is running. |
+| Response ignores context | Start a clean chat or restate the constraint in the current prompt. |
+| Run stops mid-answer | Status line and Run Log; partial text is not a confirmed completion. |

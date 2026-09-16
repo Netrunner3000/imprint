@@ -32,7 +32,7 @@ The status pill reports **Ready**, **Running**, **Blocked**, or a diagnostic
 state. The right rail separates four questions: is the system healthy, where
 will this route, which keys exist, and how much has been spent?
 
-## Write → Draft (`author`)
+## Author → Book Author (`author`)
 
 ![Draft workspace](img/workspace-draft.png)
 
@@ -76,7 +76,7 @@ claims, quotations, and metadata as proposals that require verification.
 **Maximum-leverage pattern:** lock the profile → approve the outline → draft
 scene by scene → edit → generate packaging from the approved manuscript.
 
-## Write → Publish (`manuscript`)
+## Author → Publishing Manager (`manuscript`)
 
 ![Publisher agent](img/agent-manuscript.png)
 
@@ -95,7 +95,7 @@ Use **Graphic** or **Short** on a calendar row to create that row's asset. Expor
 the calendar CSV as a manual publishing queue. Imported reports are observations;
 model answers are interpretations.
 
-## Audio → Audiobooks (`audiobook`)
+## Audio + Music → Audiobook Producer (`audiobook`)
 
 ### Convert tab
 
@@ -121,7 +121,7 @@ and speed control operate the selected file. **Start Over** deliberately clears
 its saved position; **Show in Finder** reveals the file. Position is stored by
 path every few seconds and completed books restart next time.
 
-## Audio → Music (`music`)
+## Audio + Music → Music Artist Generator (`music`)
 
 ![Music planning](img/agent-music.png)
 
@@ -140,7 +140,7 @@ Music is a release-planning agent, not an audio generator.
 Items marked **AI OUTPUT — COPY-PASTE READY** are drafts. Items marked **HUMAN
 ACTION REQUIRED** are real accounts, registrations, rights checks, or uploads.
 
-## Video → Video (`video`)
+## Video + Ads → Video & Ad Generator (`video`)
 
 ![Video generator](img/agent-video.png)
 
@@ -177,7 +177,7 @@ models fill the scene-image role. DeepSeek, Anthropic, Kimi, and Ollama can
 write scripts or prompts but do not expose official video-generation output,
 so they are not presented as renderers.
 
-## Social → Social (`social`)
+## Social → Social Media Campaign Manager (`social`)
 
 ![Social workspace](img/agent-social.png)
 
@@ -199,7 +199,7 @@ manual completion, and Post Now is available only for configured integrations.
 On **Accounts**, readiness explains why a platform can post or is draft-only.
 Nothing publishes unattended.
 
-## Web → Site Builder (`webdesign`)
+## Web → Web Developer (`webdesign`)
 
 ![Site Builder](img/agent-webdesign.png)
 
@@ -217,7 +217,7 @@ Always test the exported page at narrow and wide widths, with keyboard focus,
 and with real copy. Generated code is a starting implementation, not a deploy
 approval.
 
-## Gigs → Client Gigs (`fiverr`)
+## Brand Design → Brand & Logo Designer (`fiverr`)
 
 ![Client Gigs](img/agent-fiverr.png)
 
@@ -236,7 +236,7 @@ approval.
 Do not present raw generations as finished identity work. Check legibility,
 trademark conflicts, originality, formats, and the buyer's actual brief.
 
-## Creator → Creator (`creator`)
+## Brand Creator → Brand Creator (`creator`)
 
 ![Creator workspace](img/agent-creator.png)
 
@@ -264,7 +264,7 @@ Import statements or Record Revenue in **Earnings**; Add Media in **Media**;
 store verification and releases in **Records**. These records support review
 but do not replace legal or platform obligations.
 
-## OnlyFans → OnlyFans (`onlyfans`)
+## OF Agent → OF Agent (`onlyfans`)
 
 OnlyFans is venture intelligence, separate from content production.
 
@@ -278,6 +278,7 @@ OnlyFans is venture intelligence, separate from content production.
 | **Monetization & Analytics** | Imported receipts and attribution beside the hypothesis. |
 | **Market & Strategy** | Competition and positioning context. |
 | **Create Campaign in Creator** | Sends the selected signal and provenance into Creator as a draft brief. |
+| **Generate SFW Teaser** | Sends the selected signal to Creator and renders a real Higgsfield promotional video after account, policy, price, permission, and budget checks. The result is saved locally for review. |
 
 An opportunity score is **not** a creator ranking, live revenue forecast, or
 proof of demand. Sample data is interface demonstration only. The correct loop

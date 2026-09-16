@@ -19,9 +19,10 @@ Higgsfield all silently bill zero for months.
 from __future__ import annotations
 
 import json
-from pathlib import Path
 
-CONFIG_PATH = Path(__file__).resolve().parent.parent / "config" / "pricing.json"
+from services.runtime_paths import resource_base
+
+CONFIG_PATH = resource_base() / "config" / "pricing.json"
 
 DEFAULT_EUR_PER_USD = 0.92
 
@@ -36,6 +37,15 @@ def _table() -> dict:
 
 def eur_per_usd() -> float:
     try:
+        from services.database import get_setting
+        override = get_setting("eur_per_usd", "").strip()
+        if override:
+            value = float(override)
+            if value > 0:
+                return value
+    except Exception:
+        pass
+    try:
         return float(_table().get("eur_per_usd") or DEFAULT_EUR_PER_USD)
     except (TypeError, ValueError):
         return DEFAULT_EUR_PER_USD
@@ -48,6 +58,20 @@ def rate_usd(*path: str) -> float | None:
     an unfilled placeholder and a genuinely free service look identical in
     JSON, and of the two, silently billing nothing is the expensive mistake.
     """
+    # Settings stores user overrides in SQLite so they survive app upgrades
+    # without modifying the read-only application bundle.
+    try:
+        from services.database import get_setting
+        override = get_setting("pricing.per_unit." + ".".join(path), "").strip()
+    except Exception:
+        override = ""
+    if override:
+        try:
+            value = float(override)
+        except (TypeError, ValueError):
+            value = 0.0
+        return value if value > 0 else None
+
     node = _table().get("per_unit_usd") or {}
     for part in path:
         if not isinstance(node, dict) or part not in node:

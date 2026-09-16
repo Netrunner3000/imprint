@@ -1,7 +1,28 @@
 # Learning Centre 2.0 — audited expansion plan
 
-Status: **planning complete; implementation not started**  
+Status: **core implementation complete; validation passed**
 Prepared: 2026-09-15
+
+## Implementation record — 2026-09-15
+
+- 26 manifest-driven modules delivered across Start & paths, Foundations,
+  Agent Academy, and Income Lab (about 13,000 words).
+- Responsive curriculum shell delivered with grouped navigation, exact
+  heading-level search, excerpts, anchored results, breadcrumbs, page outline,
+  local progress, resume state, and agent handoff.
+- 130 control-to-lesson mappings delivered; F1 opens the focused control's
+  exact lesson anchor when available and falls back to the active agent.
+- Seven deterministic Income Lab worksheets delivered with golden formula and
+  refusal-state tests.
+- Music income prompt corrected to scenarios rather than earnings forecasts.
+- Sixteen current UI screenshots regenerated, including Creator Earnings and
+  two OnlyFans decision surfaces.
+- Full application test suite passed: 621 tests.
+
+Remaining release refinements are content/version migration rather than a
+blocker to the v2 centre: retire the hidden v1 Markdown copies after a reviewed
+documentation migration, add more annotated/cropped screenshots for secondary
+tabs, and extend exact help targets whenever new controls are added.
 
 ## Product goal
 

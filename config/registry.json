@@ -1,37 +1,37 @@
 {
   "agents": [
     {
-      "name": "author", "type": "agent", "label": "Draft", "enabled": true, "version": "1.0",
+      "name": "author", "type": "agent", "label": "Book Author", "enabled": true, "version": "1.0",
       "allowed_providers": ["ollama", "openai", "deepseek", "kimi", "gemini", "qwen", "anthropic"],
       "allowed_tools": null, "budget_limit_eur": null, "requires_approval": false,
       "description": "Plan, draft, revise, and export long-form fiction and non-fiction.", "log_path": "data/logs/runs.jsonl"
     },
     {
-      "name": "manuscript", "type": "agent", "label": "Publish", "enabled": true, "version": "1.0",
+      "name": "manuscript", "type": "agent", "label": "Publishing Manager", "enabled": true, "version": "1.0",
       "allowed_providers": ["ollama", "openai", "deepseek", "kimi", "gemini", "qwen", "anthropic"],
       "allowed_tools": ["General Chat", "Summarize"], "budget_limit_eur": 2.0, "requires_approval": false,
       "description": "Prepare books for distribution, promotion, and sales tracking.", "log_path": "data/logs/runs.jsonl"
     },
     {
-      "name": "audiobook", "type": "agent", "label": "Audiobooks", "enabled": true, "version": "1.0",
+      "name": "audiobook", "type": "agent", "label": "Audiobook Producer", "enabled": true, "version": "1.0",
       "allowed_providers": ["openai", "qwen"], "allowed_tools": null, "budget_limit_eur": 10.0,
       "requires_approval": false, "description": "Convert books into production-ready MP3 audiobooks.",
       "log_path": "data/logs/runs.jsonl"
     },
     {
-      "name": "music", "type": "agent", "label": "Music", "enabled": true, "version": "1.0",
+      "name": "music", "type": "agent", "label": "Music Artist Generator", "enabled": true, "version": "1.0",
       "allowed_providers": ["ollama", "openai", "deepseek", "kimi", "gemini", "qwen", "anthropic"],
       "allowed_tools": null, "budget_limit_eur": null, "requires_approval": false,
       "description": "Plan music releases, distribution, promotion, and income.", "log_path": "data/logs/runs.jsonl"
     },
     {
-      "name": "webdesign", "type": "agent", "label": "Site Builder", "enabled": true, "version": "1.0",
+      "name": "webdesign", "type": "agent", "label": "Web Developer", "enabled": true, "version": "1.0",
       "allowed_providers": ["ollama", "openai", "deepseek", "kimi", "gemini", "qwen", "anthropic"],
       "allowed_tools": null, "budget_limit_eur": null, "requires_approval": false,
       "description": "Generate responsive websites and production-ready front-end code.", "log_path": "data/logs/runs.jsonl"
     },
     {
-      "name": "fiverr", "type": "agent", "label": "Client Gigs", "enabled": true, "version": "1.0",
+      "name": "fiverr", "type": "agent", "label": "Brand & Logo Designer", "enabled": true, "version": "1.0",
       "allowed_providers": ["ollama", "openai", "deepseek", "kimi", "gemini", "qwen", "anthropic"],
       "allowed_tools": null, "budget_limit_eur": null, "requires_approval": false,
       "description": "Create logo concepts, gig listings, and client delivery messages.", "log_path": "data/logs/runs.jsonl"

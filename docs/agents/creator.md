@@ -1,4 +1,4 @@
-# CREATOR — shared content production
+# BRAND CREATOR — shared identity and content production
 
 `key: creator` · class: `agents/creator_agent.py → CreatorAgent` · panel: `build_creator_panel()` · handler: `creator_generate()`
 

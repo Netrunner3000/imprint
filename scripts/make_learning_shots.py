@@ -47,6 +47,11 @@ SHOTS: list[tuple[str, str, object]] = [
     ("agent-social-accounts.png", "social",
      lambda w: w.social_tabs.setCurrentIndex(2)),
     ("agent-creator.png", "creator", None),
+    ("agent-creator-earnings.png", "creator",
+     lambda w: w.creator_tabs.setCurrentIndex(2)),
+    ("agent-onlyfans.png", "onlyfans", None),
+    ("agent-onlyfans-content.png", "onlyfans",
+     lambda w: w.onlyfans_dashboard.sections.setCurrentIndex(2)),
     ("agent-audiobook-listen.png", "audiobook",
      lambda w: w.audiobook_tabs.setCurrentIndex(1)),
 ]

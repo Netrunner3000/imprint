@@ -140,7 +140,7 @@ def text_candidates(providers: list[str] | tuple[str, ...],
 
 def media_candidate(model, duration: int | None = None) -> Candidate:
     """Adapt a services.media_catalog.MediaModel without coupling the engine."""
-    from services.media_catalog import DIRECT_VIDEO_USD_PER_SECOND, SORA_SHUTDOWN_DATE
+    from services.media_catalog import SORA_SHUTDOWN_DATE, direct_video_rate_usd
 
     name = model.model_id.casefold()
     if model.kind == "local":
@@ -160,13 +160,13 @@ def media_candidate(model, duration: int | None = None) -> Candidate:
                    else .91 if "wan3.0" in name else .86)
         reliability = .78
         speed = .88 if any(x in name for x in ("fast", "prime", "lite")) else .58
-        rate = DIRECT_VIDEO_USD_PER_SECOND.get(model.model_id)
+        rate = direct_video_rate_usd(model.model_id)
         cost = max(.10, 1.0 - (rate or .20) / .45)
         privacy = .08
         available = provider_configured(model.provider)
     estimated = None
     if duration and model.kind == "direct_video":
-        rate = DIRECT_VIDEO_USD_PER_SECOND.get(model.model_id)
+        rate = direct_video_rate_usd(model.model_id)
         estimated = rate * duration if rate is not None else None
     retired = (model.provider == "OpenAI" and model.kind == "direct_video"
                and date.today() >= SORA_SHUTDOWN_DATE)

@@ -1,4 +1,4 @@
-# ATELIER — Fiverr logo gig studio
+# BRAND & LOGO DESIGNER — client identity studio
 
 `key: fiverr` · class: `agents/fiverr_agent.py → FiverrAgent` · panel: `build_fiverr_panel()` · handlers: `fiverr_generate_logos()`, `fiverr_write_delivery()`, `fiverr_write_gig()`
 
@@ -41,3 +41,39 @@ Two-step logo flow: a `ChatWorker` runs `FiverrAgent.build_image_prompt_request(
 **OpenAI API key** is mandatory for image generation. GPT Image uses token-based image pricing, so Imprint reserves a conservative amount against the budget before rendering. Text copy can use any provider. Fiverr seller account to sell.
 
 DALL·E 2 and 3 are intentionally not offered: OpenAI retired and removed both APIs.
+
+## Before you run
+
+Use the client's exact business name, industry, deliverable count, colour
+constraints, and prohibited references. Keep trademarked competitors in
+“avoid” notes, not as imitation targets. Confirm the OpenAI image key, image
+model, concept count, estimated reserve, and remaining session budget before
+generating. Delivery and gig copy can use a different text provider.
+
+## Verify the result
+
+- Inspect every logo at full size; the preview thumbnail can hide malformed
+  lettering and small artefacts.
+- Confirm spelling, contrast, simple-size legibility, and transparent/background
+  expectations against the client brief.
+- Run a trademark and originality check before commercial delivery. A generated
+  PNG is not automatically a vector master or an exclusive mark.
+- Edit gig claims, turnaround, revisions, and package terms so they match the
+  service you will actually provide.
+
+## Storage, cost, and privacy
+
+Generated working images first land under
+`data/fiverr_output/<timestamp>/`. **Save All Images** copies the current set to
+a folder you choose; it does not transfer files to Fiverr. Brief text and image
+prompts are sent to the selected cloud providers. Image generation is paid per
+request and each concept consumes a separate generation call.
+
+## Common failures
+
+| Symptom | Check |
+|---|---|
+| Generate Logos is blocked | Required brief fields, OpenAI key, image access, and budget reserve. |
+| Copy appears but no image | The text prompt stage succeeded; inspect the image-stage status and Run Log. |
+| Save All Images is disabled | No complete images are held in the current result set. |
+| Text in the logo is wrong | Regenerate with a simpler mark or add lettering manually in a design tool. |

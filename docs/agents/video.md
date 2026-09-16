@@ -1,4 +1,4 @@
-# VIDEO — topic to finished video
+# VIDEO & AD GENERATOR — topic to finished video
 
 `key: video` · pipeline: `vidforge` (nested repo) · direct providers: OpenAI / Gemini / Qwen-Wan / Higgsfield · bridge: `agents/video/studio.py` · panel: `build_video_panel()`
 

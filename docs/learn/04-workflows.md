@@ -23,9 +23,10 @@ the background.
 ### Run
 
 1. Record the brief before generating anything.
-2. For a logo, open **Gigs → Client Gigs**, set the business, industry, style,
-   colours, notes, and a small concept count. For a page, open **Web → Site
-   Builder** and state content, interactions, responsive behaviour, and checks.
+2. For a logo, open **Brand Design → Brand & Logo Designer**, set the business,
+   industry, style, colours, notes, and a small concept count. For a page, open
+   **Web → Web Developer** and state content, interactions, responsive behaviour,
+   and checks.
 3. Estimate and authorise the request.
 4. Generate a first pass. Reject unusable work before polishing it.
 5. Review against the written acceptance criteria: spelling, completeness,
@@ -62,7 +63,7 @@ test.
 ### Run
 
 1. Create one project. Complete and save the **Book Profile**.
-2. In **Write → Draft → Outline**, generate structure. Edit until every section
+2. In **Author → Book Author → Outline**, generate structure. Edit until every section
    earns its place; structural repair is cheapest here.
 3. Draft one scene or section at a time. Maintain Characters and World Notes for
    fiction; maintain claims and source notes outside the prose for non-fiction.
@@ -78,7 +79,7 @@ test.
 9. Publish through the platform's own controls. Imprint does not submit the book.
 10. After the observation window, import KDP/PublishDrive actuals and record
     source-specific campaign results.
-11. Only if the text and economics justify it, use **Audio → Audiobooks**:
+11. Only if the text and economics justify it, use **Audio + Music → Audiobook Producer**:
     convert a sample, approve voice/pronunciation, estimate the full book, then
     run the conversion.
 
@@ -114,7 +115,7 @@ and follow-on sales to other catalogue items.
    relevant angle. Do not alter the offer during this comparison.
 4. Edit claims and adapt the drafts to the actual community. Save approved
    versions to Schedule.
-5. Where motion materially helps, use **Make a Clip** or **Video → Social clip**.
+5. Where motion materially helps, use **Make a Clip** or **Video + Ads → Social clip**.
    Set provider, aspect, and duration before rendering; review the finished file.
 6. Post manually or through an explicitly configured Post Now integration. Mark
    each item posted so the schedule remains truthful.
@@ -180,7 +181,7 @@ retention or collected receipts does not earn automation.
 
 **Trigger:** a finished, rights-cleared recording has a release date.
 
-1. In **Audio → Music**, enter the artist, genre, release type, distributor,
+1. In **Audio + Music → Music Artist Generator**, enter the artist, genre, release type, distributor,
    audience, and an accurate description of the recording.
 2. Generate the five-part plan. Save it as a working checklist.
 3. Review profile copy, cover specification, identifiers, distributor choice,

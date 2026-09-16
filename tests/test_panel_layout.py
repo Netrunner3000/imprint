@@ -26,7 +26,10 @@ import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-AGENTS = ["author", "manuscript", "music", "webdesign", "fiverr", "video"]
+AGENTS = [
+    "author", "manuscript", "audiobook", "music", "webdesign", "fiverr",
+    "video",
+]
 
 # Agents whose panel holds more than one page. Testing only the page that
 # happens to be showing is how the Publish column's overlapping Generate button
@@ -214,8 +217,39 @@ def test_section_headings_are_readable_not_field_label_small_caps(app, window):
 def test_audiobook_source_list_does_not_push_settings_below_the_fold(app, window):
     window.select_agent("audiobook")
     _settle(app, window, (1400, 900), "audiobook")
-    assert window.audiobook_book_list.maximumHeight() <= 220
+    assert window.audiobook_book_list.maximumHeight() <= 180
+    assert window.audiobook_source_stack.height() <= 180
     assert window.audiobook_start_btn.text() == "Convert audiobook"
+
+
+def test_audiobook_convert_form_is_one_vertical_scroll_surface(app, window):
+    """Every convert control must scroll together instead of being compressed."""
+    from PySide6.QtCore import Qt
+
+    _settle(app, window, (1000, 600), "audiobook")
+    area = window.audiobook_convert_scroll
+    content = area.widget()
+    assert content is not None
+    assert content.isAncestorOf(window.audiobook_input_path)
+    assert content.isAncestorOf(window.audiobook_output_path)
+    assert content.isAncestorOf(window.audiobook_start_btn)
+    assert area.horizontalScrollBarPolicy() == Qt.ScrollBarAlwaysOff
+    assert area.verticalScrollBar().maximum() > 0
+
+
+def test_audiobook_refresh_controls_keep_separate_jobs(app, window):
+    assert window.audiobook_refresh_btn.text() == "Refresh List"
+    assert window.audiobook_library_refresh_btn.text() == "Rescan"
+
+
+def test_fixed_utility_rail_never_grows_a_horizontal_scrollbar(app, window):
+    """The right rail is deliberately one fixed width; only vertical travel is useful."""
+    from PySide6.QtCore import Qt
+    from PySide6.QtWidgets import QScrollArea, QWidget
+
+    rail = window.findChild(QWidget, "RailRight")
+    area = rail.findChild(QScrollArea)
+    assert area.horizontalScrollBarPolicy() == Qt.ScrollBarAlwaysOff
 
 
 def test_author_compose_remains_whole_with_profile_open(app, window):
@@ -485,3 +519,16 @@ def test_shell_chrome_never_overlaps(app, window, size):
     assert not bad, "\n".join(
         f"  [{where}] {_describe(a)} overlaps {_describe(b)}"
         for where, a, b in bad[:6])
+
+
+def test_workspace_names_are_never_elided(app, window):
+    """Product-area names must remain meaningful after the professional rename."""
+    from PySide6.QtCore import Qt
+
+    _settle(app, window, (1500, 950), "author")
+    assert window.workspace_tabs.elideMode() == Qt.ElideNone
+    assert [window.workspace_tabs.tabText(i)
+            for i in range(window.workspace_tabs.count())] == [
+        "Author", "Audio + Music", "Video + Ads", "Social", "Web",
+        "Brand Design", "Brand Creator", "OF Agent",
+    ]
