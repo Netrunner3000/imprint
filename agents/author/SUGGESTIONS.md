@@ -1,5 +1,11 @@
 # Draft — Suggestions
 
+Status: `IDEA` · `CONSIDERING` · `PLANNED` · `DONE` · `REJECTED`
+
+---
+
+## Open
+
 | Suggestion | Status |
 |---|---|
 | Scene cards with reorderable beats and continuity warnings | IDEA |

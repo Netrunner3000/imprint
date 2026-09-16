@@ -1,5 +1,11 @@
 # Site Builder — Suggestions
 
+Status: `IDEA` · `CONSIDERING` · `PLANNED` · `DONE` · `REJECTED`
+
+---
+
+## Open
+
 | Suggestion | Status |
 |---|---|
 | Reusable brand tokens shared with Creator and Gigs | IDEA |

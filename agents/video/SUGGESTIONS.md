@@ -1,5 +1,11 @@
 # Video — Suggestions
 
+Status: `IDEA` · `CONSIDERING` · `PLANNED` · `DONE` · `REJECTED`
+
+---
+
+## Open
+
 | Suggestion | Status |
 |---|---|
 | Shot timeline with replaceable clips before final assembly | IDEA |

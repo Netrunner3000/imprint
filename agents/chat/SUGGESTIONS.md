@@ -1,5 +1,11 @@
 # Studio Assistant — Suggestions
 
+Status: `IDEA` · `CONSIDERING` · `PLANNED` · `DONE` · `REJECTED`
+
+---
+
+## Open
+
 | Suggestion | Status |
 |---|---|
 | Project-aware assistant that can hand work to specialist agents | CONSIDERING |

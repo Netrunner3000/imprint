@@ -1,5 +1,11 @@
 # Client Gigs — Suggestions
 
+Status: `IDEA` · `CONSIDERING` · `PLANNED` · `DONE` · `REJECTED`
+
+---
+
+## Open
+
 | Suggestion | Status |
 |---|---|
 | Profit-per-order dashboard including provider cost and revision time | IDEA |

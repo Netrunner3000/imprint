@@ -1,5 +1,11 @@
 # Publish — Suggestions
 
+Status: `IDEA` · `CONSIDERING` · `PLANNED` · `DONE` · `REJECTED`
+
+---
+
+## Open
+
 | Suggestion | Status |
 |---|---|
 | Edition and territory comparison dashboard | IDEA |

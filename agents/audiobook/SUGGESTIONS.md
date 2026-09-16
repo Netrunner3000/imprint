@@ -1,5 +1,11 @@
 # Audiobook — Suggestions
 
+Status: `IDEA` · `CONSIDERING` · `PLANNED` · `DONE` · `REJECTED`
+
+---
+
+## Open
+
 | Suggestion | Status |
 |---|---|
 | Per-character voice casting with a narrator fallback | IDEA |

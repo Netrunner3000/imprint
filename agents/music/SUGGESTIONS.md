@@ -1,5 +1,11 @@
 # Music — Suggestions
 
+Status: `IDEA` · `CONSIDERING` · `PLANNED` · `DONE` · `REJECTED`
+
+---
+
+## Open
+
 | Suggestion | Status |
 |---|---|
 | Release-calendar view shared with Social | IDEA |

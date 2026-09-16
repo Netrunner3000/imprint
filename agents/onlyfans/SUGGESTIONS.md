@@ -1,5 +1,11 @@
 # OnlyFans — Suggestions
 
+Status: `IDEA` · `CONSIDERING` · `PLANNED` · `DONE` · `REJECTED`
+
+---
+
+## Open
+
 | Suggestion | Status |
 |---|---|
 | Cohort retention and subscriber lifetime-value analysis | IDEA |
