@@ -7,9 +7,10 @@ Provider execution and project persistence stay in the umbrella.
 User guidance: `docs/agents/music.md`.  Run focused coverage with
 `pytest tests/test_agents_scenarios.py -k music`.
 
-The package also owns the **Songs & Albums** tab (`suno_panel.py`, wired into
-Imprint's Music workspace from `main.py`), a user-assisted Suno handoff — see
-`SUNO_WORKFLOW.md`.
+The package owns the Music workspace layout in `panel.py` and its **Songs &
+Albums** tab in `suno_panel.py`. Imprint still owns the plan request/result
+handlers and shared spending guard; the panel exposes temporary host aliases
+for the recommendation, tooltip and Suno integrations. See `SUNO_WORKFLOW.md`.
 
 ## Files
 
@@ -63,6 +64,10 @@ Imprint's Music workspace from `main.py`), a user-assisted Suno handoff — see
   `services.runtime_paths.user_data_base()`) without moving the originals.
   Each album folder holds its audio plus an `album.json` recording title,
   brief, lyrics/prompts and track order. See `SUNO_WORKFLOW.md`.
+
+- **`panel.py`** — the Music workspace's form, provider/model pair, action row,
+  and six result tabs. The umbrella composes `MusicPanel`; it no longer defines
+  this layout in `main.py`.
 
 - **`recommendations.py`** — registers Music's `RECOMMENDATION_PROFILE` (an
   `AgentProfile` from `services.recommendations.models`) with the shared

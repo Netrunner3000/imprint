@@ -1,5 +1,11 @@
 # Router — Suggestions
 
+Status: `IDEA` · `CONSIDERING` · `PLANNED` · `DONE` · `REJECTED`
+
+---
+
+## Open
+
 | Suggestion | Status |
 |---|---|
 | Rule-first routing with an optional model only for ambiguous requests | PLANNED |

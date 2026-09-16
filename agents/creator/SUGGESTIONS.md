@@ -1,5 +1,11 @@
 # Creator — Suggestions
 
+Status: `IDEA` · `CONSIDERING` · `PLANNED` · `DONE` · `REJECTED`
+
+---
+
+## Open
+
 | Suggestion | Status |
 |---|---|
 | Cross-venture asset library with usage rights and expiry | IDEA |

@@ -1,5 +1,11 @@
 # Social — Suggestions
 
+Status: `IDEA` · `CONSIDERING` · `PLANNED` · `DONE` · `REJECTED`
+
+---
+
+## Open
+
 | Suggestion | Status |
 |---|---|
 | One campaign calendar across books, releases, videos and ventures | PLANNED |
