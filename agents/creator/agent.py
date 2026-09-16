@@ -27,10 +27,10 @@ Three, recorded per account because they carry different obligations:
 * ``managed`` — someone else's, run on their behalf. Requires a recorded
   consent holder and date; `require_ready()` refuses to draft without one, so
   an agency cannot quietly accumulate accounts nobody authorised.
-* ``persona`` — a synthetic character the user operates. Legal, and common, but
-  subscribers are paying on an understanding of who they are talking to, so the
-  account carries a disclosure line and drafts never claim to be a real named
-  person.
+* ``persona`` — a synthetic character the user operates, only when the
+  current written platform policy has been reviewed and recorded as permitting
+  that use. A disclosure line is required; drafts never claim the persona is
+  a real named person.
 
 What this agent will not write, in any mode, is a message pretending to be a
 specific real human in a live conversation with a paying subscriber. That is
@@ -43,6 +43,7 @@ from __future__ import annotations
 from services.creator_profile import (
     SEGMENTS, persona_block, voice_block,
 )
+from services.creator_platform_policy import get_policy
 
 ACCOUNT_TYPES = ("own", "managed", "persona")
 
@@ -88,6 +89,20 @@ def require_ready(account: dict) -> None:
                 "consent holder is recorded. Add who authorised it and when "
                 "before drafting on their behalf."
             )
+    platform = account.get("platform")
+    if account_type == "persona" and platform:
+        policy = get_policy(platform)
+        if policy["synthetic_persona"] != "allowed" or not policy["source_url"] or not policy["reviewed_on"]:
+            raise ConsentError(
+                f"Synthetic personas are not confirmed as permitted for {platform}. "
+                "Review the current written platform policy, save its source and date, "
+                "and keep this workflow manual until verified.")
+        if policy["verified_owner_required"] != "no":
+            raise ConsentError(
+                f"The {platform} policy does not confirm that a wholly synthetic "
+                "persona may be the depicted account creator.")
+        if not (account.get("disclosure") or "").strip():
+            raise ConsentError("Record how the synthetic persona is disclosed before drafting.")
 
 
 def _account_context(account: dict) -> str:
@@ -170,6 +185,12 @@ class CreatorAgent:
         account_id = account.get("id")
         what = KINDS.get(kind, KINDS["post"])
         parts = [_account_context(account)]
+        if account.get("platform"):
+            policy = get_policy(account["platform"])
+            if policy["ai_disclosure"]:
+                parts.append(
+                    "The reviewed platform policy requires this AI disclosure: "
+                    + policy["ai_disclosure"])
 
         if account_id:
             if (account.get("account_type") or "").lower() == "persona":

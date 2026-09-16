@@ -96,6 +96,29 @@ def test_progress_survives_a_rescan(library, tmp_path):
     assert book.started
 
 
+def test_saved_listening_marks_round_trip_and_can_be_removed(library, tmp_path):
+    path = tmp_path / "book.mp3"
+    library.save_mark(path, 42_000, "Chapter two begins")
+    assert library.saved_marks(path) == [
+        library.ChapterMark("Chapter two begins", 42_000, "saved")]
+    library.delete_mark(path, 42_000)
+    assert library.saved_marks(path) == []
+
+
+def test_embedded_chapters_are_read_from_media_metadata(library, tmp_path, monkeypatch):
+    from subprocess import CompletedProcess
+
+    def fake_probe(*_args, **_kwargs):
+        return CompletedProcess([], 0,
+            '{"chapters":[{"start_time":"0.000","tags":{"title":"Opening"}},'
+            '{"start_time":"123.500","tags":{"title":"Chapter 2"}}]}', "")
+
+    monkeypatch.setattr(library.subprocess, "run", fake_probe)
+    chapters = library.embedded_chapters(tmp_path / "book.m4b")
+    assert [(c.title, c.position_ms) for c in chapters] == [
+        ("Opening", 0), ("Chapter 2", 123_500)]
+
+
 def test_duration_is_not_erased_by_a_later_save(library, tmp_path):
     """The player reports duration 0 until the media loads; a save at that
     moment must not wipe a known length."""
@@ -198,3 +221,19 @@ def test_saving_with_nothing_loaded_is_harmless(app, library, monkeypatch):
 def test_controls_are_disabled_until_something_is_loaded(app):
     from ui.audio_player import AudiobookPlayer
     assert not AudiobookPlayer().play_btn.isEnabled()
+
+
+def test_player_has_sleep_and_keyboard_transport_controls(app, library, audio_file):
+    from PySide6.QtGui import QShortcut
+    from ui.audio_player import AudiobookPlayer
+
+    player = AudiobookPlayer()
+    player.load(audio_file)
+    assert player.chapters_btn.isEnabled()
+    assert player.mark_btn.isEnabled()
+    assert len(player.findChildren(QShortcut)) == 3
+    player.sleep_box.setCurrentText("15 min")
+    assert player._sleep_timer.isActive()
+    player._on_sleep_expired()
+    assert player.sleep_box.currentText() == "Off"
+    assert not player._sleep_timer.isActive()

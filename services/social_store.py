@@ -89,21 +89,22 @@ def delete_campaign(campaign_id: int) -> None:
 # ── Posts ────────────────────────────────────────────────────────────────────
 def add_post(campaign_id: int, platform: str, body: str, fmt: str = "text",
              scheduled_for: str = "", media_path: str = "",
-             status: str = "draft") -> int:
+             status: str = "draft", angle: str = "") -> int:
     with get_connection() as conn:
         cur = conn.execute(
             "INSERT INTO social_posts "
             "(campaign_id, created_at, platform, format, body, media_path, "
-            " scheduled_for, status) VALUES (?,?,?,?,?,?,?,?)",
+            " scheduled_for, status, angle) VALUES (?,?,?,?,?,?,?,?,?)",
             (campaign_id, _now(), platform, fmt, body, media_path,
-             scheduled_for, status))
+             scheduled_for, status, angle))
         conn.commit()
         return int(cur.lastrowid)
 
 
 def update_post(post_id: int, **fields) -> None:
     allowed = ("platform", "format", "body", "media_path", "scheduled_for",
-               "status", "posted_at", "permalink", "last_error")
+               "status", "posted_at", "permalink", "last_error", "angle",
+               "reach", "clicks", "metric_source", "metric_window")
     sets = {k: v for k, v in fields.items() if k in allowed}
     if not sets:
         return
@@ -150,6 +151,20 @@ def mark_posted(post_id: int, permalink: str = "") -> None:
 
 def mark_failed(post_id: int, error: str) -> None:
     update_post(post_id, status="failed", last_error=error[:500])
+
+
+def record_metrics(post_id: int, *, reach: int, clicks: int,
+                   source: str, window: str) -> None:
+    """Manual observed metrics for one posted item, with explicit provenance."""
+    post = get_post(post_id)
+    if not post or post["status"] != "posted":
+        raise ValueError("Only posted items can have observed metrics.")
+    if min(reach, clicks) < 0:
+        raise ValueError("Reach and clicks cannot be negative.")
+    if not source.strip() or not window.strip():
+        raise ValueError("Record the metric source and measurement window.")
+    update_post(post_id, reach=int(reach), clicks=int(clicks),
+                metric_source=source.strip(), metric_window=window.strip())
 
 
 # ── Scheduling ───────────────────────────────────────────────────────────────

@@ -21,12 +21,18 @@ from __future__ import annotations
 from pathlib import Path
 
 from PySide6.QtCore import Qt, QTimer, QUrl, Signal
+from PySide6.QtGui import QKeySequence, QShortcut
 from PySide6.QtMultimedia import QAudioOutput, QMediaPlayer
 from PySide6.QtWidgets import (
-    QComboBox, QHBoxLayout, QLabel, QPushButton, QSlider, QVBoxLayout, QWidget,
+    QComboBox, QHBoxLayout, QInputDialog, QLabel, QMenu, QPushButton, QSlider,
+    QVBoxLayout, QWidget,
 )
 
-from services.audiobook_library import format_time, save_position
+from services.audiobook_library import (
+    delete_mark, embedded_chapters, format_time, save_mark, saved_marks,
+    save_position,
+)
+from ui.widgets import FlowLayout
 
 # How often the playhead is persisted. Frequent enough that a crash costs
 # seconds, rare enough that it is not writing to sqlite constantly.
@@ -86,15 +92,38 @@ class AudiobookPlayer(QWidget):
         self.forward_btn = QPushButton("+30s")
         self.forward_btn.clicked.connect(lambda: self.skip(SKIP_MS))
         controls.addWidget(self.forward_btn)
-
         controls.addStretch()
-        controls.addWidget(QLabel("Speed:"))
+        layout.addLayout(controls)
+
+        options = QWidget()
+        options.setObjectName("Transparent")
+        option_row = FlowLayout(options, spacing=8)
+
+        self.chapters_btn = QPushButton("Chapters & marks")
+        self.chapters_btn.setToolTip(
+            "Jump to embedded chapters or to a mark you saved while listening.")
+        self.chapters_btn.clicked.connect(self.show_chapters)
+        option_row.addWidget(self.chapters_btn)
+
+        self.mark_btn = QPushButton("Add mark")
+        self.mark_btn.clicked.connect(self.add_mark)
+        option_row.addWidget(self.mark_btn)
+
+        option_row.addWidget(QLabel("Speed:"))
         self.speed_box = QComboBox()
         self.speed_box.addItems(SPEEDS)
         self.speed_box.setCurrentText("1.0×")
         self.speed_box.currentTextChanged.connect(self._on_speed)
-        controls.addWidget(self.speed_box)
-        layout.addLayout(controls)
+        option_row.addWidget(self.speed_box)
+        option_row.addWidget(QLabel("Sleep:"))
+        self.sleep_box = QComboBox()
+        for label, minutes in (("Off", 0), ("15 min", 15), ("30 min", 30),
+                               ("45 min", 45), ("60 min", 60)):
+            self.sleep_box.addItem(label, minutes)
+        self.sleep_box.setToolTip("Pause playback after this many minutes.")
+        self.sleep_box.currentIndexChanged.connect(self._on_sleep_changed)
+        option_row.addWidget(self.sleep_box)
+        layout.addWidget(options)
 
         self._player.positionChanged.connect(self._on_position)
         self._player.durationChanged.connect(self._on_duration)
@@ -110,17 +139,31 @@ class AudiobookPlayer(QWidget):
         self._save_timer.setInterval(SAVE_INTERVAL_MS)
         self._save_timer.timeout.connect(self.save_now)
 
+        self._sleep_timer = QTimer(self)
+        self._sleep_timer.setSingleShot(True)
+        self._sleep_timer.timeout.connect(self._on_sleep_expired)
+
+        for key, callback in ((Qt.Key.Key_Space, self.toggle),
+                              (Qt.Key.Key_Left, lambda: self.skip(-SKIP_MS)),
+                              (Qt.Key.Key_Right, lambda: self.skip(SKIP_MS))):
+            shortcut = QShortcut(QKeySequence(key), self)
+            shortcut.setContext(Qt.ShortcutContext.WidgetWithChildrenShortcut)
+            shortcut.activated.connect(callback)
+
         self.set_enabled(False)
 
     # ── public API ──────────────────────────────────────────────────────
     def set_enabled(self, enabled: bool) -> None:
         for widget in (self.play_btn, self.back_btn, self.forward_btn,
-                       self.scrubber, self.speed_box):
+                       self.scrubber, self.speed_box, self.chapters_btn,
+                       self.mark_btn, self.sleep_box):
             widget.setEnabled(enabled)
 
     def load(self, path: Path, title: str = "", resume_ms: int = 0) -> None:
         """Load a file and arm its resume position."""
         self.save_now()
+        self._sleep_timer.stop()
+        self.sleep_box.setCurrentIndex(0)
         self._path = Path(path)
         self._title = title or self._path.stem
         self._resume_ms = max(0, int(resume_ms))
@@ -148,7 +191,65 @@ class AudiobookPlayer(QWidget):
 
     def stop(self) -> None:
         self.save_now()
+        self._sleep_timer.stop()
+        self.sleep_box.setCurrentIndex(0)
         self._player.stop()
+
+    def add_mark(self) -> None:
+        if not self._path:
+            return
+        position = self._player.position()
+        title, accepted = QInputDialog.getText(
+            self, "Save listening mark", "Mark name:",
+            text=f"Mark at {format_time(position)}")
+        if accepted and title.strip():
+            save_mark(self._path, position, title)
+
+    def show_chapters(self) -> None:
+        if not self._path:
+            return
+        menu = QMenu(self)
+        embedded = embedded_chapters(self._path)
+        marks = saved_marks(self._path)
+        if embedded:
+            menu.addSection("Embedded chapters")
+            for chapter in embedded:
+                action = menu.addAction(
+                    f"{format_time(chapter.position_ms)}  {chapter.title}")
+                action.triggered.connect(
+                    lambda _checked=False, position=chapter.position_ms:
+                    self._player.setPosition(position))
+        if marks:
+            menu.addSection("Your marks")
+            for mark in marks:
+                action = menu.addAction(
+                    f"{format_time(mark.position_ms)}  {mark.title}")
+                action.triggered.connect(
+                    lambda _checked=False, position=mark.position_ms:
+                    self._player.setPosition(position))
+            remove_menu = menu.addMenu("Remove a mark")
+            for mark in marks:
+                action = remove_menu.addAction(mark.title)
+                action.triggered.connect(
+                    lambda _checked=False, position=mark.position_ms:
+                    delete_mark(self._path, position))
+        if not embedded and not marks:
+            action = menu.addAction("No chapters in this file yet — use Add mark")
+            action.setEnabled(False)
+        menu.exec(self.chapters_btn.mapToGlobal(self.chapters_btn.rect().bottomLeft()))
+
+    def _on_sleep_changed(self, _index: int) -> None:
+        self._sleep_timer.stop()
+        if not self._path:
+            return
+        minutes = int(self.sleep_box.currentData() or 0)
+        if minutes:
+            self._sleep_timer.start(minutes * 60_000)
+
+    def _on_sleep_expired(self) -> None:
+        self.pause()
+        self.save_now()
+        self.sleep_box.setCurrentIndex(0)
 
     def skip(self, delta_ms: int) -> None:
         if not self._path:

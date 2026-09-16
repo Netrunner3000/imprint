@@ -6,9 +6,9 @@ from pathlib import Path
 import services.resource_monitor as resource_monitor
 
 
-# The seven agents the fork removed. None of them may come back through a
+# The security agents the fork removed. None of them may come back through a
 # workspace, which is the property this file is named for.
-STRIPPED_AGENTS = {"chat", "osint", "osint_heavy", "wifi", "bug_bounty",
+STRIPPED_AGENTS = {"osint", "osint_heavy", "wifi", "bug_bounty",
                    "manager", "nfl_bet"}
 
 
@@ -37,7 +37,9 @@ def test_every_workspace_agent_has_a_panel():
     import main
 
     listed = {agent for agents in main.WORKSPACES.values() for agent in agents}
-    missing = sorted(a for a in listed if a not in main.CUSTOM_PANELS)
+    # Studio Assistant deliberately uses the shared normal_panel.
+    missing = sorted(a for a in listed if a not in main.CUSTOM_PANELS
+                     and a != "chat")
     assert not missing, f"workspace agents with no panel: {missing}"
 
     labelled = sorted(a for a in listed if a not in main.WORKSPACE_LABELS)
@@ -57,7 +59,7 @@ def test_registry_exposes_only_focused_agents():
     registry = json.loads(registry_path.read_text(encoding="utf-8"))
 
     assert {agent["name"] for agent in registry["agents"]} == {
-        "author", "manuscript", "audiobook", "music", "webdesign", "fiverr"
+        "chat", "author", "manuscript", "audiobook", "music", "webdesign", "fiverr"
     }
 
 
@@ -78,7 +80,7 @@ def test_resource_monitor_degrades_when_os_metrics_are_unavailable(monkeypatch):
     assert snapshot["battery_percent"] is None
 
 
-def test_every_workspace_agent_is_registered_and_enabled():
+def test_every_workspace_agent_is_registered_and_enabled(tmp_path, monkeypatch):
     """A panel the validator refuses is a button that never works.
 
     `authorize_request` runs every paid call past `Validator.validate`, which
@@ -88,8 +90,11 @@ def test_every_workspace_agent_is_registered_and_enabled():
     fine, the tests pass, and it only shows up when money is about to be spent.
     """
     import main
+    from services import database
     from services.registry import Registry
 
+    monkeypatch.setattr(database, "DB_PATH", tmp_path / "registry.db")
+    database.init_db()
     registry = Registry()
     listed = {agent for agents in main.WORKSPACES.values() for agent in agents}
     unregistered = sorted(a for a in listed if not registry.is_agent_enabled(a))

@@ -106,7 +106,7 @@ fixed width and cannot be dragged.
 
 | Region | Width | Purpose |
 |--------|-------|---------|
-| **Header bar** | full width, 56 px | Wordmark, the five mode tabs, agent status, Docs / Tooltips / Settings |
+| **Header bar** | full width, 56 px | Wordmark, workspace tabs, agent status, Docs / Tooltips / Settings |
 | **Left rail** | 236 px | Projects: filter, search, list, New Project |
 | **Centre** | fills the remainder | The current agent's panel |
 | **Right rail** | 268 px | Spend, budget limits, utilities, and collapsed reference panels |
@@ -130,7 +130,7 @@ tests run every panel down to that size.
 
 ## 3. Header Bar — Modes and Chrome
 
-**Mode tabs** — `Write` · `Audio` · `Video` · `Social` · `Web` · `Gigs` · `Creator`. Each opens the
+**Mode tabs** — `Author` · `Audio + Music` · `Video + Ads` · `Social` · `Web` · `Brand Design` · `Brand Creator` · `OF Agent` · `Assistant`. Each opens the
 last tool used in that workspace. Where a workspace holds two related tools
 (Author → Book Author / Publishing Manager, Audio + Music → Audiobook Producer / Music Artist Generator) a second tab row appears
 above the page title.
@@ -284,7 +284,7 @@ Changing the tool updates the live cost estimate and the recommendation label in
 - **Ollama:** fetches the list of locally installed models via `ollama.list_models()`. Falls back to `deepseek-r1:8b` and `deepseek-r1:1.5b` if none are found.
 - **OpenAI:** queries the API for available GPT/o-series models. Falls back to a static list (`gpt-4o-mini`, `gpt-4.1-mini`, `gpt-4.1`) if the API is unavailable.
 - **DeepSeek:** queries the API if a key is configured; otherwise uses a static list including `deepseek-chat`, `deepseek-reasoner`, `deepseek-coder`.
-- **Gemini:** queries the API for models supporting `generateContent`; otherwise uses a static list including `gemini-1.5-flash`, `gemini-2.0-flash`, `gemini-2.5-pro`.
+- **Gemini:** queries the API for models supporting `generateContent`; otherwise uses current 3.8 Flash / 3.1 Pro Preview and 2.5 Flash / Pro fallbacks. Retired 1.5 and 2.0 IDs are not offered offline.
 
 The last selected model for each provider is saved to `config/settings.json` and restored on the next startup.
 
@@ -444,7 +444,7 @@ Chat uses the **standard `normal_panel`** described in Chapter 4 (no custom GUI)
 
 ### 7.2 Atelier Agent
 
-**Left-panel button:** Client Gigs  (category: **Gigs**)
+**Left-panel button:** Brand & Logo Designer  (category: **Gigs**)
 
 A logo-design freelancer assistant. The Fiverr agent generates **GPT Image logo concepts**, a polished **delivery message** for the client, and a complete **Fiverr gig description** — all from a single client brief form. Image generation runs through OpenAI's current Images API; the text deliverables can use any provider.
 
@@ -561,7 +561,7 @@ Live status appears as a line under the action row.
 
 ### 7.3 Manuscript Agent
 
-**Left-panel button:** Draft  (category: **Creative**)
+**Left-panel button:** Book Author  (category: **Creative**)
 
 A full creative writing suite for novelists, screenwriters, short-story writers, and bloggers. The panel has **three distinct modes** accessed via a toggle at the top: a manuscript workspace for drafting, and a Publish & Market system for producing everything needed to take a finished book to market — from query letters and synopses to Amazon copy and Instagram posts.
 
@@ -826,7 +826,7 @@ Platform format rules enforced by the Market system prompt:
 
 ### 7.4 Maestro Agent
 
-**Left-panel button:** Music  (category: **Creative**)
+**Left-panel button:** Music Artist Generator  (category: **Creative**)
 
 A Spotify Artist Setup specialist that produces a complete, copy-paste-ready release-and-monetisation plan for independent artists. The agent's system prompt forces every response to mark **[AI OUTPUT — COPY-PASTE READY]** vs **[HUMAN ACTION REQUIRED]** so you always know which bits to paste and which require manual steps in Spotify for Artists, DistroKid, etc.
 
@@ -951,7 +951,7 @@ full step-by-step.
 
 ### 7.5 Site Builder Agent
 
-**Left-panel button:** Site Builder  (category: **Creative**)
+**Left-panel button:** Web Developer  (category: **Creative**)
 
 A front-end design and prototyping agent. Given a brief, Web Design produces complete, self-contained HTML / CSS / JS — landing pages, portfolios, dashboards, forms, blogs, or single components — split across three editable tabs and ready to copy or save as an `.html` file.
 
@@ -1058,7 +1058,7 @@ The panel splits the output into HTML / CSS / JS tabs and reports responsive, fr
 
 ### 7.6 Narrator Agent
 
-**Left-panel button:** Audiobooks  (category: **Creative**)
+**Left-panel button:** Audiobook Producer  (category: **Creative**)
 
 A completely separate workflow that converts ebook files into MP3 audiobooks using OpenAI's Text-to-Speech API. The Audiobook agent is unusual in two ways: (1) it does not stream LLM output — it runs an **external Python script** as a subprocess, and (2) it has no system-prompt-style "agent class" beyond a thin **AudiobookConnector** that parses configuration input. The conversion engine lives in the sibling project at `narrator/`.
 
@@ -1177,6 +1177,10 @@ for audio files and tracks progress; `ui/audio_player.py` is a `QMediaPlayer`
 widget with play/pause, 30-second skips, a scrubber and 0.75×–2× speed. The
 button reads *Resume at 1:24:03* and picks up exactly there.
 
+The player also offers embedded chapters, user-saved marks, a 15–60-minute
+sleep timer, and Space/Left/Right keyboard controls. Marks live in the local
+SQLite database and are keyed by audio path.
+
 Resume position is keyed by **file path**, not by a library index — the library
 is a directory scan, and files get renamed, moved and re-converted, so an index
 would quietly point at the wrong book. It is saved on a five-second timer as
@@ -1197,7 +1201,7 @@ so the next play starts over instead of resuming and stopping immediately.
 
 ### 7.7 Publisher Agent
 
-**Left-panel button:** Publish  (category: **Creative**)
+**Left-panel button:** Publishing Manager  (category: **Creative**)
 
 Picks up where the Manuscript (writing studio) agent stops: real sales data, launch-content generation, and a publishing checklist. Five tabs: **Overview**, **Quote Finder**, **Quote Graphics**, **Shorts**, **Calendar**.
 
@@ -1395,7 +1399,7 @@ gitignored — open `index.html` in a browser to review the generated course.
 
 ### 7.9 Video Agent
 
-**Mode tab:** Video
+**Mode tab:** Video & Ad Generator
 
 Topic to finished video: script, narration, aligned captions, generated
 visuals, Ken Burns motion, music, loudness normalisation and a thumbnail.
@@ -1444,7 +1448,7 @@ standalone app appears here and vice versa. Frozen, both share
 
 ### 7.10 Social Agent
 
-**Mode tab:** Social
+**Mode tab:** Social Media Campaign Manager
 
 The public funnel for everything else in the studio. A **campaign** is one
 subject — a book, a release, a product, a gig — and its goal; posts are written
@@ -1677,11 +1681,17 @@ Requires a `GOOGLE_API_KEY` environment variable. Get your key at **console.clou
 
 | Model | Notes |
 |-------|-------|
-| `gemini-2.5-pro` | Most capable. Excellent long-context handling. |
-| `gemini-2.5-flash` | Fast and cost-effective. Good for summaries. |
-| `gemini-2.0-flash` | Previous generation Flash. Solid general use. |
-| `gemini-1.5-pro` | 1M token context window. Best for very long documents. |
-| `gemini-1.5-flash` | Affordable fallback for most tasks. |
+| `gemini-3.1-pro-preview` | Higher-capability paid-tier option; cost reserve uses the >200k-token tier. |
+| `gemini-3.8-flash` | Current fast general-purpose option. |
+| `gemini-2.5-pro` | Long-context fallback; cost reserve uses the >200k-token tier. |
+| `gemini-2.5-flash` | Lower-cost fallback for summaries and routine drafts. |
+
+The Pricing settings show explicit paid-tier text-token rates for these and other
+current Gemini Flash models. Unknown API-listed models use a conservative
+provider reserve, not a free price. Gemini's image, audio, video, grounding,
+and non-standard priority tiers can carry separate charges, so verify the
+provider bill for those modalities. Rates and the 2027 Flash change should be
+reviewed against [Google's pricing page](https://ai.google.dev/gemini-api/docs/pricing).
 
 ---
 
@@ -2041,7 +2051,7 @@ The SQLite database is stored at `data/imprint.db`. All tables use WAL journal m
 
 Primary key: `(backend, model)`
 
-On every launch, `_seed_pricing_from_json()` reconciles this table against `config/pricing.json`: it inserts any backend/model row missing from the database and fills in a cached rate that is still `0.0`, without touching a rate someone has edited in Settings. This isn't just a convenience sync — `calculate_cost_eur()` silently returns €0.00 for a backend with no pricing row at all, so a database that was ever created without going through the normal first-run migration (imported, restored, copied between machines) would bill some providers nothing and never trip the budget caps. That was this project's own state for Kimi, OpenAI, DeepSeek and Gemini before the reconciliation pass was added; see the still-open "Gemini bills nothing" item in `TODO.md` for the one case (placeholder `0.0` rates in the JSON itself) reconciliation can't fix.
+On every launch, `_seed_pricing_from_json()` reconciles this table against `config/pricing.json`: it inserts any backend/model row missing from the database and fills in a cached rate that is still `0.0`, without touching a rate someone has edited in Settings. This isn't just a convenience sync — `calculate_cost_eur()` silently returns €0.00 for a backend with no pricing row at all, so a database that was ever created without going through the normal first-run migration (imported, restored, copied between machines) would bill some providers nothing and never trip the budget caps. The Gemini migration also repairs old zero placeholders and the earlier 2.5/15 provider reserve while preserving any different user-entered rate.
 
 ### `settings`
 
@@ -2375,7 +2385,7 @@ The Audiobook agent reads its paths and defaults from `services/tool_runner.py`,
 
 ## 20. Learning Centre
 
-**Learning Centre** in the right rail opens a 26-lesson operating academy
+**Learning Centre** in the right rail opens a 27-lesson operating academy
 rendered from `docs/learn/manifest.json` and `docs/learn/modules/`:
 
 | Section | Covers |

@@ -91,8 +91,8 @@ AGENT_SPECS = (
         "agents.course", panel=False,
     ),
     AgentSpec(
-        "chat", "Studio Assistant", None,
-        "General assistant retained as an internal compatibility capability.",
+        "chat", "Studio Assistant", "Assistant",
+        "General-purpose chat and tool-assisted conversation.",
         "agents.chat", panel=False,
         recommendation_profile="agents.chat.recommendations",
     ),

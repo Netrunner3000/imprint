@@ -404,13 +404,13 @@ def test_model_best_fit_recomputes_inside_each_selected_provider(app, window):
 
 # ── Conditional fields ───────────────────────────────────────────────────────
 CREATOR_KINDS = [
-    ("post", 2),        # kind + audience
-    ("ppv", 3),         # kind + price + audience
-    ("promo", 2),       # kind + promo channel
-    ("bio", 1),         # kind only
-    ("campaign", 1),
-    ("hooks", 1),
-    ("welcome", 2),     # kind + audience
+    ("post", 4),       # kind + campaign + channel + audience
+    ("ppv", 5),        # kind + campaign + channel + price + audience
+    ("promo", 3),      # kind + campaign + channel
+    ("bio", 3),        # kind + campaign + channel
+    ("campaign", 3),
+    ("hooks", 3),
+    ("welcome", 4),    # kind + campaign + channel + audience
 ]
 
 
@@ -418,7 +418,7 @@ CREATOR_KINDS = [
 def test_creator_compose_grid_has_no_empty_cells(app, window, kind, expected):
     """Fields that do not apply give up their cell instead of leaving a hole.
 
-    Three of the four compose fields only apply to some kinds of post. Hiding
+    Price and audience only apply to some kinds of post. Hiding
     a widget inside a QGridLayout leaves its cell reserved and empty, so
     switching to "post" left a gap where Price had been and pushed Audience
     into the third column on its own — the same "nothing lines up" complaint,
@@ -530,5 +530,13 @@ def test_workspace_names_are_never_elided(app, window):
     assert [window.workspace_tabs.tabText(i)
             for i in range(window.workspace_tabs.count())] == [
         "Author", "Audio + Music", "Video + Ads", "Social", "Web",
-        "Brand Design", "Brand Creator", "OF Agent",
+        "Brand Design", "Brand Creator", "OF Agent", "Assistant",
     ]
+
+
+def test_studio_assistant_workspace_opens_the_existing_chat_panel(app, window):
+    window.select_agent("chat")
+    app.processEvents()
+    assert window.workspace_tabs.tabText(window.workspace_tabs.currentIndex()) == "Assistant"
+    assert window.normal_panel.isVisible()
+    assert window.agent_title_label.text() == "Studio Assistant"

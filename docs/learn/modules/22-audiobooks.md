@@ -16,6 +16,7 @@
 |---|---|---|
 | Convert | Book list, input folder, output folder, Voice, Chunk tokens, Start, Refresh List, Stop, progress/log | Extract, chunk, narrate, and assemble; completed chunks may survive a stop |
 | Listen | Rescan, library, Listen, Start Over, Show in Finder | Play completed audio and persist progress keyed to its full path |
+| Player | Chapters & marks, Add mark, Speed, Sleep, ±30s | Jump to embedded chapters or saved marks, adjust speed, and pause after 15–60 minutes |
 
 ## Worked run
 
@@ -31,6 +32,9 @@
    MP3 in Finder.
 7. In Listen, pause, leave, return, and verify progress resumes. **Start Over**
    deliberately resets that path's listening position.
+8. Open **Chapters & marks** to jump to chapter metadata when the file has it,
+   or add your own labelled marks. Space pauses/plays; Left and Right skip 30
+   seconds. Choose a Sleep interval to pause automatically; Off cancels it.
 
 ## How to read the output
 

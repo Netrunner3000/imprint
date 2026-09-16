@@ -178,6 +178,32 @@ def test_thin_evidence_is_labelled(db):
     assert "few sends" in price_history(account_id)
 
 
+def test_asset_outcome_keeps_currency_and_evidence_separate(db):
+    from services.creator_insights import asset_outcomes, record_outcome
+    database, account_id = db
+    conn = database.get_connection()
+    cur = conn.execute(
+        "INSERT INTO creator_content (account_id, created_at, title, status, "
+        "generation_cost_eur) VALUES (?,?,?,'draft',?)",
+        (account_id, datetime.now().isoformat(), "Test post", 0.12))
+    conn.commit()
+    content_id = cur.lastrowid
+    values = dict(campaign="Launch", channel="Instagram", permalink="https://example.test/p",
+                  reach=500, clicks=25, subscriptions=3, ppv_purchases=1,
+                  revenue_usd=30.0, attributable_cost_usd=10.0,
+                  source="platform export", window="2026-09-01 to 2026-09-07")
+    record_outcome(content_id, **values)
+    row = asset_outcomes(account_id)[0]
+    assert row["status"] == "posted"
+    assert (row["campaign"], row["channel"], row["clicks"]) == (
+        "Launch", "Instagram", 25)
+    assert row["generation_cost_eur"] == 0.12
+    assert row["attributable_cost_usd"] == 10.0
+    assert row["metric_source"] == "platform export"
+    with pytest.raises(ValueError, match="source"):
+        record_outcome(content_id, **{**values, "source": ""})
+
+
 def test_price_history_reaches_the_ppv_prompt(db):
     from agents.creator import CreatorAgent
     from services.creator_insights import price_history

@@ -1,6 +1,12 @@
 {
   "agents": [
     {
+      "name": "chat", "type": "agent", "label": "Studio Assistant", "enabled": true, "version": "1.0",
+      "allowed_providers": ["ollama", "openai", "deepseek", "kimi", "gemini", "qwen", "anthropic"],
+      "allowed_tools": null, "budget_limit_eur": null, "requires_approval": false,
+      "description": "General-purpose conversation with saved project history.", "log_path": "data/logs/runs.jsonl"
+    },
+    {
       "name": "author", "type": "agent", "label": "Book Author", "enabled": true, "version": "1.0",
       "allowed_providers": ["ollama", "openai", "deepseek", "kimi", "gemini", "qwen", "anthropic"],
       "allowed_tools": null, "budget_limit_eur": null, "requires_approval": false,

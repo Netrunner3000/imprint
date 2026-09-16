@@ -9,6 +9,8 @@
 
 - An `own`, `managed`, or accurately disclosed `persona` profile.
 - Recorded authorisation for managed work; disclosure for synthetic personas.
+- A dated platform-policy record with source before any wholly synthetic persona
+  is used. Unknown is not permission, especially for OnlyFans.
 - Performer identity/age/consent/release records where applicable.
 - One bounded campaign hypothesis, account, segment, and measurement window.
 
@@ -21,8 +23,10 @@
 | Authorised by | Required evidence for managed accounts, including who and when |
 | Disclosure | How a synthetic persona is truthfully disclosed |
 | Save Profile / Remove profile | Persist or remove profile state; preserve required records first |
+| Review platform policy | Record whether synthetic personas are permitted, whether the depicted owner must be verified, AI disclosure, publishing route, source and review date |
 | Kind | post, caption, campaign, posting_plan, promo_assets, hooks, bio, ppv, welcome, promo |
-| Price / Audience / Promo channel | Conditional experiment fields; not all appear for every kind |
+| Campaign / Channel | Label every asset for later comparison, even outside a promo kind |
+| Price / Audience | Conditional experiment fields; not all appear for every kind |
 | Brief / Provider / Model / Draft | Bounded content request and local Best Fit route |
 | Add to Calendar | Saves reviewed output as a prepared schedule item |
 | Generate/Cancel Teaser | Paid Higgsfield SFW promotional render and provider-dependent cancellation |
@@ -36,7 +40,7 @@
 |---|---|
 | Draft | Editable output. Nothing is sent automatically; review then post manually. |
 | Calendar | When, kind, title, price, status. Prepared state is not published state. |
-| Earnings | Import Earnings CSV or Record Revenue. Receipts are not profit without matching cost/period. |
+| Earnings | Import Earnings CSV or Record outcome for a selected Calendar asset. The dashboard compares price, asset, channel and tested hook; receipts are not profit. |
 | Voice | Manage authorised voice/character settings and test samples before use. |
 | Media | Add Media with kind, source, caption, and rights/provenance. |
 | Agency | Compare accounts/types/authorisation/net receipts/subscribers/draft counts cautiously. |
@@ -46,6 +50,8 @@
 
 1. Select/create a profile and ownership type. Complete the conditional
    authorisation or disclosure fields and save.
+   For a persona, review the destination's current written policy first;
+   unverified rules block generation rather than granting permission.
 2. Choose one Kind, segment/channel, price if applicable, and a brief with
    audience, offer, proof boundary, CTA, and prohibited claims.
 3. Draft once. Review voice, facts, disclosure, consent, platform fit, and CTA.
@@ -53,8 +59,11 @@
 5. Add only authorised media/voice references with source/provenance.
 6. For a teaser, confirm SFW content, estimate, provider policy, likeness rights,
    and cancellation boundary before submission.
-7. Later import the platform statement or Record Revenue with source/window.
-   Keep acquisition, production, fees, refunds, human time, and currency beside it.
+7. Once an asset is actually posted, select it on Calendar, then use **Record
+   outcome** on Earnings. Confirm publication and enter the post link, reach,
+   clicks, subscriptions, PPV purchases, attributed revenue, all-in cost in
+   USD, source, and window. Import statements separately. Do not add statement
+   receipts to attributed revenue: they may describe the same transactions.
 
 ## How to read the output and analytics
 
@@ -62,6 +71,10 @@ Draft/calendar/media counts are production observations. Imported net receipts
 are `OBSERVED` only for their source/window, not profit or LTV. Revenue per
 posted asset is not conversion without exposure and purchase denominators.
 Subscriber totals from another date cannot be used as cohort retention.
+The asset ROI column is `(attributed revenue − entered all-in USD cost) ÷ cost`
+only when cost is known. Imprint's generation cost is recorded in EUR and is
+not silently converted into that USD number; include it after a documented
+conversion, along with production, fees, promotion, and human time.
 
 ## Acceptance checklist
 

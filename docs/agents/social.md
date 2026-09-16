@@ -1,6 +1,6 @@
 # SOCIAL MEDIA CAMPAIGN MANAGER — the public funnel
 
-`key: social` · class: `agents/social_agent.py → build_post_messages()` · panel: `build_social_panel()` · storage: `services/social_store.py` · posting: `services/social_publishing.py`
+`key: social` · class: `agents/social/agent.py → build_post_messages()` · panel: `build_social_panel()` · storage: `services/social_store.py` · posting: `services/social_publishing.py`
 
 ## What it does
 Promotes anything the studio made — a book, a release, a product, a gig — across the public platforms. Writes per platform, schedules at each platform's own cadence, and posts directly where the API allows it.
@@ -53,6 +53,15 @@ The Accounts tab shows this live, including exactly which environment variables 
 - **Nothing posts unattended.** No scheduler thread, no "publish all". The schedule is a plan you work through, one confirmed click at a time. A tool that posts on its own behalf while nobody is watching is how an account gets banned for something the owner never saw.
 - **No invented evidence.** Reviews, testimonials, sales figures, chart positions and follower counts are forbidden in the system prompt rather than left to chance. A promotion tool that fabricates a happy customer is a liability its owner finds out about last.
 - **No engagement bait**, no hashtag walls, no impersonation.
+
+## Analytics loop
+
+After a real post, select its Schedule row and choose **Record metrics**.
+Enter reach and link clicks from a named platform report for one explicit
+measurement window. The Analytics tab preserves the creative angle and shows
+clicks ÷ reach only when reach is nonzero. These counts are observed inputs,
+not sales attribution; compare like audiences and windows before changing the
+campaign. Drafts and scheduled items cannot carry observed metrics.
 
 ## Cadence
 `services/social_store.CADENCE` — posts per week per platform, spread through the week rather than stacked. Reddit is one. That is not timidity: posting more often than that is how promotional accounts get banned, whatever the API allows.

@@ -39,11 +39,10 @@ class GeminiVideoJob:
 
 class GeminiClientWrapper:
     KNOWN_MODELS = [
+        "gemini-3.8-flash",
+        "gemini-3.1-pro-preview",
         "gemini-2.5-flash",
         "gemini-2.5-pro",
-        "gemini-2.0-flash",
-        "gemini-1.5-flash",
-        "gemini-1.5-pro",
     ]
 
     def __init__(self):
@@ -102,7 +101,7 @@ class GeminiClientWrapper:
         except Exception:
             return self.KNOWN_MODELS
 
-    def chat(self, messages, model="gemini-1.5-flash"):
+    def chat(self, messages, model="gemini-2.5-flash"):
         if not self.client:
             raise RuntimeError("GEMINI_API_KEY is not set.")
 
@@ -128,7 +127,7 @@ class GeminiClientWrapper:
 
         return text, usage
 
-    def generate(self, prompt, model="gemini-1.5-flash"):
+    def generate(self, prompt, model="gemini-2.5-flash"):
         messages = [{"role": "user", "content": prompt}]
         return self.chat(messages=messages, model=model)
 
@@ -257,7 +256,7 @@ class GeminiClientWrapper:
             raise RuntimeError("Gemini returned an empty video file.")
         return data
     
-    def stream_chat(self, messages, model="gemini-1.5-flash"):
+    def stream_chat(self, messages, model="gemini-2.5-flash"):
         if not self.client:
             raise RuntimeError("GEMINI_API_KEY is not set.")
 

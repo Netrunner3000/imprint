@@ -32,6 +32,61 @@ def record_revenue(content_id: int, revenue_usd: float) -> None:
         conn.commit()
 
 
+def record_outcome(content_id: int, *, campaign: str, channel: str,
+                   permalink: str, reach: int, clicks: int,
+                   subscriptions: int, ppv_purchases: int,
+                   revenue_usd: float, attributable_cost_usd: float,
+                   source: str, window: str) -> None:
+    """Record one manually verified published-asset outcome.
+
+    Revenue and all-in cost are both USD; the separately captured model cost is
+    EUR and is never silently mixed into this return calculation.
+    """
+    if min(reach, clicks, subscriptions, ppv_purchases) < 0:
+        raise ValueError("Outcome counts cannot be negative.")
+    if min(revenue_usd, attributable_cost_usd) < 0:
+        raise ValueError("Revenue and cost cannot be negative.")
+    if not source.strip() or not window.strip():
+        raise ValueError("Name the outcome source and measurement window.")
+    with get_connection() as conn:
+        row = conn.execute(
+            "SELECT id FROM creator_content WHERE id = ?", (content_id,)).fetchone()
+        if not row:
+            raise ValueError("The selected content no longer exists.")
+        conn.execute("""
+            UPDATE creator_content SET campaign=?, channel=?, permalink=?,
+                reach=?, clicks=?, subscriptions=?, ppv_purchases=?,
+                revenue_usd=?, attributable_cost_usd=?, metric_source=?,
+                metric_window=?, status='posted',
+                posted_at=CASE WHEN posted_at='' THEN datetime('now') ELSE posted_at END
+            WHERE id=?
+        """, (campaign.strip(), channel.strip(), permalink.strip(),
+              int(reach), int(clicks), int(subscriptions), int(ppv_purchases),
+              float(revenue_usd), float(attributable_cost_usd), source.strip(),
+              window.strip(), content_id))
+        conn.execute(
+            "UPDATE creator_variants SET revenue_usd = ? "
+            "WHERE content_id = ? AND chosen = 1",
+            (float(revenue_usd), content_id))
+        conn.commit()
+
+
+def asset_outcomes(account_id: int) -> list[dict]:
+    """Observed item-level results; no sums across overlapping statements."""
+    with get_connection() as conn:
+        rows = conn.execute("""
+            SELECT c.id, c.title, c.kind, c.status, c.campaign, c.channel, c.permalink,
+                   c.reach, c.clicks, c.subscriptions, c.ppv_purchases,
+                   c.revenue_usd, c.attributable_cost_usd, c.generation_cost_eur,
+                   c.metric_source, c.metric_window,
+                   (SELECT substr(v.body, 1, 80) FROM creator_variants v
+                    WHERE v.content_id=c.id AND v.chosen=1 LIMIT 1) AS hook
+            FROM creator_content c WHERE c.account_id=? AND c.status='posted'
+            ORDER BY c.posted_at DESC, c.id DESC
+        """, (account_id,)).fetchall()
+    return [dict(row) for row in rows]
+
+
 def price_points(account_id: int) -> list[dict]:
     """Revenue grouped by PPV price, best average first."""
     with get_connection() as conn:

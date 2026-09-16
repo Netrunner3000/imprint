@@ -91,13 +91,18 @@ from services.creator_profile import (
     save_persona, save_voice,
 )
 from services.creator_insights import (
-    account_summary, agency_overview, commission, hook_results, price_history,
-    price_points, record_revenue, top_content,
+    account_summary, agency_overview, asset_outcomes, commission,
+    hook_results, price_history, price_points, record_outcome,
+    record_revenue, top_content,
 )
 from ui.book_widgets import (
     make_theme_box, make_size_box, make_voice_source_box,
     theme_key, size_key, unique_output_path,
 )
+from ui.creator_earnings import CreatorEarningsView
+from ui.creator_outcome_dialog import CreatorOutcomeDialog
+from ui.creator_policy_dialog import CreatorPolicyDialog
+from services.creator_platform_policy import get_policy, save_policy
 
 
 # Writable base = project root in dev, ~/Library/Application Support/Imprint when frozen.
@@ -1504,7 +1509,8 @@ class GodAI(QWidget):
         top_row_1 = QHBoxLayout()
 
         self.agent_box = QComboBox()
-        # Compatibility control for the currently hidden general-chat panel.
+        # Shared general-chat panel; the selector itself is hidden because the
+        # workspace tabs already choose the agent.
         # The catalog, not config/agents.json plus an accumulating patch list,
         # defines the real roster.
         self.agent_box.addItems(WORKSPACE_LABELS)
@@ -3422,9 +3428,9 @@ class GodAI(QWidget):
         self.social_schedule_table.verticalHeader().setVisible(False)
         schedule.addWidget(self.social_schedule_table, 1)
 
-        schedule_actions = QHBoxLayout()
-        schedule_actions.setSpacing(SM)
-        schedule_actions.addStretch()
+        schedule_actions_container = QWidget()
+        schedule_actions_container.setObjectName("Transparent")
+        schedule_actions = FlowLayout(schedule_actions_container, spacing=SM)
         self.social_copy_btn = QPushButton("Copy Text")
         self.social_copy_btn.clicked.connect(self.social_copy_selected)
         schedule_actions.addWidget(self.social_copy_btn)
@@ -3433,6 +3439,11 @@ class GodAI(QWidget):
             "For the platforms you post by hand.")
         self.social_mark_posted_btn.clicked.connect(self.social_mark_posted)
         schedule_actions.addWidget(self.social_mark_posted_btn)
+        self.social_metrics_btn = QPushButton("Record metrics")
+        self.social_metrics_btn.setToolTip(
+            "Enter observed reach and clicks for the selected posted item, with source and date window.")
+        self.social_metrics_btn.clicked.connect(self.social_record_metrics)
+        schedule_actions.addWidget(self.social_metrics_btn)
         self.social_post_btn = QPushButton("Post Now")
         self.social_post_btn.setObjectName("WarnAction")
         self.social_post_btn.setToolTip(
@@ -3444,8 +3455,29 @@ class GodAI(QWidget):
         self.social_delete_post_btn.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
         self.social_delete_post_btn.clicked.connect(self.social_delete_post)
         schedule_actions.addWidget(self.social_delete_post_btn)
-        schedule.addLayout(schedule_actions)
+        schedule.addWidget(schedule_actions_container)
         self.social_tabs.addTab(schedule_page, "Schedule")
+
+        analytics_page = QWidget()
+        analytics_page.setObjectName("Transparent")
+        analytics_layout = QVBoxLayout(analytics_page)
+        analytics_layout.setContentsMargins(MD, MD, MD, MD)
+        analytics_layout.setSpacing(MD)
+        analytics_note = QLabel(
+            "Observed post metrics only. Click-through rate is clicks ÷ reach for the same "
+            "post and window; it does not prove sales or compare different audiences fairly.")
+        analytics_note.setWordWrap(True)
+        analytics_note.setObjectName("EstimateLine")
+        analytics_layout.addWidget(analytics_note)
+        self.social_analytics_table = QTableWidget(0, 6)
+        self.social_analytics_table.setHorizontalHeaderLabels(
+            ["Platform", "Angle", "Reach", "Clicks", "Click rate", "Source / window"])
+        self.social_analytics_table.horizontalHeader().setSectionResizeMode(
+            QHeaderView.ResizeMode.Stretch)
+        self.social_analytics_table.setEditTriggers(QTableWidget.NoEditTriggers)
+        self.social_analytics_table.verticalHeader().setVisible(False)
+        analytics_layout.addWidget(self.social_analytics_table, 1)
+        self.social_tabs.addTab(analytics_page, "Analytics")
 
         accounts_page = QWidget()
         accounts_page.setObjectName("Transparent")
@@ -3744,7 +3776,8 @@ class GodAI(QWidget):
             social_store.add_post(
                 campaign["id"], platform_key,
                 self.social_draft_box.toPlainText().strip(),
-                fmt="clip", media_path=path)
+                fmt="clip", media_path=path,
+                angle=self.social_angle_box.currentText())
             self.social_refresh_schedule()
         self.social_status_label.setText(f"Clip ready — {Path(path).name}")
         self._social_clip_done()
@@ -3777,7 +3810,7 @@ class GodAI(QWidget):
         pieces = [p for p in pieces if p]
         for piece in pieces:
             social_store.add_post(campaign["id"], platform.key, piece,
-                                  fmt="text")
+                                  fmt="text", angle=self.social_angle_box.currentText())
         self.social_refresh_schedule()
         self.social_tabs.setCurrentIndex(1)
         self.social_status_label.setText(
@@ -3843,6 +3876,63 @@ class GodAI(QWidget):
                 if column == 0:
                     item.setData(Qt.UserRole, post["id"])
                 self.social_schedule_table.setItem(row, column, item)
+        self.social_refresh_analytics(posts)
+
+    def social_refresh_analytics(self, posts: list[dict] | None = None):
+        from services import social_store
+        if posts is None:
+            campaign = self.social_current_campaign()
+            posts = social_store.list_posts(campaign["id"]) if campaign else []
+        self.social_analytics_table.setRowCount(0)
+        for post in posts:
+            if post["status"] != "posted" or not post.get("metric_source"):
+                continue
+            reach, clicks = int(post["reach"]), int(post["clicks"])
+            rate = f"{clicks / reach:.1%}" if reach else "—"
+            values = (post["platform"], post.get("angle") or "—",
+                      f"{reach:,}", f"{clicks:,}", rate,
+                      f"{post['metric_source']} · {post['metric_window']}")
+            row = self.social_analytics_table.rowCount()
+            self.social_analytics_table.insertRow(row)
+            for column, value in enumerate(values):
+                item = QTableWidgetItem(value)
+                item.setToolTip(value)
+                self.social_analytics_table.setItem(row, column, item)
+
+    def social_record_metrics(self):
+        from services import social_store
+        post = self._selected_social_post()
+        if not post:
+            QMessageBox.information(self, "Select a post", "Select a posted row in Schedule first.")
+            return
+        if post["status"] != "posted":
+            QMessageBox.information(self, "Not posted", "Only posted items have observed metrics.")
+            return
+        reach, ok = QInputDialog.getInt(
+            self, "Record reach", "Unique accounts reached:", int(post["reach"]), 0, 1_000_000_000)
+        if not ok:
+            return
+        clicks, ok = QInputDialog.getInt(
+            self, "Record clicks", "Link clicks:", int(post["clicks"]), 0, 1_000_000_000)
+        if not ok:
+            return
+        source, ok = QInputDialog.getText(
+            self, "Metric source", "Platform report or export:", text=post["metric_source"])
+        if not ok:
+            return
+        window, ok = QInputDialog.getText(
+            self, "Measurement window", "For example 2026-09-01 to 2026-09-07:",
+            text=post["metric_window"])
+        if not ok:
+            return
+        try:
+            social_store.record_metrics(post["id"], reach=reach, clicks=clicks,
+                                        source=source, window=window)
+        except ValueError as exc:
+            QMessageBox.warning(self, "Metrics not saved", str(exc))
+            return
+        self.social_refresh_schedule()
+        self.social_tabs.setCurrentIndex(2)
 
     def _selected_social_post(self) -> dict | None:
         from services import social_store
@@ -4742,6 +4832,8 @@ class GodAI(QWidget):
             "AltMerch", "Instagram", "TikTok", "X / Twitter", "Reddit",
             "YouTube", "Other",
         ], "General")
+        self.creator_platform_box.currentTextChanged.connect(
+            self._creator_update_policy_status)
         self.creator_type_box = combo(["own", "managed", "persona"])
         self.creator_type_box.currentTextChanged.connect(self._creator_type_changed)
         self.creator_consent_input = line_edit("Who authorised this, and when")
@@ -4779,6 +4871,17 @@ class GodAI(QWidget):
         account_actions.addStretch()
         layout.addLayout(account_actions)
 
+        policy_row = QHBoxLayout()
+        self.creator_policy_status = QLabel("")
+        self.creator_policy_status.setObjectName("EstimateLine")
+        self.creator_policy_status.setWordWrap(True)
+        policy_row.addWidget(self.creator_policy_status, 1)
+        self.creator_policy_btn = quiet("Review platform policy")
+        self.creator_policy_btn.clicked.connect(self.creator_review_policy)
+        policy_row.addWidget(self.creator_policy_btn)
+        layout.addLayout(policy_row)
+        self._creator_update_policy_status(self.creator_platform_box.currentText())
+
         # ── Compose ─────────────────────────────────────────────────────
         layout.addWidget(section("Compose"))
 
@@ -4790,10 +4893,14 @@ class GodAI(QWidget):
         self.creator_segment_box = combo(
             ["(any)", "new", "loyal", "lapsed", "big_spender"])
         self.creator_channel_box = combo(list(PROMO_CHANNELS))
+        for _extra_channel in ("OnlyFans", "Website", "Email", "Other"):
+            self.creator_channel_box.addItem(_extra_channel)
+        self.creator_campaign_input = line_edit("Campaign or test name")
 
         self.creator_price_field = field("Price (USD)", self.creator_price_input)
         self.creator_segment_field = field("Audience", self.creator_segment_box)
-        self.creator_channel_field = field("Promo channel", self.creator_channel_box)
+        self.creator_channel_field = field("Channel", self.creator_channel_box)
+        self.creator_campaign_field = field("Campaign", self.creator_campaign_input)
 
         # Three of these four fields only apply to some kinds of post, so the
         # grid is re-packed when the kind changes. Simply hiding a cell leaves
@@ -4887,18 +4994,16 @@ class GodAI(QWidget):
             2, QHeaderView.Stretch)
         self.creator_tabs.addTab(self.creator_calendar_table, "Calendar")
 
-        self.creator_earnings_output = QTextEdit()
-        self.creator_earnings_output.setReadOnly(True)
-        self.creator_earnings_output.setPlaceholderText(
-            "No performance imported yet. When a platform has no supported "
-            "analytics API, export its statement and import the CSV here.")
-        self.creator_revenue_btn = QPushButton("Record Revenue")
-        self.creator_revenue_btn.clicked.connect(self.creator_record_revenue)
+        self.creator_earnings_view = CreatorEarningsView()
+        self.creator_revenue_btn = QPushButton("Record outcome")
+        self.creator_revenue_btn.setToolTip(
+            "Select an asset in Calendar first, then record its observed results and costs.")
+        self.creator_revenue_btn.clicked.connect(self.creator_record_outcome)
         self.creator_import_btn = QPushButton("Import Earnings CSV")
         self.creator_import_btn.clicked.connect(self.creator_import_earnings)
         self.creator_tabs.addTab(
             self._creator_tab_with_actions(
-                self.creator_earnings_output,
+                self.creator_earnings_view,
                 [self.creator_import_btn, self.creator_revenue_btn]),
             "Earnings")
 
@@ -4976,15 +5081,38 @@ class GodAI(QWidget):
         self.creator_consent_field.setVisible(is_managed)
         self.creator_disclosure_field.setVisible(is_persona)
 
+    def _creator_update_policy_status(self, platform: str):
+        if not hasattr(self, "creator_policy_status"):
+            return
+        policy = get_policy(platform)
+        review = policy["reviewed_on"] or "not reviewed"
+        self.creator_policy_status.setText(
+            f"{platform} policy · {review} · synthetic personas: "
+            f"{policy['synthetic_persona']} · publishing: "
+            f"{policy['publishing_method'].replace('_', ' ')}")
+
+    def creator_review_policy(self):
+        platform = self.creator_platform_box.currentText()
+        dialog = CreatorPolicyDialog(platform, get_policy(platform), self)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        try:
+            save_policy(platform, **dialog.values())
+        except ValueError as exc:
+            QMessageBox.warning(self, "Policy not saved", str(exc))
+            return
+        self._creator_update_policy_status(platform)
+
     def _creator_kind_changed(self, kind: str):
         # Which fields apply, in the order they should appear. Kind is always
         # shown; the other three depend on it.
         wanted = [
             (self.creator_kind_field, True),
+            (self.creator_campaign_field, True),
+            (self.creator_channel_field, True),
             (self.creator_price_field, kind == "ppv"),
             # Audience only shapes a message aimed at someone.
             (self.creator_segment_field, kind in ("welcome", "ppv", "post", "caption")),
-            (self.creator_channel_field, kind == "promo"),
         ]
         self._creator_reflow_compose(wanted)
 
@@ -5169,6 +5297,7 @@ class GodAI(QWidget):
             return
 
         self.creator_generate_btn.setEnabled(False)
+        self._creator_last_generation_cost_eur = 0.0
         self.creator_stop_btn.setEnabled(True)
         self.creator_stop_btn.show()
         self.creator_status_label.setText(f"Drafting {kind}…")
@@ -5182,6 +5311,7 @@ class GodAI(QWidget):
     def _creator_on_finished(self, response: str):
         self.creator_output.setPlainText(response)
         self.record_request("creator", response)
+        self._creator_last_generation_cost_eur = float(self.last_request_cost or 0)
         self.creator_generate_btn.setEnabled(True)
         self.creator_stop_btn.setEnabled(False)
         self.creator_stop_btn.hide()
@@ -5226,14 +5356,18 @@ class GodAI(QWidget):
                 conn.execute("""
                     INSERT INTO creator_content
                       (account_id, created_at, scheduled_for, kind, title,
-                       body, price_usd, status)
-                    VALUES (?,?,?,?,?,?,?,'draft')
+                       body, price_usd, status, campaign, channel,
+                       generation_cost_eur)
+                    VALUES (?,?,?,?,?,?,?,'draft',?,?,?)
                 """, (account["id"],
                       datetime.now().isoformat(timespec="seconds"),
                       when.strip(),
                       self.creator_kind_box.currentText(),
                       body.splitlines()[0][:80] if body else "",
-                      body, price))
+                      body, price,
+                      self.creator_campaign_input.text().strip(),
+                      self.creator_channel_box.currentText(),
+                      float(getattr(self, "_creator_last_generation_cost_eur", 0.0))))
                 conn.commit()
         except Exception as exc:
             self._note_failure("creator: schedule", exc, self.creator_status_label)
@@ -5551,53 +5685,18 @@ class GodAI(QWidget):
         except Exception as exc:
             self._note_failure("creator: load earnings", exc)
             return
-        if not rows:
-            self.creator_earnings_output.setPlainText(
-                "No earnings imported yet.\n\nThere is no OnlyFans API, so "
-                "export the statement from the site and import the CSV.")
-            return
-
         summary = account_summary(account["id"])
-        lines = [
-            "OVERVIEW",
-            f"  Statements imported : {summary['statements']}",
-            f"  Gross / Net         : ${summary['gross']:,.2f} / ${summary['net']:,.2f}",
-            f"  Subscribers (peak)  : {summary['subscribers']}",
-            f"  Net per subscriber  : ${summary['per_subscriber']:,.2f}",
-            f"  Posted items        : {summary['posted']}"
-            f"  (attributed ${summary['attributed']:,.2f})",
-        ]
-
+        # A user can record post revenue without importing a statement. Only
+        # show the empty state when neither kind of evidence exists.
+        if not rows and not summary["posted"]:
+            self.creator_earnings_view.show_empty()
+            return
         points = price_points(account["id"])
-        if points:
-            lines += ["", "PRICE POINTS  (what each PPV price actually returned)"]
-            for point in points:
-                thin = "" if point["sends"] >= 5 else "   ← few sends, treat as anecdote"
-                lines.append(
-                    f"  ${point['price_usd']:>7.2f}  ×{point['sends']:<3}  "
-                    f"avg ${point['average']:>8.2f}  total ${point['total']:>9.2f}{thin}")
-
         best = top_content(account["id"])
-        if best:
-            lines += ["", "TOP CONTENT"]
-            for item in best:
-                lines.append(
-                    f"  ${item['revenue_usd']:>9.2f}  {item['kind']:<9} "
-                    f"{(item['title'] or '')[:52]}")
-
-        hooks = hook_results(account["id"])
-        if hooks:
-            lines += ["", "HOOKS THAT SHIPPED"]
-            for hook in hooks[:8]:
-                lines.append(f"  ${hook['revenue_usd']:>9.2f}  {hook['body'][:60]}")
-
-        lines += ["", "STATEMENTS"]
-        for r in rows:
-            lines.append(
-                f"  {r['source_file']}  {r['period_from']}–{r['period_to']}  "
-                f"gross ${r['gross_usd']:,.2f}  net ${r['net_usd']:,.2f}  "
-                f"subs {r['subscribers']}")
-        self.creator_earnings_output.setPlainText("\n".join(lines))
+        self.creator_earnings_view.set_data(
+            summary, points, best, [dict(row) for row in rows],
+            outcomes=asset_outcomes(account["id"]),
+            hooks=hook_results(account["id"]))
 
     def creator_load_models(self):
         """Kept as a method so existing call sites stay put."""
@@ -5851,6 +5950,33 @@ class GodAI(QWidget):
                 self.creator_records_table.setItem(r, col, QTableWidgetItem(str(value)))
 
     # ── Revenue attribution ──────────────────────────────────────────────────
+    def creator_record_outcome(self):
+        """Attach a source-labelled observation to the selected calendar item."""
+        row = self.creator_calendar_table.currentRow()
+        ids = getattr(self, "_creator_calendar_ids", [])
+        if row < 0 or row >= len(ids):
+            QMessageBox.information(
+                self, "Select an item",
+                "Select an asset on Calendar first, then return to Earnings.")
+            return
+        with get_connection() as conn:
+            item = conn.execute(
+                "SELECT * FROM creator_content WHERE id=?", (ids[row],)).fetchone()
+        if item is None:
+            QMessageBox.warning(self, "Missing item", "The selected asset no longer exists.")
+            return
+        dialog = CreatorOutcomeDialog(dict(item), self)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        try:
+            record_outcome(ids[row], **dialog.values())
+        except ValueError as exc:
+            QMessageBox.warning(self, "Outcome not saved", str(exc))
+            return
+        self.creator_refresh_calendar()
+        self.creator_refresh_earnings()
+        self.creator_tabs.setCurrentIndex(2)
+
     def creator_record_revenue(self):
         """Attach what a calendar item earned, closing the loop to the drafter."""
         row = self.creator_calendar_table.currentRow()
@@ -8172,13 +8298,7 @@ class GodAI(QWidget):
                     models = []
 
                 if not models:
-                    models = [
-                        "gemini-1.5-flash",
-                        "gemini-1.5-pro",
-                        "gemini-2.0-flash",
-                        "gemini-2.5-flash",
-                        "gemini-2.5-pro",
-                    ]
+                    models = list(self.gemini.KNOWN_MODELS)
 
             elif provider == "anthropic":
                 models = self.anthropic.list_models()
@@ -9872,7 +9992,8 @@ def _selftest() -> int:
         # idempotent initialization here before checking a newly added panel.
         init_db()
         registry = Registry()
-        missing = [a for a in CUSTOM_PANELS if not registry.is_agent_enabled(a)]
+        visible_agents = {key for keys in WORKSPACES.values() for key in keys}
+        missing = [a for a in visible_agents if not registry.is_agent_enabled(a)]
         check("every panel agent is registered", not missing, ", ".join(missing))
     except Exception as exc:
         check("registry is readable", False, str(exc))
