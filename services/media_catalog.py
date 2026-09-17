@@ -18,6 +18,8 @@ OPENAI_IMAGE_MODELS = (
     "gpt-image-2.5-flare",
     "gpt-image-2",
 )
+# Legacy adapter identifiers are retained for existing jobs, but no longer
+# appear in MODELS: OpenAI is shutting the Videos API down on 2026-09-24.
 OPENAI_VIDEO_MODELS = ("sora-2", "sora-2-pro")
 GEMINI_VIDEO_MODELS = (
     "gemini-omni-1.1-flash",
@@ -74,12 +76,6 @@ MODELS = (
                "Faster scene-image generation."),
     MediaModel("OpenAI", "gpt-image-2", "GPT Image 2", "scene_images",
                "Current general image model."),
-    MediaModel("OpenAI", "sora-2", "Sora 2 · retiring 24 Sep",
-               "direct_video", "Direct 4, 8 or 12 second clip with audio.",
-               (4, 8, 12), (LANDSCAPE, VERTICAL)),
-    MediaModel("OpenAI", "sora-2-pro", "Sora 2 Pro · retiring 24 Sep",
-               "direct_video", "Higher-quality direct clip with audio.",
-               (4, 8, 12), (LANDSCAPE, VERTICAL)),
     MediaModel("Gemini", "gemini-omni-1.1-flash", "Gemini Omni 1.1 Flash",
                "direct_video", "Fast text-to-video with generated audio. "
                "The requested length is expressed in the prompt.",

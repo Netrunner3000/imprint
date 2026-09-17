@@ -12,3 +12,4 @@ Status: `IDEA` · `CONSIDERING` · `PLANNED` · `DONE` · `REJECTED`
 | Cost/quality presets spanning script, visuals, voice and render | PLANNED |
 | Automatic short-form derivatives from a finished long video | IDEA |
 | Keep a provider-compatibility matrix in the panel, so a deprecation is visible before it lands | IDEA |
+| Add a new OpenAI direct-video model only if OpenAI publishes a supported successor to Sora with a documented API, pricing and lifecycle | IDEA |

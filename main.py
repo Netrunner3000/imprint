@@ -169,7 +169,7 @@ from ui.panels.base import AgentPanel
 from ui.workers import (
     VideoWorker,
     ChatWorker, SubprocessWorker, ModelPullWorker, FiverrImageWorker, ShortsWorker,
-    HiggsfieldEstimateWorker, HiggsfieldWorker, OpenAIVideoWorker,
+    HiggsfieldEstimateWorker, HiggsfieldWorker,
     VideoGenerationWorker,
 )
 from ui.forms import (
@@ -3602,7 +3602,6 @@ class GodAI(QWidget):
 
     def _video_visual_model_changed(self, *_args):
         from agents.video import video_studio
-        from services.media_catalog import SORA_SHUTDOWN_DATE
 
         selection = self._video_media_selection()
         if selection is None:
@@ -3626,12 +3625,9 @@ class GodAI(QWidget):
             note = (
                 f"{selection.note} One image is generated for each scene. "
                 "DALL·E 2 and 3 are not listed because OpenAI retired and "
-                "removed both APIs; GPT Image is their supported replacement.")
-        elif selection.provider == "OpenAI":
-            note = (
-                f"{selection.note} Sora's API is deprecated and scheduled to "
-                f"shut down on {SORA_SHUTDOWN_DATE.strftime('%d %B %Y')}. "
-                "It is suitable only for a direct 4, 8 or 12 second clip.")
+                "removed both APIs. Sora is no longer offered for new clips "
+                "ahead of its 24 September 2026 API shutdown; choose Gemini, "
+                "Qwen or Higgsfield for direct video.")
         else:
             note = selection.note
         self.video_visual_note.setText(note)
@@ -3767,20 +3763,27 @@ class GodAI(QWidget):
         self.video_stop_btn.setEnabled(can_cancel)
         self.video_stop_btn.show()
 
-    def _video_direct_parameters(self) -> tuple[int, str, str]:
+    def _video_direct_parameters(self) -> tuple[int, str]:
         seconds = int(self.video_length_box.currentText().rstrip("s") or 4)
         aspect = self.video_aspect_box.currentText()
-        sora_size = ("1280x720" if aspect == "Landscape 16:9"
-                     else "720x1280")
         provider_aspect = {
             "Landscape 16:9": "16:9",
             "Vertical 9:16": "9:16",
             "Square 1:1": "1:1",
         }.get(aspect, "16:9")
-        return seconds, sora_size, provider_aspect
+        return seconds, provider_aspect
 
     def _video_render_direct(self, selection) -> None:
         from agents.video import video_studio
+
+        if selection.provider == "OpenAI":
+            QMessageBox.warning(
+                self, "Sora retired for new jobs",
+                "Imprint no longer starts new Sora jobs ahead of the "
+                "24 September 2026 API shutdown. Choose Gemini, Qwen or "
+                "Higgsfield for direct video, or OpenAI GPT Image for a "
+                "narrated scene-based video.")
+            return
 
         topic = self.video_topic_input.text().strip()
         if not topic:
@@ -3788,67 +3791,13 @@ class GodAI(QWidget):
                 self, "Topic Needed",
                 "Direct video models need a prompt in the Topic field.")
             return
-        seconds, sora_size, provider_aspect = self._video_direct_parameters()
+        seconds, provider_aspect = self._video_direct_parameters()
         self._video_external_context = {
             "slug": "", "path": "", "topic": topic,
             "provider": selection.provider.lower(), "model": selection.model_id,
             "seconds": seconds, "job_id": "", "provider_completed": False,
             "cancel_requested": False,
         }
-
-        if selection.provider == "OpenAI":
-            from services.media_catalog import sora_cost_usd, sora_is_retired
-            from services.per_unit_pricing import eur_per_usd
-
-            if sora_is_retired():
-                QMessageBox.warning(
-                    self, "Sora API Retired",
-                    "OpenAI scheduled the Sora API to shut down on "
-                    "24 September 2026. Choose Higgsfield or a scene-image "
-                    "pipeline model instead.")
-                return
-            if not self.openai.key_available():
-                QMessageBox.information(
-                    self, "OpenAI Key Needed",
-                    "Set OPENAI_API_KEY in Imprint's private .env file.")
-                return
-            if not self.allow_openai_checkbox.isChecked():
-                QMessageBox.warning(
-                    self, "OpenAI Not Enabled",
-                    "Enable OpenAI in the API permissions row first.")
-                return
-            cost_usd = sora_cost_usd(selection.model_id, seconds)
-            token = self.authorize_request(
-                "video", "openai", selection.model_id, topic,
-                label="direct video", flat_cost_eur=round(
-                    cost_usd * eur_per_usd(), 6))
-            if not token:
-                return
-            self._video_request_token = token
-            try:
-                slug, output_path = video_studio.external_output_path(
-                    topic, selection.model_id)
-            except Exception as exc:
-                self._video_on_error(str(exc))
-                return
-            self._video_external_context.update({
-                "slug": slug, "path": str(output_path),
-            })
-            self._video_begin("sora", can_cancel=False)
-            self.video_status_label.setText(
-                "Submitting to Sora… This legacy API cannot cancel a job "
-                "after submission.")
-            self.video_worker = OpenAIVideoWorker(
-                self.openai, topic, output_path, model=selection.model_id,
-                seconds=seconds, size=sora_size)
-            self.video_worker.status_signal.connect(
-                self.video_status_label.setText)
-            self.video_worker.progress_signal.connect(self._video_on_progress)
-            self.video_worker.job_signal.connect(self._video_external_job)
-            self.video_worker.done_signal.connect(self._video_external_done)
-            self.video_worker.error_signal.connect(self._video_on_error)
-            self.video_worker.start()
-            return
 
         if selection.provider in {"Gemini", "Qwen"}:
             from services.media_catalog import direct_video_cost_usd

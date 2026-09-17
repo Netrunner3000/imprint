@@ -1,8 +1,8 @@
 """Contracts for the media-model catalog and OpenAI media adapters.
 
 These tests never call a paid API. They prove that every option shown in the
-Video workspace has a real route, and that retired DALL-E ids cannot leak back
-into an image request.
+Video workspace has a real route, and that retired DALL-E and Sora ids cannot
+leak back into the new-job controls.
 """
 
 import base64
@@ -17,6 +17,7 @@ from services.media_catalog import (
     MEDIA_PROVIDERS,
     MODELS,
     OPENAI_IMAGE_MODELS,
+    OPENAI_VIDEO_MODELS,
     RETIRED_DALLE_MODELS,
     WAN_VIDEO_MODELS,
     direct_video_cost_usd,
@@ -49,6 +50,12 @@ def test_retired_dalle_models_are_not_selectable():
     selectable = {model.model_id for model in MODELS}
     assert selectable.isdisjoint(RETIRED_DALLE_MODELS)
     assert set(OPENAI_IMAGE_MODELS) <= selectable
+
+
+def test_sora_legacy_adapter_is_not_selectable_for_new_jobs():
+    selectable = {model.model_id for model in MODELS}
+    assert selectable.isdisjoint(OPENAI_VIDEO_MODELS)
+    assert all(model.kind != "direct_video" for model in models_for("OpenAI"))
 
 
 @pytest.mark.parametrize(

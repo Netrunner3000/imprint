@@ -9,7 +9,7 @@
 
 ## v1 — current
 
-- [ ] `P0` `@me` Replace the Sora 2 direct route once OpenAI names a successor. The API is deprecated and shuts down permanently on **24 September 2026**; `media_catalog.SORA_SHUTDOWN_DATE` blocks submissions from that date, so this is a provider migration rather than an outage. Higgsfield and the GPT Image scene pipeline stay available. *(moved from imprint/TODO.md; replaces the untimed 'migrate the Sora route' item that was here)*
+- [x] `P0` Retire the Sora 2 direct route for new Imprint jobs ahead of the **24 September 2026** API shutdown. OpenAI has not announced a direct-video successor, so Sora is absent from the selectable catalog and the handler rejects a legacy selection before authorization. Legacy adapter code remains for previously submitted jobs; Gemini, Qwen and Higgsfield direct routes and the GPT Image scene pipeline remain available.
 - [ ] `P1` Move the Video panel and handlers from `main.py` into this package.
 - [ ] `P1` Persist provider jobs and resume polling after app restarts.
 - [ ] `P2` Give every direct-video provider the same cancel/status contract.

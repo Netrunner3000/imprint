@@ -1419,8 +1419,7 @@ covers the trade and what it costs (a clone of `imprint` alone has no Video tab,
 which the panel explains rather than crashing on).
 
 Choose a **Visual provider** and **Visual model** as well as the format. OpenAI
-offers the current GPT Image models for scene-by-scene assembly and Sora 2 / 2
-Pro for a direct 4, 8 or 12-second clip. Gemini adds Omni 1.1 Flash and the
+offers the current GPT Image models for scene-by-scene assembly. Gemini adds Omni 1.1 Flash and the
 Veo 3.1 quality, Fast and Lite tiers. Qwen adds Wan 3.0, Wan 3.0 Prime and Wan
 2.7 text-to-video. Higgsfield's Seedance route also makes a direct clip after
 an exact provider quote. Pexels supplies stock visuals and Local makes gradient
@@ -1429,22 +1428,23 @@ and Ollama stay available for writing but are not shown as video renderers
 because their APIs do not return generated video.
 
 DALL·E 2 and 3 are not selectable because OpenAI retired and removed both APIs;
-GPT Image is their supported replacement. Sora remains callable but is
-deprecated and scheduled to shut down on **24 September 2026**, so Imprint
-labels it as retiring and blocks new submissions from that date.
+GPT Image is their supported replacement. Sora is no longer offered for new
+jobs in Imprint ahead of the **24 September 2026** API shutdown. Existing
+Sora adapter code remains for legacy jobs; no OpenAI direct-video successor
+has been announced. Use Gemini, Qwen or Higgsfield for direct clips.
 
 For scene visuals, `Long-form` uses `config.yaml` as-is and `Social clip`
 overrides width, height, image shape, target length and scene cadence — the same
 `produce()` call, not a second code path.
 
 The cost estimate is guarded before the run: a conservative reserve for the
-GPT Image pipeline, selected 720p per-second pricing for Sora, Veo and Wan,
+GPT Image pipeline, selected 720p per-second pricing for Veo and Wan,
 a clearly labelled token-based reserve for Gemini Omni, and Higgsfield's exact
 request quote. Pexels and Local remove the image-generation portion, though the
 script and narration providers can still cost money.
 
 **Stop** cancels the pipeline at the next stage boundary; Higgsfield uses its
-provider cancellation endpoint. Sora, Gemini and Wan jobs have no safe cancel
+provider cancellation endpoint. Gemini and Wan jobs have no safe cancel
 route in these integrations, so Imprint keeps watching and saves the paid
 result once it has been submitted.
 

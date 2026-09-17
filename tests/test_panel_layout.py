@@ -492,7 +492,7 @@ def test_creator_compose_grid_has_no_empty_cells(app, window, kind, expected):
 
 def test_video_provider_model_controls_only_offer_working_routes(app, window):
     """Every visible provider/model pair must change to its real constraints."""
-    from services.media_catalog import RETIRED_DALLE_MODELS
+    from services.media_catalog import OPENAI_VIDEO_MODELS, RETIRED_DALLE_MODELS
 
     window.select_agent("video")
     offered = set()
@@ -505,22 +505,36 @@ def test_video_provider_model_controls_only_offer_working_routes(app, window):
             for i in range(window.video_visual_model_box.count()))
 
     assert offered.isdisjoint(RETIRED_DALLE_MODELS)
+    assert offered.isdisjoint(OPENAI_VIDEO_MODELS)
     window.video_visual_provider_box.setCurrentText("OpenAI")
-    sora_index = next(
-        i for i in range(window.video_visual_model_box.count())
-        if window.video_visual_model_box.itemData(i).model_id == "sora-2")
-    window.video_visual_model_box.setCurrentIndex(sora_index)
-    app.processEvents()
-    assert not window.video_format_box.isEnabled()
-    assert [window.video_length_box.itemText(i)
-            for i in range(window.video_length_box.count())] == ["4s", "8s", "12s"]
-
     image_index = next(
         i for i in range(window.video_visual_model_box.count())
         if window.video_visual_model_box.itemData(i).kind == "scene_images")
     window.video_visual_model_box.setCurrentIndex(image_index)
     app.processEvents()
     assert window.video_format_box.isEnabled()
+    assert "Sora is no longer offered" in window.video_visual_note.text()
+
+    window.video_visual_provider_box.setCurrentText("Gemini")
+    direct_index = next(
+        i for i in range(window.video_visual_model_box.count())
+        if window.video_visual_model_box.itemData(i).kind == "direct_video")
+    window.video_visual_model_box.setCurrentIndex(direct_index)
+    app.processEvents()
+    assert not window.video_format_box.isEnabled()
+
+
+def test_video_refuses_a_legacy_sora_selection_before_authorization(window, monkeypatch):
+    from services.media_catalog import MediaModel
+
+    warnings = []
+    monkeypatch.setattr("main.QMessageBox.warning",
+                        lambda *_args: warnings.append(_args[2]))
+    monkeypatch.setattr(window, "authorize_request",
+                        lambda *_args, **_kwargs: pytest.fail("paid call was reached"))
+    window._video_render_direct(MediaModel(
+        "OpenAI", "sora-2", "Sora 2", "direct_video"))
+    assert "no longer starts new Sora jobs" in warnings[0]
 
 
 def test_no_control_label_carries_an_emoji(app, window):

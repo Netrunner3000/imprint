@@ -43,7 +43,7 @@ Run focused coverage with `pytest tests/test_media_generation.py tests/test_vidf
     too and vice versa.
   - `external_output_path()` / `record_external()` — reserve a slot in the
     shared vidforge library and write its manifest/history entry for a
-    direct provider-rendered clip (e.g. Sora, Higgsfield) that bypassed
+    direct provider-rendered clip (e.g. Gemini, Higgsfield) that bypassed
     vidforge's own pipeline.
   - `pre_estimate()` — reproduces vidforge's own cost-estimate arithmetic
     (word budget from target seconds and words-per-minute, scene count from
