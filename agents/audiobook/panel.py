@@ -1,12 +1,19 @@
 """Audiobook Convert and Listen workspace owned by the Audiobook agent."""
 
-from PySide6.QtCore import Qt
+from pathlib import Path
+
+from PySide6.QtCore import Qt, QUrl
+from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import (
     QFrame, QGridLayout, QHBoxLayout, QHeaderView, QLabel, QLineEdit,
-    QListWidget, QProgressBar, QPushButton, QSizePolicy, QStackedWidget,
-    QTableWidget, QTabWidget, QVBoxLayout, QWidget,
+    QListWidget, QMessageBox, QProgressBar, QPushButton, QSizePolicy,
+    QStackedWidget, QTableWidget, QTableWidgetItem, QTabWidget, QVBoxLayout,
+    QWidget,
 )
 
+from services.audiobook_library import (
+    format_time, load_position, mark_unfinished, scan,
+)
 from ui.audio_player import AudiobookPlayer
 from ui.forms import CONTROL_HEIGHT, LG, MD, SM, combo, field, line_edit, primary, rule, section
 from ui.widgets import scrollable
@@ -15,9 +22,8 @@ from ui.widgets import scrollable
 class AudiobookPanel(QWidget):
     """Book selection, conversion controls and a resumable listening library.
 
-    Conversion and playback handlers remain on the umbrella host for now.
-    Temporary aliases let those handlers and shared tooltip bindings keep
-    their current behavior while this layout moves into the agent package.
+    Conversion handlers remain on the umbrella host for now. Temporary aliases
+    let those handlers and shared tooltip bindings keep their current behavior.
     """
 
     HOST_CONTROLS = (
@@ -35,6 +41,8 @@ class AudiobookPanel(QWidget):
 
     def __init__(self, host):
         super().__init__()
+        self.host = host
+        self._audiobook_library = []
         self.setObjectName("AudiobookPanel")
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
@@ -164,7 +172,6 @@ class AudiobookPanel(QWidget):
 
         for name in self.HOST_CONTROLS:
             setattr(host, name, getattr(self, name))
-        host._audiobook_library = []
         host.audiobook_panel = self
         self.hide()
 
@@ -178,8 +185,7 @@ class AudiobookPanel(QWidget):
         header.addStretch()
         self.audiobook_library_refresh_btn = QPushButton("Rescan")
         self.audiobook_library_refresh_btn.setObjectName("ChipBtn")
-        self.audiobook_library_refresh_btn.clicked.connect(
-            host.refresh_audiobook_library)
+        self.audiobook_library_refresh_btn.clicked.connect(self.refresh_library)
         header.addWidget(self.audiobook_library_refresh_btn)
         layout.addLayout(header)
 
@@ -191,24 +197,24 @@ class AudiobookPanel(QWidget):
         self.audiobook_library_table.setSelectionBehavior(QTableWidget.SelectRows)
         self.audiobook_library_table.setEditTriggers(QTableWidget.NoEditTriggers)
         self.audiobook_library_table.itemSelectionChanged.connect(
-            host._audiobook_selection_changed)
+            self._selection_changed)
         self.audiobook_library_table.doubleClicked.connect(
-            lambda *_: host.play_selected_audiobook())
+            lambda *_: self.play_selected())
         layout.addWidget(self.audiobook_library_table, 1)
 
         row = QHBoxLayout()
         self.audiobook_play_btn = QPushButton("Listen")
         self.audiobook_play_btn.setObjectName("PrimaryAction")
         self.audiobook_play_btn.setEnabled(False)
-        self.audiobook_play_btn.clicked.connect(host.play_selected_audiobook)
+        self.audiobook_play_btn.clicked.connect(self.play_selected)
         row.addWidget(self.audiobook_play_btn)
         self.audiobook_restart_btn = QPushButton("Start Over")
         self.audiobook_restart_btn.setEnabled(False)
-        self.audiobook_restart_btn.clicked.connect(host.restart_selected_audiobook)
+        self.audiobook_restart_btn.clicked.connect(self.restart_selected)
         row.addWidget(self.audiobook_restart_btn)
         self.audiobook_reveal_btn = QPushButton("Show in Finder")
         self.audiobook_reveal_btn.setEnabled(False)
-        self.audiobook_reveal_btn.clicked.connect(host.reveal_selected_audiobook)
+        self.audiobook_reveal_btn.clicked.connect(self.reveal_selected)
         row.addWidget(self.audiobook_reveal_btn)
         row.addStretch()
         layout.addLayout(row)
@@ -219,6 +225,97 @@ class AudiobookPanel(QWidget):
         layout.addWidget(divider)
         self.audiobook_player = AudiobookPlayer()
         self.audiobook_player.position_saved.connect(
-            lambda *_: host._audiobook_refresh_row())
+            lambda *_: self._refresh_row())
         layout.addWidget(self.audiobook_player)
         return page
+
+    def refresh_library(self):
+        """Rescan the output folder on entry without touching conversion state."""
+        defaults = self.host.get_audiobook_defaults()
+        folder = Path(defaults["output"]).expanduser()
+        try:
+            self._audiobook_library = scan(folder)
+        except Exception as exc:
+            self.host._note_failure("audiobook: scan library", exc)
+            self._audiobook_library = []
+
+        table = self.audiobook_library_table
+        table.setRowCount(0)
+        for book in self._audiobook_library:
+            row = table.rowCount()
+            table.insertRow(row)
+            if book.finished:
+                progress = "finished"
+            elif book.duration_ms:
+                progress = f"{book.progress * 100:.0f}%"
+            elif book.position_ms:
+                progress = "started"
+            else:
+                progress = "—"
+            position = format_time(book.position_ms) if book.position_ms else "—"
+            table.setItem(row, 0, QTableWidgetItem(book.title))
+            table.setItem(row, 1, QTableWidgetItem(progress))
+            table.setItem(row, 2, QTableWidgetItem(position))
+            table.setItem(row, 3, QTableWidgetItem(book.last_played or "—"))
+
+        if not self._audiobook_library:
+            self.audiobook_status_label.setText(
+                f"[Library] No audio files in {folder}. Convert a book first.")
+
+    def _selected_book(self):
+        row = self.audiobook_library_table.currentRow()
+        if row < 0 or row >= len(self._audiobook_library):
+            return None
+        return self._audiobook_library[row]
+
+    def _selection_changed(self):
+        book = self._selected_book()
+        for button in (self.audiobook_play_btn, self.audiobook_restart_btn,
+                       self.audiobook_reveal_btn):
+            button.setEnabled(book is not None)
+        if book and book.started:
+            self.audiobook_play_btn.setText(
+                f"Resume at {format_time(book.position_ms)}")
+        else:
+            self.audiobook_play_btn.setText("Listen")
+
+    def _refresh_row(self):
+        """Update the selected row in place without losing selection mid-listen."""
+        book = self._selected_book()
+        if not book:
+            return
+        row = self.audiobook_library_table.currentRow()
+        position = load_position(book.path)
+        book.position_ms = position
+        self.audiobook_library_table.setItem(
+            row, 2, QTableWidgetItem(format_time(position)))
+
+    def play_selected(self):
+        book = self._selected_book()
+        if not book:
+            return
+        if not book.path.exists():
+            QMessageBox.warning(
+                self, "File Missing",
+                f"{book.path.name} is no longer in the output folder.")
+            self.refresh_library()
+            return
+        self.audiobook_player.load(
+            book.path, title=book.title,
+            resume_ms=load_position(book.path))
+        self.audiobook_player.play()
+        self.audiobook_status_label.setText(f"[Playing] {book.title}")
+
+    def restart_selected(self):
+        book = self._selected_book()
+        if not book:
+            return
+        mark_unfinished(book.path)
+        self.audiobook_player.load(book.path, title=book.title, resume_ms=0)
+        self.audiobook_player.play()
+        self.refresh_library()
+
+    def reveal_selected(self):
+        book = self._selected_book()
+        if book:
+            QDesktopServices.openUrl(QUrl.fromLocalFile(str(book.path.parent)))
