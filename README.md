@@ -877,24 +877,14 @@ Five-section release plan:
 
 | Button | Action |
 |--------|--------|
-| **Generate Plan** | Sends the brief; the five sections stream into the tabs. |
+| **Generate Plan** | Checks permissions and budget, then sends the brief; a declined request leaves the button usable. The five sections stream into the tabs. |
 | **Stop** | Cancels the request. |
-| **Help** | Opens this documentation. |
 | **Save Full Plan** | Saves the complete plan as a single `.txt`. |
 | **Clear** | Resets the form and tabs. |
 
 ##### Results Tabs
 
-One tab per section: **Artist Profile**, **Release Setup**, **Distribution**, **Spotify Strategy**, **Income Roadmap**.
-
-##### Sidebar
-
-| Section | Content |
-|---------|---------|
-| **Release Type** | Echoes the selected release type. |
-| **Genre** | Echoes the selected genre. |
-| **Distributor** | Echoes the distributor (or `Not signed up yet`). |
-| **Procedure** | A static 5-step checklist (Profile → Release → Distribution → Strategy → Income). |
+One tab per section: **Artist Profile**, **Release Setup**, **Distribution**, **Spotify Strategy**, **Income Roadmap**, plus **Songs & Albums**. The Music package owns this panel and its plan-generation lifecycle; Imprint supplies the shared provider, spending, and history services.
 
 ---
 
@@ -956,7 +946,8 @@ full step-by-step.
 
 | Property | Value |
 |----------|-------|
-| Agent class | `agents/music_agent.py` — `MusicAgent` |
+| Agent class | `agents/music/agent.py` — `MusicAgent` |
+| Workspace and lifecycle | `agents/music/panel.py` — `MusicPanel` |
 | Agent name (DB) | `music` |
 | Label | Maestro |
 | Default provider | Anthropic |

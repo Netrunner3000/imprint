@@ -36,6 +36,11 @@ class AgentHost(Protocol):
         """Execute one request. Panels hand this to a ChatWorker."""
         ...
 
+    def _new_chat_worker(self, backend: str, model: str, messages: list,
+                         prompt: str) -> Any:
+        """Create a worker with a snapshot of the active project context."""
+        ...
+
     # ── The request guard ───────────────────────────────────────────────
     # Every panel that can spend money goes through these. Bypassing them is
     # how the budget caps, the spend counters, the confirmation prompt and

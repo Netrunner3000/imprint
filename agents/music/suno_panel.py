@@ -11,7 +11,6 @@ from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel,
     QFileDialog, QMessageBox, QApplication)
 
 from services.runtime_paths import user_data_base
-from ui.workers import ChatWorker
 
 
 class SunoPanel(QWidget):
@@ -179,13 +178,14 @@ class SunoPanel(QWidget):
             self.status.setText("Enter a title and a creative brief first.")
             return
         host = self.host
+        panel = host.music_panel
         if host.music_worker and host.music_worker.isRunning():
             self.status.setText("Wait for the current music plan to finish.")
             return
-        provider = host.music_provider_box.currentText()
-        model = host.music_model_box.currentText()
+        provider = panel.music_provider_box.currentText()
+        model = panel.music_model_box.currentText()
         prompt = (f"Create {self.count.value()} original songs for {self.title.text()}. "
-                  f"Artist: {host.music_artist_input.text()}. Genre: {host.music_genre_box.currentText()}. "
+                  f"Artist: {panel.music_artist_input.text()}. Genre: {panel.music_genre_box.currentText()}. "
                   f"Brief: {self.brief.toPlainText()}")
         if not model or not host.authorize_request("music", provider, model, prompt):
             return
@@ -198,10 +198,11 @@ class SunoPanel(QWidget):
         self.output.clear()
         self.generate.setEnabled(False)
         self.setEnabled(False)
-        host.music_analyse_btn.setEnabled(False)
-        self.worker = ChatWorker(host.run_backend, provider, model,
-                                 [{"role": "system", "content": system},
-                                  {"role": "user", "content": prompt}], prompt)
+        panel.music_analyse_btn.setEnabled(False)
+        self.worker = host._new_chat_worker(
+            provider, model,
+            [{"role": "system", "content": system},
+             {"role": "user", "content": prompt}], prompt)
         host.music_worker = self.worker
         self.worker.usage_signal.connect(lambda usage: host.note_request_usage("music", usage))
         self.worker.finished_signal.connect(self.complete)
@@ -215,11 +216,11 @@ class SunoPanel(QWidget):
         self.output.setPlainText(text)
         self.save()
         self.generate.setEnabled(True)
-        self.host.music_analyse_btn.setEnabled(True)
+        self.host.music_panel.music_analyse_btn.setEnabled(True)
 
     def failed(self, error):
         self.setEnabled(True)
         self.host.abandon_request("music")
         self.status.setText(error)
         self.generate.setEnabled(True)
-        self.host.music_analyse_btn.setEnabled(True)
+        self.host.music_panel.music_analyse_btn.setEnabled(True)

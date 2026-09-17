@@ -268,7 +268,6 @@ class GodAI(QWidget):
         self.calendar_worker: Optional[ChatWorker] = None
         self._calendar_slots: list = []
         self.music_worker: Optional[ChatWorker] = None
-        self._last_music_response: str = ""
         self.webdesign_worker: Optional[ChatWorker] = None
         self._last_webdesign_response: str = ""
         self.fiverr_image_worker: Optional[FiverrImageWorker] = None
@@ -7837,145 +7836,13 @@ class GodAI(QWidget):
                 writer.writerow([slot.day.strftime("%Y-%m-%d"), slot.platform, slot.format, slot.quote, slot.caption])
         self.manuscript_status_label.setText(f"[Done] Exported calendar to {Path(path).name}")
 
-    # ── Music handlers ────────────────────────────────────────────────────────
+    # The Music workspace owns its UI and request/result lifecycle. This one
+    # compatibility entry point remains for the umbrella's global Stop action.
     def music_load_models(self):
-        """Kept as a method so existing call sites stay put."""
         self.music_panel_base.load_models()
 
-    def music_analyse(self):
-        description = self.music_query_input.toPlainText().strip()
-        artist = self.music_artist_input.text().strip()
-        genre = self.music_genre_box.currentText()
-        release_type = self.music_release_type_box.currentText()
-        distributor = self.music_distributor_box.currentText()
-        audience = self.music_audience_input.text().strip()
-        provider = self.music_provider_box.currentText()
-        model = self.music_model_box.currentText()
-
-        if not description:
-            QMessageBox.warning(self, "Missing Input", "Please describe your music in the text box.")
-            return
-        if not model:
-            QMessageBox.warning(self, "No Model", "Please select a model.")
-            return
-
-        prompt_parts = []
-        if artist:
-            prompt_parts.append(f"Artist / Project Name: {artist}")
-        prompt_parts += [
-            f"Genre: {genre}",
-            f"Release Type: {release_type}",
-            f"Current Distributor: {distributor}",
-        ]
-        if audience:
-            prompt_parts.append(f"Target Audience: {audience}")
-        prompt_parts.append(f"\nMusic Description:\n{description}")
-        prompt = "\n".join(prompt_parts)
-
-        agent = self.agent_instances["music"]
-        messages = agent.build_messages(prompt)
-
-        self._music_clear_displays()
-        self._last_music_response = ""
-        self.music_status_label.setText("Generating Spotify plan…")
-        self.music_analyse_btn.setEnabled(False)
-        self.music_stop_btn.setEnabled(True)
-        self.music_stop_btn.show()
-        self.music_save_btn.setEnabled(False)
-
-        if not self.authorize_request("music", provider, model, prompt):
-            return
-        self.music_worker = self._new_chat_worker(provider, model, messages, prompt)
-        self.music_worker.token_signal.connect(self._music_on_token)
-        self.music_worker.finished_signal.connect(self._music_on_finished)
-        self.music_worker.usage_signal.connect(lambda u: self.note_request_usage("music", u))
-        self.music_worker.error_signal.connect(self._music_on_error)
-        self.music_worker.start()
-
-    def _music_on_token(self, token: str):
-        self._last_music_response += token
-        self.music_profile_box.setPlainText(self._last_music_response)
-        self.music_profile_box.moveCursor(QTextCursor.End)
-
-    def _music_on_finished(self, full_response: str):
-        self.record_request("music", full_response)
-        self._last_music_response = full_response
-        self._populate_music_tabs(full_response)
-        self.music_status_label.setText("Plan complete — tabs populated.")
-        self.music_analyse_btn.setEnabled(True)
-        self.music_stop_btn.setEnabled(False)
-        self.music_stop_btn.hide()
-        self.music_save_btn.setEnabled(True)
-
-    def _music_on_error(self, error: str):
-        self.abandon_request("music")
-        self.music_profile_box.setPlainText(f"[Error] {error}")
-        self.music_status_label.setText("Error.")
-        self.music_analyse_btn.setEnabled(True)
-        self.music_stop_btn.setEnabled(False)
-        self.music_stop_btn.hide()
-
     def music_stop(self):
-        if self.music_worker is not None and self.music_worker.isRunning():
-            self.music_worker.cancel()
-        self.music_status_label.setText("Stopped.")
-        self.music_analyse_btn.setEnabled(True)
-        self.music_stop_btn.setEnabled(False)
-        self.music_stop_btn.hide()
-
-    def music_save(self):
-        if not self._last_music_response:
-            return
-        artist = self.music_artist_input.text().strip().lower().replace(" ", "_") or "artist"
-        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-        default_name = f"spotify_plan_{artist}_{ts}.txt"
-        path, _ = QFileDialog.getSaveFileName(
-            self, "Save Spotify Plan", str(DATA_DIR / default_name), "Text files (*.txt);;All files (*)"
-        )
-        if path:
-            Path(path).write_text(self._last_music_response, encoding="utf-8")
-            self.music_status_label.setText(f"Saved to {Path(path).name}")
-
-    def music_clear(self):
-        self._music_clear_displays()
-        self.music_query_input.clear()
-        self.music_artist_input.clear()
-        self.music_audience_input.clear()
-        self.music_status_label.setText("")
-        self._last_music_response = ""
-
-    def _music_clear_displays(self):
-        for box in (
-            self.music_profile_box,
-            self.music_release_box,
-            self.music_distribution_box,
-            self.music_strategy_box,
-            self.music_income_box,
-        ):
-            box.clear()
-        self.music_save_btn.setEnabled(False)
-
-    def _populate_music_tabs(self, text: str):
-        sections = self._parse_music_sections(text)
-        self.music_profile_box.setPlainText(sections.get("profile", text))
-        self.music_release_box.setPlainText(sections.get("release", ""))
-        self.music_distribution_box.setPlainText(sections.get("distribution", ""))
-        self.music_strategy_box.setPlainText(sections.get("strategy", ""))
-        self.music_income_box.setPlainText(sections.get("income", ""))
-
-    def _parse_music_sections(self, text: str) -> dict:
-        patterns = {
-            "profile":      r"1\.\s*ARTIST PROFILE(.*?)(?=2\.\s*RELEASE SETUP|$)",
-            "release":      r"2\.\s*RELEASE SETUP(.*?)(?=3\.\s*DISTRIBUTION GUIDE|$)",
-            "distribution": r"3\.\s*DISTRIBUTION GUIDE(.*?)(?=4\.\s*SPOTIFY STRATEGY|$)",
-            "strategy":     r"4\.\s*SPOTIFY STRATEGY(.*?)(?=5\.\s*INCOME ROADMAP|$)",
-            "income":       r"5\.\s*INCOME ROADMAP(.*?)$",
-        }
-        result = {}
-        for key, pat in patterns.items():
-            m = re.search(pat, text, re.DOTALL | re.IGNORECASE)
-            result[key] = m.group(1).strip() if m else ""
-        return result
+        self.music_panel.stop()
 
     def build_right_panel(self) -> QWidget:
         """Spend, limits, and the utilities that open a window.
