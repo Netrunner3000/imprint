@@ -108,6 +108,28 @@ def test_audiobook_workspace_is_owned_by_its_package(window):
         assert getattr(window, name) is getattr(window.audiobook_panel, name)
 
 
+def test_audiobook_library_actions_use_owned_panel(window, monkeypatch, tmp_path):
+    audio = tmp_path / "Example_Book.mp3"
+    audio.write_bytes(b"audio")
+    monkeypatch.setattr(window, "get_audiobook_defaults",
+                        lambda: {"output": str(tmp_path)})
+    panel = window.audiobook_panel
+    window.refresh_audiobook_library()
+
+    assert panel.audiobook_library_table.rowCount() == 1
+    assert panel.audiobook_library_table.item(0, 0).text() == "Example Book"
+    panel.audiobook_library_table.selectRow(0)
+    assert panel.audiobook_play_btn.isEnabled()
+
+    calls = []
+    monkeypatch.setattr(panel.audiobook_player, "load",
+                        lambda path, **kwargs: calls.append((path, kwargs)))
+    monkeypatch.setattr(panel.audiobook_player, "play", lambda: None)
+    panel.audiobook_play_btn.click()
+    assert calls[0][0] == audio
+    assert panel.audiobook_status_label.text() == "[Playing] Example Book"
+
+
 def _overlapping_pairs(panel):
     """Sibling widgets sharing pixels — i.e. one drawn over the other."""
     from PySide6.QtWidgets import (

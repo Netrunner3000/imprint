@@ -29,7 +29,7 @@ The converter runs as a separate process via `QProcess`:
 ## Under the hood — files & functions
 | Location | Role |
 |---|---|
-| `agents/audiobook/panel.py` | Owns the Convert and Listen workspace layouts and controls. |
+| `agents/audiobook/panel.py` | Owns the Convert and Listen layouts, library scan, selection, resume and playback actions. |
 | `services/narrator/converter.py` | `convert()`, `main()`, extraction + TTS + chunking. |
 | `main.py: start_selected_audiobook_book()` | Builds the QProcess command (dev vs frozen branch). |
 | `main.py: handle_audiobook_stdout()/_finished()/_error()` | Streams log, detects done/blocked/paused/quota. |
@@ -88,5 +88,5 @@ immediately stopping. **Start Over** clears that flag.
 |---|---|
 | `services/audiobook_library.py` | Scan, resume bookkeeping, time formatting. |
 | `ui/audio_player.py` | `AudiobookPlayer` widget. |
-| `agents/audiobook/panel.py: _build_library_tab()` | The Listen tab layout; library and playback actions still call host handlers. |
+| `agents/audiobook/panel.py: _build_library_tab()` | The Listen tab layout and actions; the host retains compatibility entry points for workspace switching. |
 | `audiobook_progress` table | Path, position, duration, finished, last played. |
