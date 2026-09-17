@@ -1,18 +1,20 @@
 # Audiobook agent
 
 Owns ebook discovery, narration configuration, conversion progress, listening,
-resume state and audiobook output management.  Imprint imports the input adapter
-from `agents.audiobook`; narration and library services remain shared during the
-panel extraction phase.
+resume state and audiobook output management. Imprint imports its connector and
+Convert/Listen workspace from `agents.audiobook`. Conversion, playback handlers,
+and narration and library services remain on the host/shared side for now.
 
 ## Files
 
-- `__init__.py` — public interface; re-exports `AudiobookConnector` from `agent.py`.
+- `__init__.py` — public interface; re-exports `AudiobookConnector` and lazily
+  exposes `AudiobookPanel` so converter/CLI imports do not require Qt.
 - `agent.py` — `AudiobookConnector.parse_input(text)` parses a `key=value`-per-line
   config block into a dict with defaults (`voice="alloy"`, `chunk_tokens=1500`),
-  and raises `ValueError` if `input=` or `output=` is missing. This is the only
-  logic extracted so far; conversion, playback and resume-state handling still
-  live in `main.py` and shared services (see TODO).
+  and raises `ValueError` if `input=` or `output=` is missing.
+- `panel.py` — owns the Convert and Listen layouts and their controls. It exposes
+  temporary control aliases on the host while conversion, library, and playback
+  handlers still live in `main.py` (see TODO).
 - `recommendations.py` — exports `RECOMMENDATION_PROFILE`, an `AgentProfile`
   (from `services.recommendations`) describing what this agent needs from an
   AI provider/model: tagged `narration`, `longform`, `reliability`, weighted

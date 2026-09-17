@@ -69,7 +69,7 @@ from services.registry import Registry
 from services.validator import Validator
 from services.run_logger import RunLogger
 
-from agents.audiobook import AudiobookConnector
+from agents.audiobook import AudiobookConnector, AudiobookPanel
 from agents.chat import ChatAgent
 from agents.author import AuthorAgent
 from agents.manuscript import ManuscriptAgent
@@ -172,7 +172,6 @@ from services.audiobook_library import (
     mark_unfinished as mark_audiobook_unfinished,
     scan as scan_audiobooks,
 )
-from ui.audio_player import AudiobookPlayer
 from ui.workers import (
     VideoWorker,
     ChatWorker, SubprocessWorker, ModelPullWorker, FiverrImageWorker, ShortsWorker,
@@ -1811,216 +1810,8 @@ class GodAI(QWidget):
             self.output_box.setVisible(False)
     
     def build_audiobook_panel(self):
-        """Convert a book to MP3, and listen to what came out.
-
-        Was three group boxes side by side. The settings box held six rows in a
-        space sized by the book list next to it, so it stretched them apart
-        with 60px of nothing between each — the emptiest screen in the app,
-        and boxed on all four sides to draw attention to it.
-        """
-        self.audiobook_panel = QWidget()
-        outer = QVBoxLayout(self.audiobook_panel)
-        outer.setContentsMargins(0, 0, 0, 0)
-        outer.setSpacing(MD)
-
-        # Convert and Listen are two different jobs. The app could produce an
-        # audiobook and then had no way to play it; the Listen tab is that.
-        self.audiobook_tabs = QTabWidget()
-        outer.addWidget(self.audiobook_tabs, 1)
-
-        convert_page = QWidget()
-        convert_page.setObjectName("Transparent")
-        page = QVBoxLayout(convert_page)
-        page.setContentsMargins(MD, MD, MD, MD)
-        page.setSpacing(LG)
-
-        # ── Source ──────────────────────────────────────────────────────
-        page.addWidget(section("Book"))
-        self.audiobook_book_help = QLabel(
-            "Choose a PDF, EPUB, TXT, or MOBI file from the input folder. "
-            "Imprint converts the selected title and remembers completed output.")
-        self.audiobook_book_help.setObjectName("EstimateLine")
-        self.audiobook_book_help.setWordWrap(True)
-        page.addWidget(self.audiobook_book_help)
-
-        self.audiobook_book_list = QListWidget()
-        self.audiobook_book_list.setMaximumHeight(
-            CONTROL_HEIGHT * 5 + MD)
-        self.audiobook_book_list.setSizePolicy(
-            QSizePolicy.Expanding, QSizePolicy.Expanding)
-        self.audiobook_book_list.currentItemChanged.connect(
-            lambda *_: self.estimate_audiobook_cost_from_selection())
-
-        self.audiobook_empty_state = QLabel(
-            "No supported books found yet. Add a PDF, EPUB, TXT, or MOBI file "
-            "to the input folder, then refresh the list.")
-        self.audiobook_empty_state.setObjectName("InlineEmptyState")
-        self.audiobook_empty_state.setWordWrap(True)
-        self.audiobook_empty_state.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
-        self.audiobook_empty_state.setAccessibleName("No audiobook source files")
-
-        self.audiobook_source_stack = QStackedWidget()
-        self.audiobook_source_stack.setObjectName("AudiobookSourceStack")
-        self.audiobook_source_stack.addWidget(self.audiobook_empty_state)
-        self.audiobook_source_stack.addWidget(self.audiobook_book_list)
-        self.audiobook_source_stack.setFixedHeight(CONTROL_HEIGHT * 2 + SM)
-        page.addWidget(self.audiobook_source_stack)
-
-        # ── Settings ────────────────────────────────────────────────────
-        page.addWidget(rule())
-        page.addWidget(section("Conversion settings"))
-
-        self.audiobook_input_path = QLineEdit()
-        self.audiobook_input_path.setReadOnly(True)
-        self.audiobook_open_input_btn = QPushButton("Open input")
-        self.audiobook_open_input_btn.setFixedWidth(116)
-        self.audiobook_open_input_btn.clicked.connect(self.open_audiobook_input_folder)
-
-        self.audiobook_output_path = QLineEdit()
-        self.audiobook_output_path.setReadOnly(True)
-        self.audiobook_change_output_btn = QPushButton("Set output")
-        self.audiobook_change_output_btn.setFixedWidth(116)
-        self.audiobook_change_output_btn.clicked.connect(self.change_audiobook_output_folder)
-
-        folders = QGridLayout()
-        folders.setHorizontalSpacing(SM)
-        folders.setVerticalSpacing(MD)
-        folders.addWidget(field("Input folder", self.audiobook_input_path), 0, 0, Qt.AlignTop)
-        folders.addWidget(self.audiobook_open_input_btn, 0, 1, Qt.AlignBottom)
-        folders.addWidget(field("Output folder", self.audiobook_output_path), 1, 0, Qt.AlignTop)
-        folders.addWidget(self.audiobook_change_output_btn, 1, 1, Qt.AlignBottom)
-        folders.setColumnStretch(0, 1)
-        page.addLayout(folders)
-
-        self.audiobook_voice_box = combo(
-            ["alloy", "verse", "aria", "coral", "sage"])
-        self.audiobook_voice_box.setToolTip(
-            "Narration voice. Open the menu to see Imprint's best-fit default.")
-        self.audiobook_chunk_input = line_edit("1400", "1400")
-        self.audiobook_chunk_input.setToolTip(
-            "Approximate text sent per narration request. 1400 is a stable default; "
-            "smaller chunks recover more easily if a request fails.")
-
-        options = QGridLayout()
-        options.setHorizontalSpacing(MD)
-        options.setVerticalSpacing(MD)
-        options.addWidget(field("Voice", self.audiobook_voice_box), 0, 0, Qt.AlignTop)
-        options.addWidget(field("Chunk size (tokens)", self.audiobook_chunk_input), 0, 1, Qt.AlignTop)
-        for column in range(3):
-            options.setColumnStretch(column, 1)
-        page.addLayout(options)
-
-        # ── Actions ─────────────────────────────────────────────────────
-        actions = QHBoxLayout()
-        actions.setSpacing(SM)
-        self.audiobook_start_btn = primary("Convert audiobook")
-        self.audiobook_start_btn.setMinimumWidth(160)
-        self.audiobook_start_btn.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
-        self.audiobook_start_btn.clicked.connect(self.start_selected_audiobook_book)
-        actions.addWidget(self.audiobook_start_btn)
-
-        self.audiobook_refresh_btn = QPushButton("Refresh List")
-        self.audiobook_refresh_btn.clicked.connect(self.refresh_audiobook_books)
-        actions.addWidget(self.audiobook_refresh_btn)
-
-        self.stop_btn = QPushButton("Stop")
-        self.stop_btn.setObjectName("DangerAction")
-        self.stop_btn.clicked.connect(self.stop_current_task)
-        self.stop_btn.hide()
-        actions.addWidget(self.stop_btn)
-
-        actions.addStretch()
-        self.audiobook_cost_label = QLabel("Estimated cost: not calculated")
-        self.audiobook_cost_label.setObjectName("EstimateLine")
-        actions.addWidget(self.audiobook_cost_label)
-        page.addLayout(actions)
-
-        # ── Progress ────────────────────────────────────────────────────
-        self.tool_progress = QProgressBar()
-        self.tool_progress.setRange(0, 100)
-        self.tool_progress.setValue(0)
-        self.tool_progress.setTextVisible(True)
-        page.addWidget(self.tool_progress)
-
-        self.audiobook_status_label = QLabel("[Ready] Select a book and click Start.")
-        self.audiobook_status_label.setObjectName("EstimateLine")
-        self.audiobook_status_label.setWordWrap(True)
-        page.addWidget(self.audiobook_status_label)
-
-        # The complete form is one scrolling surface.  Without this wrapper Qt
-        # compressed the folder-field containers below their controls' minimum
-        # height on shorter windows, so the line edits painted over one another.
-        self.audiobook_convert_scroll = scrollable(convert_page)
-        self.audiobook_convert_scroll.setObjectName("AudiobookConvertScroll")
-        self.audiobook_convert_scroll.setHorizontalScrollBarPolicy(
-            Qt.ScrollBarAlwaysOff)
-        self.audiobook_convert_scroll.setAccessibleName(
-            "Audiobook conversion controls")
-        self.audiobook_tabs.addTab(self.audiobook_convert_scroll, "Convert")
-        self.audiobook_tabs.addTab(self._build_audiobook_library_tab(), "Listen")
-        self.audiobook_panel.hide()
-
-    def _build_audiobook_library_tab(self) -> QWidget:
-        """The finished audiobooks, and a player that resumes where you left off."""
-        page = QWidget()
-        layout = QVBoxLayout(page)
-        layout.setContentsMargins(8, 8, 8, 8)
-        layout.setSpacing(8)
-
-        header = QHBoxLayout()
-        header.addWidget(section("Audiobooks in your output folder"))
-        header.addStretch()
-        self.audiobook_library_refresh_btn = QPushButton("Rescan")
-        self.audiobook_library_refresh_btn.setObjectName("ChipBtn")
-        self.audiobook_library_refresh_btn.clicked.connect(
-            self.refresh_audiobook_library)
-        header.addWidget(self.audiobook_library_refresh_btn)
-        layout.addLayout(header)
-
-        self.audiobook_library_table = QTableWidget(0, 4)
-        self.audiobook_library_table.setHorizontalHeaderLabels(
-            ["Title", "Progress", "Position", "Last played"])
-        self.audiobook_library_table.horizontalHeader().setSectionResizeMode(
-            0, QHeaderView.Stretch)
-        self.audiobook_library_table.setSelectionBehavior(QTableWidget.SelectRows)
-        self.audiobook_library_table.setEditTriggers(QTableWidget.NoEditTriggers)
-        self.audiobook_library_table.itemSelectionChanged.connect(
-            self._audiobook_selection_changed)
-        self.audiobook_library_table.doubleClicked.connect(
-            lambda *_: self.play_selected_audiobook())
-        layout.addWidget(self.audiobook_library_table, 1)
-
-        row = QHBoxLayout()
-        self.audiobook_play_btn = QPushButton("Listen")
-        self.audiobook_play_btn.setObjectName("PrimaryAction")
-        self.audiobook_play_btn.setEnabled(False)
-        self.audiobook_play_btn.clicked.connect(self.play_selected_audiobook)
-        row.addWidget(self.audiobook_play_btn)
-
-        self.audiobook_restart_btn = QPushButton("Start Over")
-        self.audiobook_restart_btn.setEnabled(False)
-        self.audiobook_restart_btn.clicked.connect(self.restart_selected_audiobook)
-        row.addWidget(self.audiobook_restart_btn)
-
-        self.audiobook_reveal_btn = QPushButton("Show in Finder")
-        self.audiobook_reveal_btn.setEnabled(False)
-        self.audiobook_reveal_btn.clicked.connect(self.reveal_selected_audiobook)
-        row.addWidget(self.audiobook_reveal_btn)
-        row.addStretch()
-        layout.addLayout(row)
-
-        divider = QFrame()
-        divider.setFrameShape(QFrame.HLine)
-        divider.setObjectName("CardDivider")
-        layout.addWidget(divider)
-
-        self.audiobook_player = AudiobookPlayer()
-        self.audiobook_player.position_saved.connect(
-            lambda *_: self._audiobook_refresh_row())
-        layout.addWidget(self.audiobook_player)
-
-        self._audiobook_library: list = []
-        return page
+        """Compose Audiobook's owned Convert and Listen workspace."""
+        self.audiobook_panel = AudiobookPanel(self)
 
     def refresh_audiobook_library(self):
         """Rescan the output folder. Cheap, so it runs on every panel entry."""
