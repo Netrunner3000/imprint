@@ -1,6 +1,6 @@
 # AUDIOBOOK PRODUCER — Ebook → MP3 audiobook
 
-`key: audiobook` · converter: `services/narrator/converter.py` · panel: `build_audiobook_panel()` · handler: `start_selected_audiobook_book()`
+`key: audiobook` · converter: `services/narrator/converter.py` · panel: `agents.audiobook.AudiobookPanel` · host handler: `start_selected_audiobook_book()`
 
 > Uses **OpenAI TTS** regardless of the provider selected elsewhere — an OpenAI API key is required.
 
@@ -29,6 +29,7 @@ The converter runs as a separate process via `QProcess`:
 ## Under the hood — files & functions
 | Location | Role |
 |---|---|
+| `agents/audiobook/panel.py` | Owns the Convert and Listen workspace layouts and controls. |
 | `services/narrator/converter.py` | `convert()`, `main()`, extraction + TTS + chunking. |
 | `main.py: start_selected_audiobook_book()` | Builds the QProcess command (dev vs frozen branch). |
 | `main.py: handle_audiobook_stdout()/_finished()/_error()` | Streams log, detects done/blocked/paused/quota. |
@@ -87,5 +88,5 @@ immediately stopping. **Start Over** clears that flag.
 |---|---|
 | `services/audiobook_library.py` | Scan, resume bookkeeping, time formatting. |
 | `ui/audio_player.py` | `AudiobookPlayer` widget. |
-| `main.py: _build_audiobook_library_tab()` | The Listen tab. |
+| `agents/audiobook/panel.py: _build_library_tab()` | The Listen tab layout; library and playback actions still call host handlers. |
 | `audiobook_progress` table | Path, position, duration, finished, last played. |

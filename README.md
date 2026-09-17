@@ -1067,7 +1067,7 @@ The panel shows the extracted HTML and any inline `<style>` / `<script>` blocks 
 
 **Left-panel button:** Audiobook Producer  (category: **Creative**)
 
-A completely separate workflow that converts ebook files into MP3 audiobooks using OpenAI's Text-to-Speech API. The Audiobook agent is unusual in two ways: (1) it does not stream LLM output — it runs an **external Python script** as a subprocess, and (2) it has no system-prompt-style "agent class" beyond a thin **AudiobookConnector** that parses configuration input. The conversion engine lives in the sibling project at `narrator/`.
+A separate workflow that converts ebook files into MP3 audiobooks using OpenAI's Text-to-Speech API. The Audiobook agent is unusual in two ways: (1) it does not stream LLM output — it runs a **conversion worker** as a subprocess, and (2) it has no system-prompt-style "agent class" beyond a thin **AudiobookConnector** that parses configuration input. Its Convert and Listen workspace lives in `agents/audiobook/panel.py`; the shared conversion engine is `services/narrator/converter.py`.
 
 ---
 
@@ -1164,8 +1164,9 @@ The conversion runs as a `QProcess` so the GUI stays responsive. Output is strea
 
 | Property | Value |
 |----------|-------|
-| Connector class | `agents/audiobook_connector.py` — `AudiobookConnector` (parses `input=`/`output=`/`voice=`/`chunk_tokens=` config) |
-| Engine | External script `narrator/ebook_to_audiobook.py` (separate venv) |
+| Connector class | `agents/audiobook/agent.py` — `AudiobookConnector` (parses `input=`/`output=`/`voice=`/`chunk_tokens=` config) |
+| Workspace | `agents/audiobook/panel.py` — Convert and Listen layouts; host handles actions for now |
+| Engine | `services/narrator/converter.py` (subprocess worker) |
 | Agent name (DB) | `audiobook` |
 | Label | Narrator |
 | Provider | OpenAI TTS — hard-coded; no provider switching |

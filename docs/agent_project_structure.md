@@ -13,12 +13,13 @@ unpublished nested Git repositories.
 
 ```text
 Imprint umbrella
-├── main.py / ui/             window, panels and workflow composition
+├── main.py / ui/             window and remaining panel/workflow composition
 ├── services/                 shared persistence, providers, budgets, workers
 ├── agents/catalog.py         roster, labels, workspaces, profile locations
 └── agents/<agent>/
     ├── __init__.py           stable public contract
     ├── agent.py              owned domain logic
+    ├── panel.py              owned workspace (where extracted)
     ├── recommendations.py    owned task and quality requirements
     ├── README.md             operating boundary
     ├── TODO.md               committed work
@@ -65,7 +66,9 @@ permissions and ranking policy. See `docs/recommendation_system.md`.
 - Keeping one parent repository is less autonomous than nested Git repos, but a
   clone remains complete and releases remain atomic.
 - Several panels still live in `main.py`; OnlyFans, Music and Site Builder own
-  their panels. The remaining panel extraction is the next mechanical phase.
+  their panels and workflows. Audiobook owns its Convert/Listen layout, but its
+  conversion and playback handlers remain on the host. The remaining panel and
+  handler extraction is the next phase.
 - Shared services reduce drift but mean an extracted agent needs a declared
   Imprint platform dependency.
 
@@ -73,9 +76,9 @@ permissions and ranking policy. See `docs/recommendation_system.md`.
 
 1. Move flat agent implementations behind package public APIs. **Done.**
 2. Move each panel and its handlers into `agents/<key>/panel.py`. **OnlyFans,
-   Music and Site Builder done; remaining panels are incremental work. Music
-   and Site Builder still expose temporary host aliases to shared recommendations
-   and tooltips.**
+   Music and Site Builder done; Audiobook layout done, handlers still on the host.
+   Remaining panels are incremental work. Music, Site Builder and Audiobook
+   still expose temporary host aliases for shared integrations.**
 3. Move purely domain-specific services under their owner; keep cross-agent
    storage, providers, budgets and request guards shared.
 4. Move focused tests into each agent project while retaining umbrella contract

@@ -11,7 +11,7 @@ under **Detail** — this checklist is the summary view.
 `ui/forms.py` over a header bar and two fixed rails; Video and Social shipped,
 which closes the last two gaps against the original plan. Every paid path now
 goes through the request guard, including the ones billed per unit rather than
-per token. 695 tests pass in an isolated database (2026-09-17). The installed
+per token. 696 tests pass in an isolated database (2026-09-17). The installed
 macOS app is a live launcher into this source tree; restarting it loads changes.
 
 The package foundation of **Refactor Phase 4** is complete: every agent owns a
@@ -19,8 +19,9 @@ repo-ready directory, public API, README, TODO and suggestions file, while one
 catalog drives the umbrella roster.  Moving the UI panels and domain-only
 services into those packages remains the largest open implementation step.
 Music and Site Builder now own their workspace layouts and request/result
-lifecycles in their own packages; temporary control aliases remain in the
-umbrella for shared recommendations and tooltips.
+lifecycles in their own packages. Audiobook owns its Convert and Listen layout;
+its conversion and playback handlers still live on the host. Temporary control
+aliases remain in the umbrella for shared integrations.
 
 ---
 
@@ -54,7 +55,7 @@ umbrella for shared recommendations and tooltips.
 - [x] `P1` `feature` `@ai` **OnlyFans venture intelligence.** Added a top-level OnlyFans business workspace for overview, ranked trends/opportunities, content intelligence, monetization and owned analytics, market/competitive density, and strategy. Selected opportunities hand structured evidence, freshness, risk, format, pricing hypothesis, and deliverables to the platform-agnostic Creator workspace. Live search, discussion, and adult-industry sources sit behind resilient adapters; until configured, the UI uses conspicuously labelled demonstration data and never presents directional scores as revenue forecasts or imported receipts as profit. Connector limitations and setup are documented in `docs/creator_trend_intelligence.md`.
 - [x] `P1` `feature` `@ai` **Explainable BEST FIT recommendations.** Every visible provider/model pair is bound to one constraint-first engine. Each agent owns its requirement profile; the host filters modality, retirement, availability, API permission, budget, aspect and duration before scoring quality, reliability, cost, speed, context and privacy. Provider menus mark the best eligible provider overall and model menus recompute the best option inside the provider selected by the user. Dedicated UI roles carry reasons, scores and confidence, with contract tests preventing new selectors from being left unbound.
 - [x] `P1` `design` `@ai` **Section hierarchy and OnlyFans decision UI.** Section titles now use readable normal-case semibold typography instead of field-label small caps. Audiobook conversion settings remain above the fold. OnlyFans uses a seven-column comparison table with stable headers, selected-signal evidence in detail, guided content/monetization/strategy cards, explicit measurement and stop rules, and a direct Creator handoff from the content plan.
-- [ ] `P1` `design` `@ai` **Refactor Phase 4 — panel extraction.** Foundation shipped 2026-09-14: flat implementations moved to `agents/<key>/agent.py`; package public APIs replaced private-file imports; `agents/catalog.py` now owns roster/workspace/recommendation metadata; and every visible, CLI and internal agent owns README/TODO/SUGGESTIONS files. Music and Site Builder now own their panels and handlers; OnlyFans was already there. Remaining work is deliberately tracked per package: move the other panels and handlers out of `main.py`, then relocate services proven exclusive to one agent. See `docs/agent_project_structure.md`.
+- [ ] `P1` `design` `@ai` **Refactor Phase 4 — panel extraction.** Foundation shipped 2026-09-14: flat implementations moved to `agents/<key>/agent.py`; package public APIs replaced private-file imports; `agents/catalog.py` now owns roster/workspace/recommendation metadata; and every visible, CLI and internal agent owns README/TODO/SUGGESTIONS files. Music and Site Builder now own their panels and handlers; OnlyFans was already there. Audiobook now owns its Convert/Listen layout, with handlers still on the host. Remaining work is tracked per package: move the other panels and handlers out of `main.py`, then relocate services proven exclusive to one agent. See `docs/agent_project_structure.md`.
 - [x] `P2` `feature` `@ai` Creator Earnings is a structured, evidence-labelled dashboard: statement and attributed totals stay separate, PPV price points have a chart, and asset, channel, hook and entered-cost ROI comparisons are visible without a text dump.
 - [x] `P3` `feature` `@ai` Audiobook player has a sleep timer, embedded-chapter and saved-mark navigation, and space/arrow-key controls, with persistence and headless tests.
 - [x] `P1` `design` `@ai` **GUI overhaul.** Header bar plus two fixed rails replacing the splitter; every panel rebuilt on `ui/forms.py` (section label + hairline instead of group boxes, labels above inputs on an equal-stretch grid, one filled button per page, Stop hidden until it can do something). One control height enforced in the stylesheet — QLineEdit / QComboBox / QPushButton / QSpinBox / QDateEdit came out at 48 / 46 / 48 / 53 / 53 from their natural size hints, and a control a few pixels taller than its neighbour drops its whole field below the row. 58 emoji removed from control labels and 36 colon captions folded into fields. Four new mutation-verified tests: shell overlap at every size, the creator compose grid packs contiguously, no emoji in a control label.
