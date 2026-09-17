@@ -959,7 +959,7 @@ full step-by-step.
 
 **Left-panel button:** Web Developer  (category: **Creative**)
 
-A front-end design and prototyping agent. Given a brief, Web Design produces complete, self-contained HTML / CSS / JS — landing pages, portfolios, dashboards, forms, blogs, or single components — split across three editable tabs and ready to copy or save as an `.html` file.
+A front-end design and prototyping agent. Given a brief, Site Builder produces HTML / CSS / JS for landing pages, portfolios, dashboards, forms, blogs, or single components. The result is shown in three read-only review tabs and can be copied or saved as an `.html` file. Check external assets and framework dependencies before treating it as self-contained.
 
 ---
 
@@ -973,7 +973,7 @@ When invoked with a brief, the agent delivers a single complete code block (or t
 - Vanilla ES6+ JavaScript (no jQuery) by default; Tailwind or Bootstrap if requested.
 - Hover/focus states and basic accessibility (aria, alt, tab order).
 
-The panel splits the output into HTML / CSS / JS tabs and reports responsive, framework and line count as stats above them.
+The panel shows the extracted HTML and any inline `<style>` / `<script>` blocks in separate tabs. Its indicators report viewport/media-query detection, selected framework and lines in the extracted HTML.
 
 ---
 
@@ -994,10 +994,10 @@ The panel splits the output into HTML / CSS / JS tabs and reports responsive, fr
 
 | Button | Action |
 |--------|--------|
-| **Generate** | Sends the brief; output streams into the tabs. |
+| **Generate** | Checks permissions and budget, then sends the brief; a declined request leaves the button usable. Output streams into the tabs. |
 | **Stop** | Cancels the request. |
-| **Copy All** | Copies the combined HTML/CSS/JS to the clipboard. |
-| **Save .html** | Saves a single self-contained `.html` file. |
+| **Copy All** | Copies the extracted HTML block to the clipboard, including inline CSS/JS when present. |
+| **Save .html** | Saves the extracted HTML as one local file; external dependencies remain external. |
 | **Clear** | Resets everything. |
 
 ##### Results Tabs
@@ -1008,13 +1008,13 @@ The panel splits the output into HTML / CSS / JS tabs and reports responsive, fr
 | **CSS** | The CSS output (or empty if Tailwind/Bootstrap is used inline). |
 | **JS** | The JavaScript output. |
 
-##### Sidebar
+##### Output indicators
 
 | Indicator | Description |
 |-----------|-------------|
-| **Responsive** | Yes/No based on detected media queries. |
+| **Responsive** | Mobile-first or Desktop based on a viewport tag or media query. |
 | **Framework Used** | Echoes the selected framework. |
-| **Lines of Code** | Total LoC across the three tabs. |
+| **Lines of Code** | Line count in the extracted HTML. |
 
 ---
 
@@ -1054,7 +1054,8 @@ The panel splits the output into HTML / CSS / JS tabs and reports responsive, fr
 
 | Property | Value |
 |----------|-------|
-| Agent class | `agents/webdesign_agent.py` — `WebdesignAgent` |
+| Agent class | `agents/webdesign/agent.py` — `WebdesignAgent` |
+| Workspace and lifecycle | `agents/webdesign/panel.py` — `WebdesignPanel` |
 | Agent name (DB) | `webdesign` |
 | Label | Site Builder |
 | Default provider | Anthropic |
