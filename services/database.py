@@ -53,7 +53,20 @@ CREATE TABLE IF NOT EXISTS usage (
     total_tokens  INTEGER NOT NULL DEFAULT 0,
     cost_eur      REAL NOT NULL DEFAULT 0.0,
     cost_type     TEXT NOT NULL DEFAULT 'estimated',
-    cloud         INTEGER NOT NULL DEFAULT 0
+    cloud         INTEGER NOT NULL DEFAULT 0,
+    project       TEXT NOT NULL DEFAULT ''
+);
+
+CREATE TABLE IF NOT EXISTS projects (
+    id               TEXT PRIMARY KEY,
+    name             TEXT NOT NULL,
+    instructions     TEXT NOT NULL DEFAULT '',
+    default_agent    TEXT NOT NULL DEFAULT '',
+    default_provider TEXT NOT NULL DEFAULT '',
+    default_model    TEXT NOT NULL DEFAULT '',
+    budget_eur       REAL,
+    archived         INTEGER NOT NULL DEFAULT 0,
+    created_at       TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE IF NOT EXISTS runs (
@@ -470,6 +483,7 @@ def _add_missing_columns(conn: sqlite3.Connection) -> None:
     column in SCHEMA never reaches one. Each entry is applied only when absent.
     """
     wanted = {
+        "usage": [("project", "TEXT NOT NULL DEFAULT ''")],
         "pricing": [("cached_input_per_1m_usd", "REAL NOT NULL DEFAULT 0.0")],
         "creator_content": [
             ("segment", "TEXT NOT NULL DEFAULT ''"),

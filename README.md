@@ -107,7 +107,7 @@ fixed width and cannot be dragged.
 | Region | Width | Purpose |
 |--------|-------|---------|
 | **Header bar** | full width, 56 px | Wordmark, workspace tabs, agent status, Docs / Tooltips / Settings |
-| **Left rail** | 236 px | Projects: filter, search, list, New Project |
+| **Left rail** | 236 px | Project context, saved-chat filters, and New Project / New Chat |
 | **Centre** | fills the remainder | The current agent's panel |
 | **Right rail** | 268 px | Spend, budget limits, utilities, and collapsed reference panels |
 
@@ -151,21 +151,35 @@ one fails.
 
 Agent navigation lives in the header, so the rail is projects only.
 
+**Project selector** — choose **All projects**, **Unfiled**, or a named project.
+Selecting a project makes its instructions, optional daily cap, and saved
+agent/provider/model defaults active. The header shows its name. **All projects**
+and **Unfiled** browse without adding project context to new requests.
+
 **Agent filter** — narrows the list to one agent. Populated from the chats that
 exist, so it only ever offers agents you have actually used.
 
 **Search** — filters the list in real time, case-insensitively, against the
 chat title (agent name + first user message).
 
-**Project list** — every saved chat from `data/chats/`, newest first. Click to
-open; double-click to rename. It takes the rail's spare height rather than
+**Saved-chat list** — chats from `data/chats/`, newest first. Click to
+reopen a full conversation and type a follow-up; double-click to rename a chat;
+right-click to assign it to a project.
+Project, agent, and title-search filters intersect. It takes the rail's spare height rather than
 being capped, so the buttons below it sit under the list rather than at the
 bottom of the window.
 
-**New Project** — clears the input, output and message history. Deletes
-nothing.
+**New Project** — creates a named context bundle and opens a clean chat. It
+does not delete previous chats. **Save Current Setup** records the current
+agent/provider/model as that project's defaults. **New Chat** clears the
+working conversation while keeping the selected project active.
 
-**Remove** — deletes the selected saved chat after a confirmation prompt.
+**Settings → Projects** — edit reusable instructions and a daily project
+budget, change defaults, archive, restore, or delete a project. Archiving hides
+it from the selector without deleting chats. Deleting it unfiles the chats but
+keeps their files. Long instructions add billable tokens to every request.
+
+**Remove Chat** — deletes the selected saved chat after a confirmation prompt.
 
 ---
 
@@ -175,7 +189,7 @@ nothing.
 requests, last request. Hovering a stat gives the detail (session vs. today
 counts, which tool ran last).
 
-**Session budget / Daily budget** — spend against the cap as a bar. The bar
+**Session budget / Daily budget / Project budget** — spend against the cap as a bar. The project bar appears only when the active project has a daily limit. The bar
 turns red at 100%. This replaced two lines of prose that gave the cap and the
 remainder and left you to subtract.
 
@@ -379,7 +393,7 @@ The default, general-purpose agent. Chat is the one agent that does *not* swap i
 
 #### What the Chat Agent Does
 
-The Chat agent simply builds a single-user-message payload from the prompt input and forwards it, along with whichever Tool is active (General Chat, Writing, Coding, Summarize, Rewrite — see Chapter 6), to the chosen provider. After the first reply, the assistant's response is appended to `current_messages` so follow-ups include full conversation context. Saved chats are persisted as JSON files in `data/chats/` and re-appear in the **Saved Chats** list in the left panel.
+The Chat agent sends the prompt with the active Tool's instructions (General Chat, Writing, Coding, Summarize, Rewrite — see Chapter 6). After the first reply, later messages in the same conversation include prior user and assistant turns. Saved chats are persisted as JSON files in `data/chats/` and re-appear in **Saved Chats**. Reopening one restores the transcript and leaves the input empty for a follow-up. It uses the *current* Tool and project instructions, not a system prompt stored in the old file. Changing the agent, Tool, or project starts a different context; **New Chat** explicitly clears it. The preflight estimate includes earlier turns that will be sent again.
 
 ---
 
@@ -396,7 +410,7 @@ Chat uses the **standard `normal_panel`** described in Chapter 4 (no custom GUI)
 | **Prompt input** | Multi-line message box. |
 | **Send / Stop** buttons | Send the prompt or cancel the in-flight request. |
 | **Output box** | Streaming response display; conversation history is preserved within the session. |
-| **New Project** | Clears `current_messages` and starts a fresh conversation. |
+| **New Project** | Creates a named project and starts a fresh conversation. |
 | **Remove** | Removes the selected saved chat from `data/chats/`. |
 
 ---
@@ -409,8 +423,9 @@ Chat uses the **standard `normal_panel`** described in Chapter 4 (no custom GUI)
 4. Choose **Provider** and **Model**.
 5. Type a message in the prompt input and click **Send** (or press the configured submit shortcut).
 6. The response streams into the output box. Type a follow-up to continue the same conversation.
-7. Use **New Project** to clear context and start over. The previous conversation is auto-saved to `data/chats/`.
-8. To re-open an older chat, click it in the **Saved Chats** list.
+7. Use **New Chat** to clear conversation context while keeping the active project. Use **New Project** only for a different client, product, or venture. Previous conversations are auto-saved to `data/chats/`.
+8. To re-open an older chat, click it in **Saved Chats**. Review the transcript,
+   then type a new follow-up; the old prompt is not copied into the input.
 
 ---
 
@@ -1735,7 +1750,7 @@ API availability is respected: if the recommended cloud API's checkbox is unchec
 
 ## 11. Validation & Permission System
 
-Every request goes through `Validator.validate()` before the worker thread is started. Ten checks are evaluated in order. The first failure blocks the request and shows a descriptive message:
+Every request goes through `Validator.validate()` before the worker thread is started. Eleven checks are evaluated in order. The first failure blocks the request and shows a descriptive message:
 
 | # | Check | Blocks if |
 |---|-------|-----------|
@@ -1746,11 +1761,12 @@ Every request goes through `Validator.validate()` before the worker thread is st
 | 5 | Tool allowed for agent | Agent's `allowed_tools` list does not include the selected tool (`null` = unrestricted, `[]` = none allowed) |
 | 6 | API checkbox | A cloud provider is selected but its checkbox is unchecked |
 | 7 | Per-agent budget | Estimated cost exceeds the agent's `budget_limit_eur` daily cap |
-| 8 | Session budget | Estimated cost would exceed the remaining session budget |
-| 9 | Daily budget | Estimated cost would exceed the remaining daily budget |
-| 10 | Requires approval | Agent has `requires_approval = true` |
+| 8 | Project budget | Estimated cost would exceed the active project's optional daily cap |
+| 9 | Session budget | Estimated cost would exceed the remaining session budget |
+| 10 | Daily budget | Estimated cost would exceed the remaining daily budget |
+| 11 | Requires approval | Agent has `requires_approval = true` |
 
-If all ten checks pass, a `ValidationResult(allowed=True)` is returned and the request proceeds.
+If all eleven checks pass, a `ValidationResult(allowed=True)` is returned and the request proceeds.
 
 If any check fails, a `ValidationResult(allowed=False, reason=<explanation>)` is returned, the request is blocked, and a warning dialog is shown with the reason.
 
@@ -1762,7 +1778,7 @@ If any check fails, a `ValidationResult(allowed=False, reason=<explanation>)` is
 
 Before sending, `estimate_chat_cost()` provides a rough estimate based on character count:
 
-- Input tokens ≈ `len(prompt) / 4`
+- Input tokens ≈ `(len(prompt) + len(active project instructions)) / 4`
 - Output tokens ≈ `input_tokens × 1.2` (minimum 250)
 - Cost = `total_tokens × price_per_token` for the current provider
 

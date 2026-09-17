@@ -130,14 +130,14 @@ class FakeUsageTracker:
         return self.today_total
 
     def log_request(self, agent, backend, model, prompt_text, response_text,
-                    usage=None, flat_cost_eur=None):
+                    usage=None, flat_cost_eur=None, project=None):
         # Mirrors the real tracker: a per-unit price wins over the token cost.
         cost = 0.02 if flat_cost_eur is None else float(flat_cost_eur)
         entry = {
             "agent": agent, "backend": backend, "model": model,
             "cost_eur": cost, "estimated_cost": cost,
             "input_tokens": 10, "output_tokens": 20, "usage": usage,
-            "flat_cost_eur": flat_cost_eur,
+            "flat_cost_eur": flat_cost_eur, "project": project,
         }
         self.logged.append(entry)
         return entry
@@ -147,10 +147,12 @@ class FakeHistory:
     def __init__(self):
         self.saved = []
 
-    def save_chat(self, agent, backend, model, command, messages, response):
+    def save_chat(self, agent, backend, model, command, messages, response,
+                  project=None, tool=None):
         self.saved.append({
             "agent": agent, "backend": backend, "model": model,
             "command": command, "messages": messages, "response": response,
+            "project": project, "tool": tool,
         })
 
 

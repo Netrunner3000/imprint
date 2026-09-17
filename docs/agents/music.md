@@ -1,6 +1,6 @@
 # MUSIC ARTIST GENERATOR — Songs, albums, artist identity, and release strategy
 
-`key: music` · class: `agents/music_agent.py → MusicAgent` · panel: `build_music_panel()` · handler: `music_analyse()`
+`key: music` · class: `agents.music.MusicAgent` · panel: `agents.music.MusicPanel` · handler: `music_analyse()`
 
 ## What it does
 A music-business consultant that produces a complete, copy-paste-ready release-and-monetisation plan for independent artists. Every section explicitly marks **[AI OUTPUT — COPY-PASTE READY]** vs **[HUMAN ACTION REQUIRED]** so you always know what to paste and what to do manually.
@@ -24,8 +24,8 @@ Five tabs mirror the plan: **Artist Profile** (short+long bio, genre tags, simil
 ## Under the hood — files & functions
 | Location | Role |
 |---|---|
-| `agents/music_agent.py` | `MusicAgent` — five-section consultant prompt. |
-| `main.py: build_music_panel()` | Setup form, model row, five tabs. |
+| `agents/music/agent.py` | `MusicAgent` — five-section consultant prompt. |
+| `agents/music/panel.py` | Setup form, model row, six tabs including Songs & Albums. |
 | `main.py: music_analyse()/music_stop()/music_save()/music_clear()` | Lifecycle. |
 
 ## Extend it

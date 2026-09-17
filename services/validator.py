@@ -41,6 +41,9 @@ class Validator:
         daily_cost: float,
         daily_budget: float,
         estimated_cost: float,
+        project_name: str = "",
+        project_cost: float = 0.0,
+        project_budget: float | None = None,
     ) -> ValidationResult:
         # 1. Agent enabled?
         if not self.registry.is_agent_enabled(agent_name):
@@ -93,7 +96,17 @@ class Validator:
                     f"This request is estimated at €{estimated_cost:.4f}."
                 )
 
-        # 8. Session budget
+        # 8. Optional daily cap for the currently selected project.
+        if project_budget is not None and provider != "ollama":
+            project_remaining = _money(project_budget) - _money(project_cost)
+            if estimated > project_remaining:
+                return ValidationResult(
+                    False,
+                    f"Project '{project_name}' daily budget exceeded. "
+                    f"Remaining: €{project_remaining:.4f}, request: ~€{estimated_cost:.4f}."
+                )
+
+        # 9. Session budget
         if provider != "ollama":
             session_remaining = _money(session_budget) - _money(session_cost)
             if estimated > session_remaining:
@@ -103,7 +116,7 @@ class Validator:
                     f"Remaining: €{session_remaining:.4f}, request: ~€{estimated_cost:.4f}."
                 )
 
-        # 9. Daily budget
+        # 10. Daily budget
         if provider != "ollama":
             daily_remaining = _money(daily_budget) - _money(daily_cost)
             if estimated > daily_remaining:
@@ -113,7 +126,7 @@ class Validator:
                     f"Remaining: €{daily_remaining:.4f}, request: ~€{estimated_cost:.4f}."
                 )
 
-        # 10. Approval required?
+        # 11. Approval required?
         if self.registry.agent_requires_approval(agent_name):
             return ValidationResult(
                 False,

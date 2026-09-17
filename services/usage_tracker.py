@@ -84,7 +84,8 @@ class UsageTracker:
 
     def log_request(self, agent: str, backend: str, model: str,
                     prompt_text: str, response_text: str, usage: dict | None = None,
-                    flat_cost_eur: float | None = None) -> dict:
+                    flat_cost_eur: float | None = None,
+                    project: str | None = None) -> dict:
         """Record one request and what it cost.
 
         `flat_cost_eur` is for work that is **not billed per token**: an image,
@@ -109,13 +110,14 @@ class UsageTracker:
             conn.execute("""
                 INSERT INTO usage
                   (timestamp, agent, backend, model, input_tokens, output_tokens,
-                   total_tokens, cost_eur, cost_type, cloud)
-                VALUES (?,?,?,?,?,?,?,?,?,?)
+                   total_tokens, cost_eur, cost_type, cloud, project)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?)
             """, (
                 timestamp, agent, backend, model,
                 input_tokens, output_tokens, input_tokens + output_tokens,
                 cost_eur, cost_type,
                 1 if backend in {"openai", "deepseek", "gemini"} else 0,
+                project or "",
             ))
             conn.commit()
 
@@ -131,7 +133,18 @@ class UsageTracker:
             "estimated_cost": cost_eur,
             "cost_type": cost_type,
             "cloud": backend in {"openai", "deepseek", "gemini"},
+            "project": project or "",
         }
+
+    def get_project_today_total(self, project: str) -> float:
+        today = datetime.now().date().isoformat()
+        with get_connection() as conn:
+            row = conn.execute(
+                "SELECT COALESCE(SUM(cost_eur), 0.0) AS total FROM usage "
+                "WHERE project = ? AND timestamp LIKE ?",
+                (project, f"{today}%"),
+            ).fetchone()
+        return round(float(row["total"]), 6)
 
     def get_today_total(self) -> float:
         today = datetime.now().date().isoformat()

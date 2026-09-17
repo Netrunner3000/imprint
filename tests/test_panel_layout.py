@@ -81,6 +81,15 @@ def _settle(app, window, size, agent):
         app.processEvents()
 
 
+def test_music_workspace_layout_is_owned_by_music_package(window):
+    from agents.music.panel import MusicPanel
+
+    assert isinstance(window.music_panel, MusicPanel)
+    assert window.music_panel.music_tabs.count() == 6
+    for name in MusicPanel.HOST_CONTROLS:
+        assert getattr(window, name) is getattr(window.music_panel, name)
+
+
 def _overlapping_pairs(panel):
     """Sibling widgets sharing pixels — i.e. one drawn over the other."""
     from PySide6.QtWidgets import (
