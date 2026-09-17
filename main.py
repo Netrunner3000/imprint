@@ -7836,14 +7836,6 @@ class GodAI(QWidget):
                 writer.writerow([slot.day.strftime("%Y-%m-%d"), slot.platform, slot.format, slot.quote, slot.caption])
         self.manuscript_status_label.setText(f"[Done] Exported calendar to {Path(path).name}")
 
-    # The Music workspace owns its UI and request/result lifecycle. This one
-    # compatibility entry point remains for the umbrella's global Stop action.
-    def music_load_models(self):
-        self.music_panel_base.load_models()
-
-    def music_stop(self):
-        self.music_panel.stop()
-
     def build_right_panel(self) -> QWidget:
         """Spend, limits, and the utilities that open a window.
 
@@ -9333,7 +9325,7 @@ class GodAI(QWidget):
             return
 
         if self.music_worker is not None and self.music_worker.isRunning():
-            self.music_stop()
+            self.music_panel.stop()
             return
 
         if self.webdesign_worker is not None and self.webdesign_worker.isRunning():
