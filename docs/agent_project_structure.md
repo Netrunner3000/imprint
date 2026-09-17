@@ -73,9 +73,9 @@ permissions and ranking policy. See `docs/recommendation_system.md`.
 ## Extraction sequence
 
 1. Move flat agent implementations behind package public APIs. **Done.**
-2. Move each panel and its handlers into `agents/<key>/panel.py`. **OnlyFans
-   done; Music's layout now lives in its package, while its handlers remain in
-   the host. Remaining panels are incremental work.**
+2. Move each panel and its handlers into `agents/<key>/panel.py`. **OnlyFans and
+   Music done; remaining panels are incremental work. Music still exposes
+   temporary host aliases to shared recommendations and tooltips.**
 3. Move purely domain-specific services under their owner; keep cross-agent
    storage, providers, budgets and request guards shared.
 4. Move focused tests into each agent project while retaining umbrella contract
