@@ -73,7 +73,7 @@ from agents.audiobook import AudiobookConnector
 from agents.chat import ChatAgent
 from agents.author import AuthorAgent
 from agents.manuscript import ManuscriptAgent
-from agents.webdesign import WebdesignAgent
+from agents.webdesign import WebdesignAgent, WebdesignPanel
 from agents.music import MusicAgent, MusicPanel
 from agents.fiverr import FiverrAgent
 from agents.creator import (
@@ -269,7 +269,6 @@ class GodAI(QWidget):
         self._calendar_slots: list = []
         self.music_worker: Optional[ChatWorker] = None
         self.webdesign_worker: Optional[ChatWorker] = None
-        self._last_webdesign_response: str = ""
         self.fiverr_image_worker: Optional[FiverrImageWorker] = None
         self.fiverr_text_worker: Optional[ChatWorker] = None
         self._fiverr_image_paths: list = []
@@ -2646,300 +2645,11 @@ class GodAI(QWidget):
     # ── OSINT Pro image helpers ──────────────────────────────────────────────
     # ── Web Design panel ────────────────────────────────────────────────────
     def build_webdesign_panel(self):
-        """Generate a page: HTML, CSS, JS, plus what came out of it.
-
-        The three indicator cards (Responsive / Framework Used / Lines of Code)
-        are real output facts rather than echoes of the form, so they stay —
-        but as a row of stats above the code, not three bordered boxes in a
-        200px column squeezing the pane you actually read.
-        """
-        self.webdesign_panel = QWidget()
-        self.webdesign_panel.setObjectName("WebdesignPanel")
-        outer = QVBoxLayout(self.webdesign_panel)
-        outer.setContentsMargins(0, 0, 0, 0)
-        content = QWidget()
-        content.setObjectName("Transparent")
-        outer.addWidget(scrollable(content))
-        layout = QVBoxLayout(content)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(LG)
-
-        # ── Brief ───────────────────────────────────────────────────────
-        layout.addWidget(section("Page"))
-
-        self.webdesign_type_box = combo([
-            "Landing Page", "Portfolio", "Dashboard", "Form", "Blog",
-            "Component / Widget", "Other",
-        ])
-        self.webdesign_style_box = combo(
-            ["Minimal", "Dark", "Corporate", "Playful", "Brutalist"])
-        self.webdesign_palette_input = line_edit("#1a1a2e, #e94560  ·  ocean blues")
-        self.webdesign_framework_box = combo(["Vanilla", "Tailwind", "Bootstrap"])
-
-        setup = QGridLayout()
-        setup.setHorizontalSpacing(MD)
-        setup.setVerticalSpacing(MD)
-        setup.addWidget(field("Page type", self.webdesign_type_box), 0, 0, Qt.AlignTop)
-        setup.addWidget(field("Style", self.webdesign_style_box), 0, 1, Qt.AlignTop)
-        setup.addWidget(field("Framework", self.webdesign_framework_box), 0, 2, Qt.AlignTop)
-        setup.addWidget(field("Colour palette", self.webdesign_palette_input),
-                        1, 0, 1, 3, Qt.AlignTop)
-        for column in range(3):
-            setup.setColumnStretch(column, 1)
-        layout.addLayout(setup)
-
-        self.webdesign_brief_input = QTextEdit()
-        self.webdesign_brief_input.setPlaceholderText(
-            "What to build — sections, features, content, interactions.")
-        self.webdesign_brief_input.setFixedHeight(70)
-        layout.addWidget(field("Brief", self.webdesign_brief_input))
-
-        # ── Model ───────────────────────────────────────────────────────
-        layout.addWidget(section("Model"))
-        self.webdesign_panel_base = AgentPanel(
-            self, "webdesign",
-            providers=("ollama", "openai", "deepseek", "kimi", "gemini",
-                       "anthropic", "qwen"),
-            default_provider="anthropic")
-        self.webdesign_provider_box = self.webdesign_panel_base.provider_box
-        self.webdesign_model_box = self.webdesign_panel_base.model_box
-
-        models = QGridLayout()
-        models.setHorizontalSpacing(MD)
-        models.setVerticalSpacing(MD)
-        models.addWidget(field("Provider", self.webdesign_provider_box), 0, 0, Qt.AlignTop)
-        models.addWidget(field("Model", self.webdesign_model_box), 0, 1, Qt.AlignTop)
-        for column in range(3):
-            models.setColumnStretch(column, 1)
-        layout.addLayout(models)
-
-        # ── Actions ─────────────────────────────────────────────────────
-        actions = QHBoxLayout()
-        actions.setSpacing(SM)
-        self.webdesign_generate_btn = primary("Generate")
-        self.webdesign_generate_btn.setMinimumWidth(160)
-        self.webdesign_generate_btn.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
-        self.webdesign_generate_btn.clicked.connect(self.webdesign_generate)
-        actions.addWidget(self.webdesign_generate_btn)
-
-        self.webdesign_copy_btn = QPushButton("Copy All")
-        self.webdesign_copy_btn.setEnabled(False)
-        self.webdesign_copy_btn.clicked.connect(self.webdesign_copy_all)
-        actions.addWidget(self.webdesign_copy_btn)
-
-        self.webdesign_save_btn = QPushButton("Save .html")
-        self.webdesign_save_btn.setEnabled(False)
-        self.webdesign_save_btn.clicked.connect(self.webdesign_save)
-        actions.addWidget(self.webdesign_save_btn)
-
-        self.webdesign_clear_btn = QPushButton("Clear")
-        self.webdesign_clear_btn.clicked.connect(self.webdesign_clear)
-        actions.addWidget(self.webdesign_clear_btn)
-
-        self.webdesign_stop_btn = QPushButton("Stop")
-        self.webdesign_stop_btn.setObjectName("DangerAction")
-        self.webdesign_stop_btn.clicked.connect(self.webdesign_stop)
-        self.webdesign_stop_btn.hide()
-        actions.addWidget(self.webdesign_stop_btn)
-
-        actions.addStretch()
-        self.webdesign_status_label = QLabel("")
-        self.webdesign_status_label.setObjectName("EstimateLine")
-        actions.addWidget(self.webdesign_status_label)
-        layout.addLayout(actions)
-
-        # ── Output ──────────────────────────────────────────────────────
-        layout.addWidget(section("Output"))
-        stats = QHBoxLayout()
-        stats.setSpacing(LG)
-        responsive_stat = StatBlock("responsive", "—")
-        framework_stat = StatBlock("framework used", "—")
-        lines_stat = StatBlock("lines of code", "—")
-        # The existing handlers call setText on these, so they keep pointing at
-        # the value label rather than the block.
-        self.webdesign_responsive_label = responsive_stat.value_label
-        self.webdesign_framework_label = framework_stat.value_label
-        self.webdesign_lines_label = lines_stat.value_label
-        for block in (responsive_stat, framework_stat, lines_stat):
-            stats.addWidget(block)
-        stats.addStretch()
-        layout.addLayout(stats)
-
-        self.webdesign_tabs = QTabWidget()
-        self.webdesign_html_box = QTextEdit()
-        self.webdesign_html_box.setReadOnly(True)
-        self.webdesign_tabs.addTab(self.webdesign_html_box, "HTML")
-        self.webdesign_css_box = QTextEdit()
-        self.webdesign_css_box.setReadOnly(True)
-        self.webdesign_tabs.addTab(self.webdesign_css_box, "CSS")
-        self.webdesign_js_box = QTextEdit()
-        self.webdesign_js_box.setReadOnly(True)
-        self.webdesign_tabs.addTab(self.webdesign_js_box, "JS")
-        layout.addWidget(self.webdesign_tabs, 1)
-
-        self.webdesign_panel.hide()
-        self.webdesign_load_models()
+        """Compose the Site Builder's independently owned workspace."""
+        self.webdesign_panel = WebdesignPanel(self)
 
     # ── Wi-Fi Adapter panel ──────────────────────────────────────────────────
     # ── Wi-Fi handlers ───────────────────────────────────────────────────────
-    # ── Web Design handlers ──────────────────────────────────────────────────
-    def webdesign_load_models(self):
-        """Kept as a method so existing call sites stay put."""
-        self.webdesign_panel_base.load_models()
-
-    def webdesign_generate(self):
-        page_type = self.webdesign_type_box.currentText()
-        style = self.webdesign_style_box.currentText()
-        palette = self.webdesign_palette_input.text().strip()
-        framework = self.webdesign_framework_box.currentText()
-        brief = self.webdesign_brief_input.toPlainText().strip()
-        provider = self.webdesign_provider_box.currentText()
-        model = self.webdesign_model_box.currentText()
-
-        if not brief:
-            QMessageBox.warning(self, "Missing Input", "Please enter a brief describing what you want built.")
-            return
-        if not model:
-            QMessageBox.warning(self, "No Model", "Please select a model.")
-            return
-
-        prompt_parts = [
-            f"Page Type: {page_type}",
-            f"Style: {style}",
-            f"Framework: {framework}",
-        ]
-        if palette:
-            prompt_parts.append(f"Colour Palette: {palette}")
-        prompt_parts.append(f"\nBrief:\n{brief}")
-
-        prompt = "\n".join(prompt_parts)
-        agent = self.agent_instances["webdesign"]
-        messages = agent.build_messages(prompt)
-
-        self._webdesign_clear_displays()
-        self._last_webdesign_response = ""
-        self.webdesign_status_label.setText("Generating...")
-        self.webdesign_generate_btn.setEnabled(False)
-        self.webdesign_stop_btn.setEnabled(True)
-        self.webdesign_stop_btn.show()
-        self.webdesign_save_btn.setEnabled(False)
-        self.webdesign_copy_btn.setEnabled(False)
-
-        if not self.authorize_request("webdesign", provider, model, prompt):
-            return
-        self.webdesign_worker = self._new_chat_worker(provider, model, messages, prompt)
-        self.webdesign_worker.token_signal.connect(self._webdesign_on_token)
-        self.webdesign_worker.finished_signal.connect(self._webdesign_on_finished)
-        self.webdesign_worker.usage_signal.connect(lambda u: self.note_request_usage("webdesign", u))
-        self.webdesign_worker.error_signal.connect(self._webdesign_on_error)
-        self.webdesign_worker.start()
-
-    def _webdesign_on_token(self, token: str):
-        self._last_webdesign_response += token
-        self.webdesign_html_box.setPlainText(self._last_webdesign_response)
-        self.webdesign_html_box.moveCursor(QTextCursor.End)
-
-    def _webdesign_on_finished(self, full_response: str):
-        self.record_request("webdesign", full_response)
-        self._last_webdesign_response = full_response
-        self._populate_webdesign_tabs(full_response)
-        self._update_webdesign_indicators(full_response)
-        self.webdesign_status_label.setText("Generation complete.")
-        self.webdesign_generate_btn.setEnabled(True)
-        self.webdesign_stop_btn.setEnabled(False)
-        self.webdesign_stop_btn.hide()
-        self.webdesign_save_btn.setEnabled(True)
-        self.webdesign_copy_btn.setEnabled(True)
-
-    def _webdesign_on_error(self, error: str):
-        self.abandon_request("webdesign")
-        self.webdesign_html_box.setPlainText(f"[Error] {error}")
-        self.webdesign_status_label.setText("Error.")
-        self.webdesign_generate_btn.setEnabled(True)
-        self.webdesign_stop_btn.setEnabled(False)
-        self.webdesign_stop_btn.hide()
-
-    def webdesign_stop(self):
-        if self.webdesign_worker is not None and self.webdesign_worker.isRunning():
-            self.webdesign_worker.cancel()
-        self.webdesign_status_label.setText("Stopped.")
-        self.webdesign_generate_btn.setEnabled(True)
-        self.webdesign_stop_btn.setEnabled(False)
-        self.webdesign_stop_btn.hide()
-
-    def webdesign_save(self):
-        if not self._last_webdesign_response:
-            return
-        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-        default_name = f"webdesign_{ts}.html"
-        path, _ = QFileDialog.getSaveFileName(
-            self, "Save HTML File", str(DATA_DIR / default_name),
-            "HTML files (*.html);;All files (*)"
-        )
-        if path:
-            full_html = self._extract_full_html(self._last_webdesign_response)
-            Path(path).write_text(full_html, encoding="utf-8")
-
-    def webdesign_copy_all(self):
-        if not self._last_webdesign_response:
-            return
-        full_html = self._extract_full_html(self._last_webdesign_response)
-        QApplication.clipboard().setText(full_html)
-        self.webdesign_status_label.setText("Copied to clipboard.")
-
-    def webdesign_clear(self):
-        self._webdesign_clear_displays()
-        self.webdesign_brief_input.clear()
-        self.webdesign_status_label.setText("")
-        self._last_webdesign_response = ""
-
-    def _webdesign_clear_displays(self):
-        self.webdesign_html_box.clear()
-        self.webdesign_css_box.clear()
-        self.webdesign_js_box.clear()
-        self.webdesign_responsive_label.setText("—")
-        self.webdesign_framework_label.setText("—")
-        self.webdesign_lines_label.setText("—")
-        self.webdesign_save_btn.setEnabled(False)
-        self.webdesign_copy_btn.setEnabled(False)
-
-    def _extract_full_html(self, text: str) -> str:
-        import re as _re
-        m = _re.search("```(?:html)?\\s*\\n(.*?)```", text, _re.DOTALL | _re.IGNORECASE)
-        return m.group(1).strip() if m else text.strip()
-
-    def _populate_webdesign_tabs(self, text: str):
-        import re as _re
-        # Full HTML in first tab
-        full = self._extract_full_html(text)
-        self.webdesign_html_box.setPlainText(full)
-
-        # Extract <style> blocks into CSS tab
-        css_parts = _re.findall(r"<style[^>]*>(.*?)</style>", full, _re.DOTALL | _re.IGNORECASE)
-        self.webdesign_css_box.setPlainText("\n\n".join(p.strip() for p in css_parts) if css_parts else "")
-
-        # Extract <script> blocks into JS tab
-        js_parts = _re.findall(r"<script[^>]*>(.*?)</script>", full, _re.DOTALL | _re.IGNORECASE)
-        self.webdesign_js_box.setPlainText("\n\n".join(p.strip() for p in js_parts) if js_parts else "")
-
-    def _update_webdesign_indicators(self, text: str):
-        import re as _re
-        full = self._extract_full_html(text)
-
-        # Responsive detection
-        if "viewport" in full.lower() or "@media" in full.lower():
-            self.webdesign_responsive_label.setText("Mobile-first")
-        else:
-            self.webdesign_responsive_label.setText("Desktop")
-
-        # Framework
-        fw = self.webdesign_framework_box.currentText()
-        self.webdesign_framework_label.setText(fw)
-
-        # Line count
-        line_count = len(full.splitlines())
-        self.webdesign_lines_label.setText(str(line_count))
-
     # ── NFL Prop Bet handlers ────────────────────────────────────────────────
     # ── Season Model handlers ────────────────────────────────────────────────
     # ── Fiverr Agent Panel ───────────────────────────────────────────────────
@@ -9329,7 +9039,7 @@ class GodAI(QWidget):
             return
 
         if self.webdesign_worker is not None and self.webdesign_worker.isRunning():
-            self.webdesign_stop()
+            self.webdesign_panel.stop()
             return
 
         if self.fiverr_image_worker is not None and self.fiverr_image_worker.isRunning():

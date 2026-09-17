@@ -1,6 +1,6 @@
 # WEB DEVELOPER — HTML / CSS / JS generation
 
-`key: webdesign` · class: `agents/webdesign_agent.py → WebdesignAgent` · panel: `build_webdesign_panel()` · handler: `webdesign_generate()`
+`key: webdesign` · class: `agents.webdesign.WebdesignAgent` · panel and lifecycle: `agents.webdesign.WebdesignPanel`
 
 ## What it does
 A senior front-end assistant that produces clean, modern, self-contained HTML/CSS/JS — from single components to full responsive landing pages. Defaults to semantic HTML5 + mobile-first CSS (flexbox/grid) with hover/focus states and basic accessibility.
@@ -11,7 +11,7 @@ A senior front-end assistant that produces clean, modern, self-contained HTML/CS
 | Brief box | Describe the page/component/layout. |
 | Provider / Model | Coding-strong model recommended (Claude/GPT-4o/DeepSeek). |
 | Generate / Stop / Save .html | Run, cancel, export. |
-| Sidebar | Responsive toggle, framework choice, line-count indicator. |
+| Output indicators | Responsive detection, selected framework, line count. |
 
 ## Outputs
 Generated code streams into HTML / CSS / JS tabs; a row of stats above them shows responsive, framework and line count. **Save .html** writes it to a file you can open in a browser immediately.
@@ -22,9 +22,9 @@ Generated code streams into HTML / CSS / JS tabs; a row of stats above them show
 ## Under the hood — files & functions
 | Location | Role |
 |---|---|
-| `agents/webdesign_agent.py` | `WebdesignAgent` — front-end system prompt + standards. |
-| `main.py: build_webdesign_panel()` | Brief form, model row, output stats and tabs. |
-| `main.py: webdesign_generate()/webdesign_stop()/webdesign_save()` | Lifecycle. |
+| `agents/webdesign/agent.py` | `WebdesignAgent` — front-end system prompt + standards. |
+| `agents/webdesign/panel.py` | Brief form, model row, output stats and tabs, guarded generation, copy and export. |
+| `main.py` | Shared authorization, worker factory, usage and history; global Stop delegates to the panel. |
 
 ## Extend it
 - **Live preview**: render the generated HTML in a `QWebEngineView` next to the code.

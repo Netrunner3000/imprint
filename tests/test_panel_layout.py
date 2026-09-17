@@ -90,6 +90,15 @@ def test_music_workspace_layout_is_owned_by_music_package(window):
         assert getattr(window, name) is getattr(window.music_panel, name)
 
 
+def test_site_builder_workspace_is_owned_by_its_package(window):
+    from agents.webdesign import WebdesignPanel
+
+    assert isinstance(window.webdesign_panel, WebdesignPanel)
+    assert window.webdesign_panel.webdesign_tabs.count() == 3
+    for name in WebdesignPanel.HOST_CONTROLS:
+        assert getattr(window, name) is getattr(window.webdesign_panel, name)
+
+
 def _overlapping_pairs(panel):
     """Sibling widgets sharing pixels — i.e. one drawn over the other."""
     from PySide6.QtWidgets import (

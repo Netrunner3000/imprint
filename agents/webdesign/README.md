@@ -2,13 +2,19 @@
 
 Owns responsive HTML, CSS and JavaScript generation plus front-end layout and
 accessibility guidance. Imprint imports `WebdesignAgent` from
-`agents.webdesign`; preview and file operations are umbrella concerns today.
+`agents.webdesign`. The package also owns the `WebdesignPanel` workspace and
+its local export action; Imprint still supplies provider execution, spending
+authorization and run history. Live preview remains future work.
 
 ## Files
 
-- **`__init__.py`** — package surface. Re-exports `WebdesignAgent` from
-  `agent.py` as the only public name (`__all__ = ["WebdesignAgent"]`); Imprint
-  imports the class from here rather than reaching into `agent.py` directly.
+- **`__init__.py`** — package surface. Re-exports `WebdesignAgent` and lazily
+  exposes `WebdesignPanel` so non-GUI imports do not initialize Qt.
+
+- **`panel.py`** — the brief form, model pair, output indicators and HTML/CSS/JS
+  tabs, plus the guarded generation lifecycle, copy and single-file export.
+  A denied paid request leaves Generate available. Recommendation and tooltip
+  bindings still use temporary host-control aliases.
 
 - **`agent.py`** — the agent itself. `WebdesignAgent` is a thin wrapper
   (`name = "webdesign"`) whose `build_messages(prompt)` returns the
