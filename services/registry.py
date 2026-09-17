@@ -1,4 +1,5 @@
 import json
+import math
 from services.database import get_connection
 
 
@@ -22,6 +23,59 @@ def _row_to_tool(row) -> dict:
 
 
 class Registry:
+    def list_projects(self, include_archived: bool = False) -> list[dict]:
+        with get_connection() as conn:
+            rows = conn.execute(
+                "SELECT * FROM projects "
+                + ("" if include_archived else "WHERE archived = 0 ")
+                + "ORDER BY LOWER(name), id"
+            ).fetchall()
+        return [dict(row) for row in rows]
+
+    def get_project(self, project_id: str) -> dict | None:
+        with get_connection() as conn:
+            row = conn.execute(
+                "SELECT * FROM projects WHERE id = ?", (project_id,)
+            ).fetchone()
+        return dict(row) if row else None
+
+    def upsert_project(self, project_id: str, name: str, *, instructions: str = "",
+                       default_agent: str = "", default_provider: str = "",
+                       default_model: str = "", budget_eur: float | None = None,
+                       archived: bool = False) -> None:
+        if not project_id or not name.strip():
+            raise ValueError("Project id and name are required")
+        if budget_eur is not None and (not math.isfinite(budget_eur) or budget_eur < 0):
+            raise ValueError("Project budget must be a finite, non-negative amount")
+        with get_connection() as conn:
+            conn.execute("""
+                INSERT INTO projects
+                  (id, name, instructions, default_agent, default_provider,
+                   default_model, budget_eur, archived)
+                VALUES (?,?,?,?,?,?,?,?)
+                ON CONFLICT(id) DO UPDATE SET
+                  name = excluded.name,
+                  instructions = excluded.instructions,
+                  default_agent = excluded.default_agent,
+                  default_provider = excluded.default_provider,
+                  default_model = excluded.default_model,
+                  budget_eur = excluded.budget_eur,
+                  archived = excluded.archived
+            """, (project_id, name.strip(), instructions, default_agent,
+                  default_provider, default_model, budget_eur, int(archived)))
+
+    def archive_project(self, project_id: str, archived: bool = True) -> None:
+        with get_connection() as conn:
+            conn.execute(
+                "UPDATE projects SET archived = ? WHERE id = ?",
+                (int(archived), project_id),
+            )
+
+    def delete_project(self, project_id: str) -> None:
+        """Remove the registry record; chat files remain and read as unfiled."""
+        with get_connection() as conn:
+            conn.execute("DELETE FROM projects WHERE id = ?", (project_id,))
+
     def get_agent(self, name: str) -> dict | None:
         with get_connection() as conn:
             row = conn.execute(

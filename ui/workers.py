@@ -12,6 +12,7 @@ from pathlib import Path
 from PySide6.QtCore import QThread, Signal
 
 from services.openai_client import DEFAULT_IMAGE_MODEL
+from services.chat_projects import with_project_instructions
 
 
 class ChatWorker(QThread):
@@ -21,12 +22,13 @@ class ChatWorker(QThread):
     error_signal = Signal(str)
     usage_signal = Signal(dict)
 
-    def __init__(self, run_backend_func, backend: str, model: str, messages: list, prompt: str):
+    def __init__(self, run_backend_func, backend: str, model: str, messages: list,
+                 prompt: str, project_instructions: str = ""):
         super().__init__()
         self.run_backend_func = run_backend_func
         self.backend = backend
         self.model = model
-        self.messages = messages
+        self.messages = with_project_instructions(messages, project_instructions)
         self.prompt = prompt
         self._cancel_requested = False
 

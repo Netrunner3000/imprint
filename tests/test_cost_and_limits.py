@@ -177,6 +177,17 @@ def test_request_exactly_at_the_remaining_budget_is_allowed():
     assert check(session_cost=0.5, session_budget=1.0, estimated_cost=0.5).allowed
 
 
+def test_project_daily_cap_blocks_only_when_its_remaining_amount_is_exceeded():
+    fields = dict(
+        project_name="Moonlight Novel", project_cost=0.4,
+        project_budget=0.5, session_budget=10.0, daily_budget=10.0,
+    )
+    assert check(estimated_cost=0.1, **fields).allowed
+    blocked = check(estimated_cost=0.1001, **fields)
+    assert not blocked.allowed
+    assert "Moonlight Novel" in blocked.reason
+
+
 def test_ollama_ignores_every_budget():
     """A local request costs nothing, so an exhausted budget must not block it."""
     result = check(

@@ -31,6 +31,7 @@ from ui.style import (
     ACCENT, ACCENT_WASH, BG, BORDER, ELEVATED, SUNKEN, SURFACE, TEXT,
     TEXT_DIM, TEXT_MUTE,
 )
+from ui.project_manager import ProjectManagerDialog
 
 
 def show_cost_history(app):
@@ -617,6 +618,27 @@ def show_settings(app):
     pricing_modes.addTab(unit_page, "Images, audio + video")
     pl.addWidget(pricing_modes)
     tabs.addTab(pricing_tab, "Pricing")
+
+    projects_tab = QWidget()
+    projects_layout = QVBoxLayout(projects_tab)
+    projects_layout.setContentsMargins(20, 24, 20, 24)
+    projects_layout.setSpacing(14)
+    page_intro(
+        projects_layout, "Projects",
+        "Group saved chats, reuse instructions and setup, and optionally cap "
+        "daily project spend. Archiving hides a project without deleting chats.",
+    )
+    manage_projects = QPushButton("Manage Projects")
+    manage_projects.setFixedWidth(190)
+    manage_projects.clicked.connect(
+        lambda: ProjectManagerDialog(
+            dialog, app.registry, on_change=app._switch_project,
+            history=app.history,
+        ).exec()
+    )
+    projects_layout.addWidget(manage_projects)
+    projects_layout.addStretch()
+    tabs.addTab(projects_tab, "Projects")
 
     dialog.setStyleSheet(f"""
         QDialog#SettingsDialog {{ background: {BG}; }}
