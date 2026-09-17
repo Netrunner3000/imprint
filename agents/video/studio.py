@@ -231,7 +231,7 @@ def external_output_path(topic: str, model: str) -> tuple[str, Path]:
 
 def record_external(*, slug: str, path: Path, topic: str, provider: str,
                     model: str, seconds: int, job_id: str = "") -> None:
-    """Put a direct Sora/Higgsfield clip in the shared Video library."""
+    """Put a direct provider clip in the shared Video library."""
     if not _load():
         raise RuntimeError(unavailable_reason())
     from vidforge import history  # type: ignore

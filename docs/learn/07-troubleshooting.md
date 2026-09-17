@@ -79,7 +79,7 @@ First identify the route:
   stage may finish before stopping.
 - **Higgsfield:** cancellation may work while queued; processing jobs may need
   to finish.
-- **Sora, Gemini Omni, Veo, or Wan:** the integration may have no safe provider
+- **Gemini Omni, Veo, or Wan:** the integration may have no safe provider
   cancellation after submission. Imprint keeps polling and saves the paid result.
 
 Keep Imprint and the connection available for provider outputs with temporary

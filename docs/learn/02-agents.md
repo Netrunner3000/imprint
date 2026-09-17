@@ -164,7 +164,6 @@ images, and direct video models that return one short clip.
 | Route | What it creates | Key |
 |---|---|---|
 | **OpenAI GPT Image 2.5 / GPT Image 2** | Scene images assembled into narrated long-form or clips. | OpenAI |
-| **OpenAI Sora 2 / Pro** | Direct 4, 8, or 12-second clip with audio; marked with its retirement date. | OpenAI |
 | **Gemini Omni 1.1 Flash** | Direct 3–10-second 720p clip with audio. | Google/Gemini |
 | **Veo 3.1 / Fast / Lite** | Direct 4, 6, or 8-second 720p operation. | Google/Gemini |
 | **Wan 3.0 / Prime / 2.7** | Direct 2–30-second 720p task, model dependent. | DashScope/Qwen |
@@ -176,6 +175,9 @@ DALL·E 2 and 3 are absent because their APIs were retired; current GPT Image
 models fill the scene-image role. DeepSeek, Anthropic, Kimi, and Ollama can
 write scripts or prompts but do not expose official video-generation output,
 so they are not presented as renderers.
+
+OpenAI's Sora API is scheduled to end on 24 September 2026. Imprint no longer
+offers Sora for new jobs; use Gemini, Qwen or Higgsfield for a direct clip.
 
 ## Social → Social Media Campaign Manager (`social`)
 

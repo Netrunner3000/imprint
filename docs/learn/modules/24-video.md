@@ -11,6 +11,9 @@
 - Topic/source facts, target format, and acceptance checklist are ready.
 - Script/narration/visual/stock keys required by the chosen route are eligible.
 - The output directory is writable and ffmpeg is available for assembly routes.
+- Sora is retired for new Imprint jobs ahead of its 24 September 2026 API
+  shutdown. Choose Gemini, Qwen or Higgsfield for direct video, or GPT Image
+  for an assembled video.
 
 ## Control atlas
 
@@ -55,7 +58,7 @@ prove copyright, likeness, disclosure, platform compliance, or marketing value.
 ## Cost, cancellation, and gates
 
 Images/video may bill by asset or duration; narration and script may add costs.
-Sora, Veo/Gemini, Wan/Qwen, and other direct jobs may have no safe cancellation
+Veo/Gemini, Wan/Qwen, and other direct jobs may have no safe cancellation
 after acceptance. Higgsfield cancellation can depend on queued/processing state.
 Humans approve paid submission and public release.
 
