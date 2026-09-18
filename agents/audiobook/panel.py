@@ -1,29 +1,35 @@
 """Audiobook Convert and Listen workspace owned by the Audiobook agent."""
 
+import re
+import sys
 from pathlib import Path
 
-from PySide6.QtCore import Qt, QUrl
-from PySide6.QtGui import QDesktopServices
+from PySide6.QtCore import Qt, QProcess, QUrl
+from PySide6.QtGui import QDesktopServices, QTextCursor
 from PySide6.QtWidgets import (
-    QFrame, QGridLayout, QHBoxLayout, QHeaderView, QLabel, QLineEdit,
-    QListWidget, QMessageBox, QProgressBar, QPushButton, QSizePolicy,
-    QStackedWidget, QTableWidget, QTableWidgetItem, QTabWidget, QVBoxLayout,
-    QWidget,
+    QFileDialog, QFrame, QGridLayout, QHBoxLayout, QHeaderView, QLabel,
+    QLineEdit, QListWidget, QListWidgetItem, QMessageBox, QProgressBar,
+    QPushButton, QSizePolicy, QStackedWidget, QTableWidget, QTableWidgetItem,
+    QTabWidget, QVBoxLayout, QWidget,
 )
 
 from services.audiobook_library import (
     format_time, load_position, mark_unfinished, scan,
 )
+from services.openai_client import OpenAIClientWrapper
+from services.runtime_paths import is_frozen
 from ui.audio_player import AudiobookPlayer
 from ui.forms import CONTROL_HEIGHT, LG, MD, SM, combo, field, line_edit, primary, rule, section
 from ui.widgets import scrollable
+
+SUPPORTED_EBOOKS = {".pdf", ".epub", ".txt", ".mobi"}
 
 
 class AudiobookPanel(QWidget):
     """Book selection, conversion controls and a resumable listening library.
 
-    Conversion handlers remain on the umbrella host for now. Temporary aliases
-    let those handlers and shared tooltip bindings keep their current behavior.
+    The host supplies shared budget authorization, usage records and the
+    output log. Temporary control aliases support existing umbrella bindings.
     """
 
     HOST_CONTROLS = (
@@ -68,7 +74,7 @@ class AudiobookPanel(QWidget):
         self.audiobook_book_list.setSizePolicy(
             QSizePolicy.Expanding, QSizePolicy.Expanding)
         self.audiobook_book_list.currentItemChanged.connect(
-            lambda *_: host.estimate_audiobook_cost_from_selection())
+            lambda *_: self.estimate_cost_from_selection())
 
         self.audiobook_empty_state = QLabel(
             "No supported books found yet. Add a PDF, EPUB, TXT, or MOBI file "
@@ -91,13 +97,13 @@ class AudiobookPanel(QWidget):
         self.audiobook_input_path.setReadOnly(True)
         self.audiobook_open_input_btn = QPushButton("Open input")
         self.audiobook_open_input_btn.setFixedWidth(116)
-        self.audiobook_open_input_btn.clicked.connect(host.open_audiobook_input_folder)
+        self.audiobook_open_input_btn.clicked.connect(self.open_input_folder)
         self.audiobook_output_path = QLineEdit()
         self.audiobook_output_path.setReadOnly(True)
         self.audiobook_change_output_btn = QPushButton("Set output")
         self.audiobook_change_output_btn.setFixedWidth(116)
         self.audiobook_change_output_btn.clicked.connect(
-            host.change_audiobook_output_folder)
+            self.change_output_folder)
         folders = QGridLayout()
         folders.setHorizontalSpacing(SM)
         folders.setVerticalSpacing(MD)
@@ -134,10 +140,10 @@ class AudiobookPanel(QWidget):
         self.audiobook_start_btn = primary("Convert audiobook")
         self.audiobook_start_btn.setMinimumWidth(160)
         self.audiobook_start_btn.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
-        self.audiobook_start_btn.clicked.connect(host.start_selected_audiobook_book)
+        self.audiobook_start_btn.clicked.connect(self.start_conversion)
         actions.addWidget(self.audiobook_start_btn)
         self.audiobook_refresh_btn = QPushButton("Refresh List")
-        self.audiobook_refresh_btn.clicked.connect(host.refresh_audiobook_books)
+        self.audiobook_refresh_btn.clicked.connect(self.refresh_books)
         actions.addWidget(self.audiobook_refresh_btn)
         self.stop_btn = QPushButton("Stop")
         self.stop_btn.setObjectName("DangerAction")
