@@ -181,6 +181,29 @@ class AudiobookPanel(QWidget):
         host.audiobook_panel = self
         self.hide()
 
+    # ── Conversion actions ───────────────────────────────────────────────
+    # These four still live on the umbrella (`GodAI`), because the conversion
+    # half of this panel has not been moved into the package yet — only the
+    # listening half has. The widgets moved with the panel, so the handlers
+    # reach back through `host`. Without these the panel's own constructor
+    # raised AttributeError and the whole app failed to start.
+    #
+    # When the conversion handlers do move here, these become the real
+    # implementations and `main.py` keeps thin shims, mirroring what
+    # `play_selected` / `restart_selected` / `reveal_selected` already do.
+
+    def open_input_folder(self):
+        self.host.open_audiobook_input_folder()
+
+    def change_output_folder(self):
+        self.host.change_audiobook_output_folder()
+
+    def refresh_books(self):
+        self.host.refresh_audiobook_books()
+
+    def start_conversion(self):
+        self.host.start_selected_audiobook_book()
+
     def _build_library_tab(self, host) -> QWidget:
         page = QWidget()
         layout = QVBoxLayout(page)
