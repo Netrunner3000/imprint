@@ -185,12 +185,19 @@ class YouTubePublisher(Publisher):
         except Exception as exc:
             raise PublishError(f"vidforge's uploader is unavailable: {exc}")
         try:
-            video_id = youtube.upload(
-                Path(media_path), title=title or "Untitled",
-                description=body, privacy=privacy)
+            # vidforge's real signature is upload(cfg, video, meta_dict) and it
+            # returns a dict — the old keyword call here TypeErrored on every
+            # upload. The config also carries the two-key public-publish guard,
+            # which stays enforced inside vidforge.
+            from agents.video import video_studio
+            cfg = video_studio.load_config()
+            result = youtube.upload(
+                cfg, Path(media_path),
+                {"title": title or "Untitled", "description": body},
+                privacy=privacy)
         except Exception as exc:
             raise PublishError(f"{type(exc).__name__}: {exc}")
-        return PublishResult(permalink=f"https://youtu.be/{video_id}")
+        return PublishResult(permalink=f"https://youtu.be/{result['video_id']}")
 
 
 class PinterestPublisher(Publisher):

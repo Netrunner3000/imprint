@@ -128,7 +128,7 @@ class OpenAIClientWrapper:
         if not url:
             raise RuntimeError(
                 f"{model} returned neither image data nor a URL.")
-        with urllib.request.urlopen(url) as handle:
+        with urllib.request.urlopen(url, timeout=REQUEST_TIMEOUT_SECONDS) as handle:
             return handle.read()
 
     # ── Sora video (legacy API scheduled to close 24 Sep 2026) ──────────
@@ -206,6 +206,11 @@ class OpenAIClientWrapper:
             )
 
             for chunk in stream:
+                # OpenAI-compatible endpoints legitimately emit chunks with an
+                # empty choices array (content filters, usage-only frames);
+                # indexing [0] blindly crashed the stream mid-response.
+                if not chunk.choices:
+                    continue
                 delta = chunk.choices[0].delta.content
                 if delta:
                     yield delta

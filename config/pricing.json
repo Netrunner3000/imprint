@@ -154,6 +154,8 @@
       "gpt-image-2": 0.06
     },
     "openai_tts_per_1k_chars": 0.015,
+    "_elevenlabs_comment": "ElevenLabs bills characters against the account's subscription quota rather than per dollar; the effective per-1k-character rate depends on the plan. 0 means UNKNOWN: the shorts narrator refuses the paid voice until a real rate is filled in.",
+    "elevenlabs_tts_per_1k_chars": 0.0,
     "openai_whisper_per_minute": 0.006,
     "higgsfield_render": 0.0
   }

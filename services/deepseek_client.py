@@ -79,6 +79,11 @@ class DeepSeekClientWrapper:
             )
 
             for chunk in stream:
+                # OpenAI-compatible endpoints legitimately emit chunks with an
+                # empty choices array (content filters, usage-only frames);
+                # indexing [0] blindly crashed the stream mid-response.
+                if not chunk.choices:
+                    continue
                 delta = chunk.choices[0].delta.content
                 if delta:
                     yield delta

@@ -481,6 +481,11 @@ def test_a_populated_database_is_never_clobbered(tmp_path, monkeypatch):
 
 
 # ── Per-unit billing ─────────────────────────────────────────────────────────
+def per_unit_eur_per_usd() -> float:
+    from services import per_unit_pricing
+    return per_unit_pricing.eur_per_usd()
+
+
 class TestPerUnitPricing:
     """Work that is not billed per token.
 
@@ -515,10 +520,9 @@ class TestPerUnitPricing:
             "prices it correctly the per-unit path may be redundant")
 
 
-def per_unit_eur_per_usd() -> float:
-    from services import per_unit_pricing
-    return per_unit_pricing.eur_per_usd()
-
+    # These four tests sat below a module-level copy of per_unit_eur_per_usd()
+    # inserted mid-class at column 0, which made them unreachable statements
+    # inside that helper — collected: never. Re-homed 2026-09-20.
     def test_a_flat_cost_counts_toward_the_daily_total(self, tracker):
         before = tracker.get_today_total()
         tracker.log_request(

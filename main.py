@@ -1666,6 +1666,13 @@ class GodAI(QWidget):
             "Allow paid promo-video requests from the Creator workspace.")
         top_row_3.addWidget(self.allow_higgsfield_checkbox)
 
+        self.allow_elevenlabs_checkbox = QCheckBox("ElevenLabs")
+        self.allow_elevenlabs_checkbox.setChecked(False)
+        self.allow_elevenlabs_checkbox.setToolTip(
+            "Allow paid ElevenLabs narration for Manuscript shorts. The "
+            "default narrator is the free on-device voice.")
+        top_row_3.addWidget(self.allow_elevenlabs_checkbox)
+
         normal_layout.addWidget(top_row_3_container)
 
         self.input_box = QTextEdit()
@@ -3005,8 +3012,11 @@ class GodAI(QWidget):
         self.social_stop_btn.hide()
 
     def social_stop(self):
+        # ChatWorker has cancel(), not stop() — calling the latter raised
+        # AttributeError, left the worker running and the authorized request
+        # unresolved.
         if self.social_worker is not None:
-            self.social_worker.stop()
+            self.social_worker.cancel()
         self.abandon_request("social")
         self._social_reset_buttons()
 
@@ -5363,11 +5373,24 @@ class GodAI(QWidget):
         # outside the budget caps.
         image_model = self.fiverr_image_model_box.currentText()
         image_cost = image_cost_eur(image_model, count)
+        if image_cost is None:
+            # A rate of 0 means unknown, not free. Coercing None to 0.0 here
+            # authorized unpriced models at €0.00 against every cap; refusing
+            # is the same posture the per-unit table documents. (Passing None
+            # through is no better — authorize_request would fall back to
+            # pricing the ~200-char prompt as a chat request.)
+            QMessageBox.warning(
+                self, "No Price Configured",
+                f"{image_model} has no per-image rate in config/pricing.json, "
+                "so the logo images cannot be billed against the budget caps. "
+                "Add a rate (0 means unknown) before generating.")
+            self._fiverr_reset_buttons()
+            return
         if not self.authorize_request(
                 "fiverr", "openai", image_model,
                 f"{count} logo concepts: {image_prompt[:200]}",
                 label="logo images",
-                flat_cost_eur=image_cost if image_cost is not None else 0.0):
+                flat_cost_eur=image_cost):
             self._fiverr_reset_buttons()
             return
         self._fiverr_image_token = True
@@ -6821,6 +6844,50 @@ class GodAI(QWidget):
         from ui.book_widgets import populate_voice_box
         populate_voice_box(self.shorts_voice_box, self.shorts_voice_source_box.currentText())
 
+    def _authorize_short_narration(self, quote: str, use_elevenlabs: bool) -> bool:
+        """Guard the paid branch of a shorts render.
+
+        The default narrator is the free on-device voice; only ElevenLabs
+        costs money (billed per character against the account's quota), and
+        these three sites used to start it with no budget check, no
+        confirmation and no usage row. A missing/0 rate means unknown →
+        refuse, like every other per-unit path. Keeps the token rather than
+        resolving by agent name — "manuscript" is shared by other flows.
+        """
+        self._shorts_request_token = None
+        if not (use_elevenlabs and os.environ.get("ELEVENLABS_API_KEY")):
+            return True   # free on-device narrator, nothing to bill
+        from services.per_unit_pricing import elevenlabs_tts_cost_eur
+        cost = elevenlabs_tts_cost_eur(len(quote))
+        if cost is None:
+            QMessageBox.warning(
+                self, "No Price Configured",
+                "ElevenLabs narration has no per-1k-character rate in "
+                "config/pricing.json (elevenlabs_tts_per_1k_chars; 0 means "
+                "unknown), so it cannot be billed against the budget caps. "
+                "Add a rate, or switch the voice source to the free "
+                "on-device narrator.")
+            return False
+        token = self.authorize_request(
+            "manuscript", "elevenlabs", "elevenlabs-tts",
+            f"short narration · {len(quote)} characters: {quote[:200]}",
+            label="short narration", flat_cost_eur=cost)
+        if not token:
+            return False
+        self._shorts_request_token = token
+        return True
+
+    def _shorts_resolve_request(self, completed: bool, detail: str = ""):
+        """Close out the narration authorized above, by its own token."""
+        token = getattr(self, "_shorts_request_token", None)
+        self._shorts_request_token = None
+        if not token:
+            return
+        if completed:
+            self.record_request(token, detail or "short narration rendered")
+        else:
+            self.abandon_request(token)
+
     def manuscript_generate_short(self):
         quote = self.shorts_quote_text.toPlainText().strip()
         if not quote:
@@ -6848,6 +6915,9 @@ class GodAI(QWidget):
             self.manuscript_status_label.setText(f"[Error] {e}")
             return
 
+        if not self._authorize_short_narration(quote, use_elevenlabs):
+            return
+
         self.shorts_generate_btn.setEnabled(False)
         self.shorts_play_btn.setEnabled(False)
         self._last_short_path = ""
@@ -6860,12 +6930,14 @@ class GodAI(QWidget):
         self.shorts_worker.start()
 
     def _shorts_on_done(self, output_path: str):
+        self._shorts_resolve_request(True, f"saved {Path(output_path).name}")
         self._last_short_path = output_path
         self.manuscript_status_label.setText(f"[Done] Saved {Path(output_path).name}")
         self.shorts_generate_btn.setEnabled(True)
         self.shorts_play_btn.setEnabled(True)
 
     def _shorts_on_error(self, error: str):
+        self._shorts_resolve_request(False)
         self.manuscript_status_label.setText(f"[Error] {error}")
         self.shorts_generate_btn.setEnabled(True)
 
@@ -7007,6 +7079,9 @@ class GodAI(QWidget):
             self.manuscript_status_label.setText(f"[Error] {e}")
             return
 
+        if not self._authorize_short_narration(quote, use_elevenlabs):
+            return
+
         self._quote_finder_busy = True
         for b in self._quote_finder_short_buttons:
             b.setEnabled(False)
@@ -7020,6 +7095,7 @@ class GodAI(QWidget):
         self.shorts_worker.start()
 
     def _quote_finder_short_done(self, output_path: str, button: QPushButton):
+        self._shorts_resolve_request(True, f"saved {Path(output_path).name}")
         self._last_short_path = output_path
         self.manuscript_status_label.setText(f"[Done] Saved {Path(output_path).name}")
         button.setText("Short")
@@ -7028,6 +7104,7 @@ class GodAI(QWidget):
             b.setEnabled(True)
 
     def _quote_finder_short_error(self, error: str, button: QPushButton):
+        self._shorts_resolve_request(False)
         self.manuscript_status_label.setText(f"[Error] {error}")
         button.setText("⚠")
         self._quote_finder_busy = False
@@ -7161,6 +7238,9 @@ class GodAI(QWidget):
             self.manuscript_status_label.setText(f"[Error] {e}")
             return
 
+        if not self._authorize_short_narration(slot.quote, use_elevenlabs):
+            return
+
         self._quote_finder_busy = True
         button.setEnabled(False)
         self.manuscript_status_label.setText("[Narrating…]")
@@ -7171,12 +7251,14 @@ class GodAI(QWidget):
         self.shorts_worker.start()
 
     def _calendar_short_done(self, output_path: str, button: QPushButton):
+        self._shorts_resolve_request(True, f"saved {Path(output_path).name}")
         self._last_short_path = output_path
         self.manuscript_status_label.setText(f"[Done] Saved {Path(output_path).name}")
         button.setEnabled(True)
         self._quote_finder_busy = False
 
     def _calendar_short_error(self, error: str, button: QPushButton):
+        self._shorts_resolve_request(False)
         self.manuscript_status_label.setText(f"[Error] {error}")
         button.setEnabled(True)
         self._quote_finder_busy = False
@@ -8111,6 +8193,7 @@ class GodAI(QWidget):
             "kimi": self.allow_kimi_checkbox.isChecked(),
             "gemini": self.allow_gemini_checkbox.isChecked(),
             "anthropic": self.allow_anthropic_checkbox.isChecked(),
+            "qwen": self.allow_qwen_checkbox.isChecked(),
             "higgsfield": self.allow_higgsfield_checkbox.isChecked(),
         }
 
@@ -8176,6 +8259,7 @@ class GodAI(QWidget):
             "allow_anthropic": self.allow_anthropic_checkbox.isChecked(),
             "allow_qwen": self.allow_qwen_checkbox.isChecked(),
             "allow_higgsfield": self.allow_higgsfield_checkbox.isChecked(),
+            "allow_elevenlabs": self.allow_elevenlabs_checkbox.isChecked(),
         }
 
         validation = self.validator.validate(
@@ -8320,6 +8404,7 @@ class GodAI(QWidget):
             "allow_anthropic": self.allow_anthropic_checkbox.isChecked(),
             "allow_qwen": self.allow_qwen_checkbox.isChecked(),
             "allow_higgsfield": self.allow_higgsfield_checkbox.isChecked(),
+            "allow_elevenlabs": self.allow_elevenlabs_checkbox.isChecked(),
         }
 
     def _project_budget_fields(self) -> dict:

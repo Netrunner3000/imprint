@@ -157,7 +157,13 @@ class AnthropicClientWrapper:
             "input_tokens": response.usage.input_tokens,
             "output_tokens": response.usage.output_tokens,
         }
-        return response.content[0].text, usage
+        # content can be empty (max_tokens exhausted before any text block)
+        # and can carry more than one text block; indexing [0] crashed on the
+        # first case and silently dropped the rest on the second.
+        text = "".join(
+            block.text for block in response.content
+            if getattr(block, "type", "") == "text")
+        return text, usage
 
     def _split(self, messages: list) -> tuple[str, list]:
         system = ""

@@ -48,3 +48,22 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 # every run because the offscreen platform has no Sans Serif. Harmless, but it
 # buries real output.
 os.environ.setdefault("QT_LOGGING_RULES", "qt.qpa.fonts=false")
+
+# ── Database isolation ────────────────────────────────────────────────────────
+# services.database resolves DB_PATH at call time, and several modules build
+# the real GodAI window without patching it — test_creator_v2 was INSERTing
+# rows into the checkout's live data/imprint.db. Redirecting it here, before
+# any test module imports main, makes isolation the default rather than a
+# per-fixture convention. Modules that point DB_PATH at their own tmp_path
+# still can; the path they restore afterwards is this temp one, not the dev
+# database. (services.database imports nothing from Qt, so this keeps the
+# rule above intact.)
+import tempfile  # noqa: E402
+
+from services import database as _database  # noqa: E402
+
+_database.DB_PATH = Path(tempfile.mkdtemp(prefix="imprint-tests-")) / "imprint.db"
+
+# The app runs init_db() at startup; tests that query without building the
+# window were leaning on the dev database's schema being there already.
+_database.init_db()

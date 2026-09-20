@@ -204,6 +204,14 @@ class AudiobookPanel(QWidget):
     def start_conversion(self):
         self.host.start_selected_audiobook_book()
 
+    def estimate_cost_from_selection(self):
+        # Fifth delegating slot of the f6aefb2 family: the book list's
+        # currentItemChanged lambda calls this. Without it the connect
+        # succeeded but every selection raised AttributeError inside the Qt
+        # event loop (silently — PySide6 swallows slot exceptions), so the
+        # per-book cost estimate never updated on selection.
+        self.host.estimate_audiobook_cost_from_selection()
+
     def _build_library_tab(self, host) -> QWidget:
         page = QWidget()
         layout = QVBoxLayout(page)

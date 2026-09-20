@@ -603,3 +603,27 @@ def test_studio_assistant_workspace_opens_the_existing_chat_panel(app, window):
     assert window.workspace_tabs.tabText(window.workspace_tabs.currentIndex()) == "Assistant"
     assert window.normal_panel.isVisible()
     assert window.agent_title_label.text() == "Studio Assistant"
+
+
+def test_audiobook_selection_refreshes_the_cost_estimate(app, window):
+    """Fires the book list's real selection signal, not just construction.
+
+    The panel connected currentItemChanged to a slot that did not exist
+    (estimate_cost_from_selection — the host method is
+    estimate_audiobook_cost_from_selection). PySide6 swallows slot
+    exceptions, so every selection raised AttributeError silently and the
+    per-book cost estimate never updated. Construction-time wiring bugs are
+    covered elsewhere; this is the signal-time variant that let two of them
+    through.
+    """
+    calls = []
+    lst = window.audiobook_panel.audiobook_book_list
+    window.estimate_audiobook_cost_from_selection = lambda: calls.append(1)
+    try:
+        lst.addItem("A Book.epub")
+        lst.setCurrentRow(lst.count() - 1)
+        app.processEvents()
+        assert calls, "selecting a book must refresh the cost estimate"
+    finally:
+        del window.estimate_audiobook_cost_from_selection
+        lst.takeItem(lst.count() - 1)

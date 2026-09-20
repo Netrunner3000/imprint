@@ -1,6 +1,12 @@
 from datetime import datetime
 from services.database import get_connection
 
+# Every backend that costs money. The cloud flag used to hardcode only
+# {"openai", "deepseek", "gemini"}, so Anthropic, Kimi, Qwen and Higgsfield
+# requests were recorded as local (cloud=0) in the usage table.
+CLOUD_BACKENDS = {"openai", "deepseek", "gemini", "anthropic", "kimi", "qwen",
+                  "higgsfield"}
+
 
 class UsageTracker:
     def estimate_tokens(self, prompt_text: str, response_text: str) -> tuple[int, int]:
@@ -116,7 +122,7 @@ class UsageTracker:
                 timestamp, agent, backend, model,
                 input_tokens, output_tokens, input_tokens + output_tokens,
                 cost_eur, cost_type,
-                1 if backend in {"openai", "deepseek", "gemini"} else 0,
+                1 if backend in CLOUD_BACKENDS else 0,
                 project or "",
             ))
             conn.commit()
@@ -132,7 +138,7 @@ class UsageTracker:
             "cost_eur": cost_eur,
             "estimated_cost": cost_eur,
             "cost_type": cost_type,
-            "cloud": backend in {"openai", "deepseek", "gemini"},
+            "cloud": backend in CLOUD_BACKENDS,
             "project": project or "",
         }
 

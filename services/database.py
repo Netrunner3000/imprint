@@ -858,7 +858,12 @@ def _seed_default_agents(conn: sqlite3.Connection) -> None:
             "name": "manuscript",
             "label": "Publisher",
             "description": "Book publishing metrics, platform distribution tracking, and todo management.",
-            "allowed_providers": json.dumps(["anthropic", "openai", "deepseek", "gemini"]),
+            # elevenlabs is the shorts narrator, not a chat provider, but it is
+            # a paid backend the guard authorises against and so has to be
+            # permitted here (same shape as creator's higgsfield entry).
+            # _reconcile_agent_providers() carries it onto existing installs.
+            "allowed_providers": json.dumps(["anthropic", "openai", "deepseek",
+                                             "gemini", "elevenlabs"]),
             "allowed_tools": json.dumps(["General Chat", "Summarize"]),
             "budget_limit_eur": 2.0,
             "requires_approval": 0,

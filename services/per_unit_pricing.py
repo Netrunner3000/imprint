@@ -99,6 +99,14 @@ def tts_cost_eur(characters: int) -> float | None:
     return None if usd is None else to_eur(usd * max(0, characters) / 1000.0)
 
 
+def elevenlabs_tts_cost_eur(characters: int) -> float | None:
+    """ElevenLabs narration for the shorts pipeline. None until a real
+    per-1k-character rate is configured — the ships-as-0 placeholder means
+    unknown, and the caller must refuse rather than bill €0.00."""
+    usd = rate_usd("elevenlabs_tts_per_1k_chars")
+    return None if usd is None else to_eur(usd * max(0, characters) / 1000.0)
+
+
 def whisper_cost_eur(minutes: float) -> float | None:
     usd = rate_usd("openai_whisper_per_minute")
     return None if usd is None else to_eur(usd * max(0.0, minutes))

@@ -5,7 +5,7 @@ from dataclasses import dataclass
 import requests
 from openai import OpenAI
 
-from services.api_limits import REQUEST_TIMEOUT_SECONDS
+from services.api_limits import MAX_RETRIES, REQUEST_TIMEOUT_SECONDS
 from services.media_catalog import WAN_VIDEO_MODELS
 
 # Alibaba's Qwen, served through Model Studio / DashScope. The API is
@@ -62,7 +62,8 @@ class QwenClientWrapper:
         self.api_key = os.getenv("DASHSCOPE_API_KEY")
         self.base_url = _base_url()
         self.client = (
-            OpenAI(api_key=self.api_key, base_url=self.base_url)
+            OpenAI(api_key=self.api_key, base_url=self.base_url,
+                   timeout=REQUEST_TIMEOUT_SECONDS, max_retries=MAX_RETRIES)
             if self.api_key
             else None
         )
@@ -125,6 +126,11 @@ class QwenClientWrapper:
             )
 
             for chunk in stream:
+                # OpenAI-compatible endpoints legitimately emit chunks with an
+                # empty choices array (content filters, usage-only frames);
+                # indexing [0] blindly crashed the stream mid-response.
+                if not chunk.choices:
+                    continue
                 delta = chunk.choices[0].delta.content
                 if delta:
                     yield delta
