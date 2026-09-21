@@ -1,4 +1,4 @@
-# Social — Suggestions
+# Social Media Campaign Manager — Suggestions
 
 Status: `IDEA` · `CONSIDERING` · `PLANNED` · `DONE` · `REJECTED`
 

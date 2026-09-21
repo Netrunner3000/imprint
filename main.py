@@ -355,11 +355,30 @@ class GodAI(QWidget):
             return True
         return super().eventFilter(obj, event)
 
+    def _find_control(self, name):
+        """Resolve a named control on the host or any owned agent panel.
+
+        The panels own their widgets since Phase 4. The temporary host
+        aliases are being retired package by package, so shared wiring —
+        tooltips, recommendation bindings, context watchers — looks a
+        control up here instead of assuming it was mirrored onto the host.
+        Host attributes still win while aliases remain."""
+        widget = getattr(self, name, None)
+        if widget is not None:
+            return widget
+        for key in CUSTOM_PANELS:
+            panel = getattr(self, f"{key}_panel", None)
+            if panel is not None:
+                widget = getattr(panel, name, None)
+                if widget is not None:
+                    return widget
+        return None
+
     def _set_tooltips(self, mapping: dict):
         """Helper: apply a {widget_attr_name: text} mapping in one call.
         Silently skips attributes that don't exist yet (panel not built)."""
         for attr, text in mapping.items():
-            widget = getattr(self, attr, None)
+            widget = self._find_control(attr)
             if widget is not None:
                 widget.setToolTip(text)
 
@@ -936,7 +955,7 @@ class GodAI(QWidget):
             return text.strip()
         values = []
         for name in AGENT_CONTEXT_WIDGETS.get(agent_key, ()):
-            widget = getattr(self, name, None)
+            widget = self._find_control(name)
             if widget is not None:
                 values.append(widget.currentText())
         return " ".join(values)
@@ -953,8 +972,8 @@ class GodAI(QWidget):
         widgets = AGENT_SETUP_WIDGETS.get(agent_key)
         if not widgets:
             return None, None
-        provider_box = getattr(self, widgets[0], None)
-        model_box = getattr(self, widgets[1], None)
+        provider_box = self._find_control(widgets[0])
+        model_box = self._find_control(widgets[1])
         if provider_box is None or model_box is None:
             return None, None
 
@@ -1009,8 +1028,8 @@ class GodAI(QWidget):
         widgets = AGENT_SETUP_WIDGETS.get(agent_key)
         if not widgets:
             return
-        provider_box = getattr(self, widgets[0], None)
-        model_box = getattr(self, widgets[1], None)
+        provider_box = self._find_control(widgets[0])
+        model_box = self._find_control(widgets[1])
         provider_result, model_result = self._text_recommendations(agent_key)
 
         if provider_box is not None and provider_result is not None:
@@ -1042,8 +1061,8 @@ class GodAI(QWidget):
         """Select the best model inside a newly chosen provider, then annotate."""
         widgets = AGENT_SETUP_WIDGETS.get(agent_key)
         if widgets:
-            provider_box = getattr(self, widgets[0], None)
-            model_box = getattr(self, widgets[1], None)
+            provider_box = self._find_control(widgets[0])
+            model_box = self._find_control(widgets[1])
             if provider_box is not None and model_box is not None:
                 _provider_result, model_result = self._text_recommendations(agent_key)
                 idx = (-1 if model_result is None else
@@ -1058,8 +1077,8 @@ class GodAI(QWidget):
         widgets = AGENT_SETUP_WIDGETS.get(agent_key)
         if not widgets:
             return
-        provider_box = getattr(self, widgets[0], None)
-        model_box = getattr(self, widgets[1], None)
+        provider_box = self._find_control(widgets[0])
+        model_box = self._find_control(widgets[1])
         provider_result, _model_result = self._text_recommendations(agent_key)
         if provider_box is not None and provider_result is not None:
             idx = self._find_provider_index(provider_box,
@@ -1069,7 +1088,7 @@ class GodAI(QWidget):
         if agent_key == "chat":
             self.load_provider_models()
         else:
-            panel = getattr(self, f"{agent_key}_panel_base", None)
+            panel = self._find_control(f"{agent_key}_panel_base")
             if panel is not None:
                 panel.load_models()
         _provider_result, model_result = self._text_recommendations(agent_key)
@@ -1179,8 +1198,8 @@ class GodAI(QWidget):
         self._install_audiobook_recommendation()
         for agent_key in AGENT_SETUP_WIDGETS:
             widgets = AGENT_SETUP_WIDGETS[agent_key]
-            provider_box = getattr(self, widgets[0], None)
-            model_box = getattr(self, widgets[1], None)
+            provider_box = self._find_control(widgets[0])
+            model_box = self._find_control(widgets[1])
             try:
                 self.apply_agent_recommendation(agent_key)
             except Exception as e:
@@ -1194,7 +1213,7 @@ class GodAI(QWidget):
                     lambda _t, k=agent_key: self.refresh_recommendation_marks(k)
                 )
             for name in AGENT_CONTEXT_WIDGETS.get(agent_key, ()):
-                widget = getattr(self, name, None)
+                widget = self._find_control(name)
                 if widget is not None:
                     widget.currentTextChanged.connect(
                         lambda _t, k=agent_key: self.refresh_recommendation_marks(k)
@@ -3507,8 +3526,8 @@ class GodAI(QWidget):
         widgets = AGENT_SETUP_WIDGETS.get(agent)
         if not widgets:
             return
-        provider_box = getattr(self, widgets[0], None)
-        model_box = getattr(self, widgets[1], None)
+        provider_box = self._find_control(widgets[0])
+        model_box = self._find_control(widgets[1])
         provider = project.get("default_provider") or ""
         model = project.get("default_model") or ""
         if provider_box is not None and provider:

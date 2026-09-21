@@ -1,4 +1,4 @@
-# Publish — Suggestions
+# Publishing Manager — Suggestions
 
 Status: `IDEA` · `CONSIDERING` · `PLANNED` · `DONE` · `REJECTED`
 

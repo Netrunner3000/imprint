@@ -1,4 +1,4 @@
-# Music — Suggestions
+# Music Artist Generator — Suggestions
 
 Status: `IDEA` · `CONSIDERING` · `PLANNED` · `DONE` · `REJECTED`
 

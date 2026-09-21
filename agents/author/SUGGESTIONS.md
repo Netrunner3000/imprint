@@ -1,4 +1,4 @@
-# Draft — Suggestions
+# Book Author — Suggestions
 
 Status: `IDEA` · `CONSIDERING` · `PLANNED` · `DONE` · `REJECTED`
 

@@ -1,4 +1,4 @@
-# OnlyFans — Suggestions
+# OF Agent — Suggestions
 
 Status: `IDEA` · `CONSIDERING` · `PLANNED` · `DONE` · `REJECTED`
 

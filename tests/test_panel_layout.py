@@ -82,12 +82,19 @@ def _settle(app, window, size, agent):
 
 
 def test_music_workspace_layout_is_owned_by_music_package(window):
+    """Music dropped its host aliases first (2026-09-21): the panel owns
+    every published control, the host no longer mirrors them, and shared
+    wiring reaches them only through the _find_control resolver."""
     from agents.music.panel import MusicPanel
 
     assert isinstance(window.music_panel, MusicPanel)
     assert window.music_panel.music_tabs.count() == 6
     for name in MusicPanel.HOST_CONTROLS:
-        assert getattr(window, name) is getattr(window.music_panel, name)
+        owned = getattr(window.music_panel, name)
+        assert owned is not None
+        assert window._find_control(name) is owned
+        assert getattr(window, name, None) is None, (
+            f"{name} is still aliased onto the host")
 
 
 def test_site_builder_workspace_is_owned_by_its_package(window):
@@ -468,8 +475,11 @@ def test_every_provider_model_selector_has_an_explained_best_fit(app, window):
     )
 
     for agent, (provider_name, model_name) in AGENT_SETUP_WIDGETS.items():
-        provider = getattr(window, provider_name)
-        model = getattr(window, model_name)
+        # Through the resolver, not host attributes: panels are dropping
+        # their host aliases (music first, 2026-09-21).
+        provider = window._find_control(provider_name)
+        model = window._find_control(model_name)
+        assert provider is not None and model is not None, agent
         window.refresh_recommendation_marks(agent)
         for kind, combo in (("provider", provider), ("model", model)):
             marked = [i for i in range(combo.count())

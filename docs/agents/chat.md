@@ -1,4 +1,4 @@
-# CHAT — General-purpose conversation
+# STUDIO ASSISTANT — General-purpose conversation
 
 `key: chat` · class: `agents/chat/agent.py → ChatAgent` · panel: standard `normal_panel` (no custom panel) · handler: `send_prompt()`
 

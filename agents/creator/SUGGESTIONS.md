@@ -1,4 +1,4 @@
-# Creator — Suggestions
+# Brand Creator — Suggestions
 
 Status: `IDEA` · `CONSIDERING` · `PLANNED` · `DONE` · `REJECTED`
 

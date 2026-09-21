@@ -148,10 +148,11 @@ class MusicPanel(QWidget):
         self.music_tabs.addTab(self.music_suno_panel, "Songs & Albums")
         layout.addWidget(self.music_tabs, 1)
 
-        # Recommendation, tooltip and Suno integrations still look these up
-        # on the host; the actual controls and layout belong to this widget.
-        for name in self.HOST_CONTROLS:
-            setattr(host, name, getattr(self, name))
+        # Aliases retired 2026-09-21 — the first package to drop them.
+        # Shared wiring (tooltips, recommendation bindings, context
+        # watchers) resolves controls through host._find_control(), which
+        # searches the owned panels; HOST_CONTROLS stays as the published
+        # contract of what this panel owns.
         host.music_panel = self
         self.hide()
         self.music_panel_base.load_models()

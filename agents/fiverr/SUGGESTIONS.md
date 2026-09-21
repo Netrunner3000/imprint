@@ -1,4 +1,4 @@
-# Client Gigs — Suggestions
+# Brand & Logo Designer — Suggestions
 
 Status: `IDEA` · `CONSIDERING` · `PLANNED` · `DONE` · `REJECTED`
 
