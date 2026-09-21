@@ -564,12 +564,13 @@ Live status appears as a line under the action row.
 
 | Property | Value |
 |----------|-------|
-| Agent class | `agents/fiverr_agent.py` — `FiverrAgent` |
+| Agent class | `agents/fiverr/agent.py` — `FiverrAgent` |
+| Workspace | `agents/fiverr/panel.py` — guarded logo/copy workflows, results and order log |
 | Agent name (DB) | `fiverr` |
 | Label | Atelier |
 | Default text provider | Anthropic |
 | Image provider | OpenAI GPT Image — selectable current model |
-| External worker | `FiverrImageWorker` (in `main.py`) — threaded image generation |
+| External worker | `FiverrImageWorker` (in `ui/workers.py`) — threaded image generation |
 | System prompt | Three modes: delivery message, gig description, image-prompt builder |
 
 ---

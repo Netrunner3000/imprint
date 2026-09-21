@@ -548,26 +548,26 @@ class TestFiverrPanelBillingDecision:
         monkeypatch.setattr(
             win, "record_request",
             lambda token, result: recorded.append((token, result)))
-        panel.image_token = "image-token"
+        panel._image_token = "image-token"
         panel._on_all_done(["one.png", "two.png"])
 
         assert recorded == [("image-token", "2 logo images")]
-        assert panel.image_token is None
+        assert panel._image_token is None
 
     def test_stop_releases_both_exact_phase_tokens(self, win, monkeypatch):
         panel = win.fiverr_panel
-        panel.text_worker = None
-        panel.image_worker = None
+        win.fiverr_text_worker = None
+        win.fiverr_image_worker = None
         abandoned = []
         monkeypatch.setattr(
             win, "abandon_request",
             lambda token, reason="error": abandoned.append((token, reason)))
-        panel.prompt_token = "prompt-token"
-        panel.image_token = "image-token"
+        panel._prompt_token = "prompt-token"
+        panel._image_token = "image-token"
 
         panel.stop()
 
-        assert panel.prompt_token is None
-        assert panel.image_token is None
+        assert panel._prompt_token is None
+        assert panel._image_token is None
         assert abandoned == [
             ("prompt-token", "stopped"), ("image-token", "stopped")]

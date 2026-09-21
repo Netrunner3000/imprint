@@ -1,17 +1,23 @@
 # Brand & Logo Designer
 
 Owns client-service workflows: brief interpretation, logo concepts, gig listing
-copy and professional delivery messages.  Its public API is
-`agents.fiverr.FiverrAgent`; image generation remains behind shared provider and
-budget services.
+copy and professional delivery messages. Its public API exposes
+`agents.fiverr.FiverrAgent` and the lazily loaded `FiverrPanel`; provider
+execution, image generation and budget services remain shared by the umbrella.
 
 User guidance: `docs/agents/fiverr.md`.  Run focused coverage with
-`pytest tests/test_agents_scenarios.py -k fiverr`.
+`pytest tests/test_agents_scenarios.py tests/test_panel_layout.py tests/test_request_guard.py -k fiverr`.
 
 ## Files
 
-- **`__init__.py`** — the package's public surface: re-exports `FiverrAgent`.
-  Everything else in the package is an implementation detail.
+- **`__init__.py`** — the package's public surface: re-exports `FiverrAgent`
+  and lazily exposes `FiverrPanel` so domain-only imports stay Qt-free.
+
+- **`panel.py`** — owns the complete Client Gigs workspace: brief and model
+  controls, price estimate, guarded prompt/image/delivery/gig request
+  lifecycles with exact tokens, result tabs, order log, save, clear and Stop.
+  Thin host delegates and worker aliases remain for umbrella integrations and
+  shutdown handling.
 
 - **`agent.py`** — the implementation. `SYSTEM_PROMPT` casts the model as a
   5-star Fiverr freelancer specialising in logo design, and defines three

@@ -65,9 +65,9 @@ permissions and ranking policy. See `docs/recommendation_system.md`.
 
 - Keeping one parent repository is less autonomous than nested Git repos, but a
   clone remains complete and releases remain atomic.
-- Several panels still live in `main.py`; OnlyFans, Music, Site Builder and
-  Audiobook own their panels and workflows. The remaining panel and handler
-  extraction is the next phase.
+- Several panels still live in `main.py`; OnlyFans, Music, Site Builder,
+  Audiobook and Client Gigs own their panels and workflows. The remaining
+  panel and handler extraction is the next phase.
 - Shared services reduce drift but mean an extracted agent needs a declared
   Imprint platform dependency.
 
@@ -75,9 +75,9 @@ permissions and ranking policy. See `docs/recommendation_system.md`.
 
 1. Move flat agent implementations behind package public APIs. **Done.**
 2. Move each panel and its handlers into `agents/<key>/panel.py`. **OnlyFans,
-   Music, Site Builder and Audiobook done.
-   Remaining panels are incremental work. Music, Site Builder and Audiobook
-   still expose temporary host aliases for shared integrations.**
+   Music, Site Builder, Audiobook and Client Gigs done.
+   Remaining panels are incremental work. Extracted panels still expose
+   temporary host aliases for shared integrations.**
 3. Move purely domain-specific services under their owner; keep cross-agent
    storage, providers, budgets and request guards shared.
 4. Move focused tests into each agent project while retaining umbrella contract

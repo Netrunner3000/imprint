@@ -323,6 +323,10 @@ class FiverrPanel(QWidget):
             self._reset_buttons()
             return
         self._prompt_token = token
+        # Set callback state before starting the thread: a fast/local worker
+        # may finish immediately after start() and must never observe defaults.
+        self._pending_count = count
+        self._pending_brief = brief
         worker = self.host._new_chat_worker(provider, model, messages, "")
         self.host.fiverr_text_worker = worker
         worker.finished_signal.connect(self._on_prompt_ready)
@@ -330,8 +334,6 @@ class FiverrPanel(QWidget):
             lambda u, t=token: self.host.note_request_usage(t, u))
         worker.error_signal.connect(self._on_text_error)
         worker.start()
-        self._pending_count = count
-        self._pending_brief = brief
 
     def _on_prompt_ready(self, image_prompt: str) -> None:
         from services.per_unit_pricing import image_cost_eur

@@ -1,6 +1,6 @@
 # BRAND & LOGO DESIGNER — client identity studio
 
-`key: fiverr` · class: `agents/fiverr_agent.py → FiverrAgent` · panel: `build_fiverr_panel()` · handlers: `fiverr_generate_logos()`, `fiverr_write_delivery()`, `fiverr_write_gig()`
+`key: fiverr` · agent: `agents.fiverr.FiverrAgent` · workspace owner: `agents.fiverr.FiverrPanel`
 
 ## What it does
 End-to-end logo-gig assistant. Unlike a prompt-only helper, it **actually generates the logo images** via OpenAI GPT Image, saves them locally, and also writes the Fiverr gig description and the client delivery message. One brief → concepts + copy.
@@ -26,11 +26,11 @@ Two-step logo flow: a `ChatWorker` runs `FiverrAgent.build_image_prompt_request(
 ## Under the hood — files & functions
 | Location | Role |
 |---|---|
-| `agents/fiverr_agent.py` | `FiverrAgent` — delivery / gig / image-prompt roles. |
+| `agents/fiverr/agent.py` | `FiverrAgent` — delivery / gig / image-prompt roles. |
+| `agents/fiverr/panel.py` | Owns the layout and all guarded text/image request, result, Stop, save and order-log lifecycles. |
 | `ui/workers.py: FiverrImageWorker` | Threaded GPT Image generation + local save. |
 | `services/openai_client.py: generate_image()` | Validated `client.images.generate()` call for the selected current model. |
-| `main.py: fiverr_generate_logos()/fiverr_write_delivery()/fiverr_write_gig()` | The actions. |
-| `main.py: fiverr_save_images()/fiverr_clear()` | Export / reset. |
+| `main.py` compatibility entries | Delegate older umbrella call sites to the owned panel; they contain no Client Gigs implementation. |
 
 ## Extend it
 - **Other gig types**: generalise the brief + add roles to `FiverrAgent` (business cards, thumbnails, banners).
