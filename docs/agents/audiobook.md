@@ -1,6 +1,6 @@
 # AUDIOBOOK PRODUCER — Ebook → MP3 audiobook
 
-`key: audiobook` · converter: `services/narrator/converter.py` · panel: `agents.audiobook.AudiobookPanel` · host handler: `start_selected_audiobook_book()`
+`key: audiobook` · converter: `services/narrator/converter.py` · owner: `agents.audiobook.AudiobookPanel`
 
 > Uses **OpenAI TTS** regardless of the provider selected elsewhere — an OpenAI API key is required.
 
@@ -29,10 +29,11 @@ The converter runs as a separate process via `QProcess`:
 ## Under the hood — files & functions
 | Location | Role |
 |---|---|
-| `agents/audiobook/panel.py` | Owns the Convert and Listen layouts, library scan, selection, resume and playback actions. |
+| `agents/audiobook/panel.py` | Owns the Convert and Listen layouts, source discovery, exact-text estimate, guarded conversion process/result lifecycle, library scan, selection, resume and playback. |
 | `services/narrator/converter.py` | `convert()`, `main()`, extraction + TTS + chunking. |
-| `main.py: start_selected_audiobook_book()` | Builds the QProcess command (dev vs frozen branch). |
-| `main.py: handle_audiobook_stdout()/_finished()/_error()` | Streams log, detects done/blocked/paused/quota. |
+| `agents/audiobook/panel.py: start_conversion()/run_conversion()` | Authorizes the paid request and builds the QProcess command (dev vs frozen branch). |
+| `agents/audiobook/panel.py: handle_stdout()/handle_finished()/handle_error()` | Streams logs, follows the converter exit-code protocol, closes the exact billing token, and reports done/blocked/paused/quota states. |
+| `main.py` compatibility entries | Delegate older umbrella call sites to the owned panel; they contain no conversion implementation. |
 | `services/tool_runner.py: run_audiobook()` | In-process convert path (used by ToolRunner). |
 | `config/tools.json` (`audiobook.module`) | Points at the converter module. |
 

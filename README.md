@@ -1165,7 +1165,7 @@ The conversion runs as a `QProcess` so the GUI stays responsive. Output is strea
 | Property | Value |
 |----------|-------|
 | Connector class | `agents/audiobook/agent.py` — `AudiobookConnector` (parses `input=`/`output=`/`voice=`/`chunk_tokens=` config) |
-| Workspace | `agents/audiobook/panel.py` — Convert/Listen layouts, library scanning and playback; host handles conversion for now |
+| Workspace | `agents/audiobook/panel.py` — Convert/Listen layouts, guarded conversion lifecycle, library scanning and playback |
 | Engine | `services/narrator/converter.py` (subprocess worker) |
 | Agent name (DB) | `audiobook` |
 | Label | Narrator |

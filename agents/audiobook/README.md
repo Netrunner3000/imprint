@@ -2,9 +2,10 @@
 
 Owns ebook discovery, narration configuration, conversion progress, listening,
 resume state and audiobook output management. Imprint imports its connector and
-Convert/Listen workspace from `agents.audiobook`. Library and playback actions
-belong to that workspace; conversion actions and shared narration/library
-services remain on the host/shared side for now.
+Convert/Listen workspace from `agents.audiobook`. Discovery, estimation,
+conversion process lifecycle, billing closure, library and playback actions all
+belong to that workspace; only shared budgets, usage storage, output and the
+narration/library services remain on the umbrella side.
 
 ## Files
 
@@ -13,9 +14,10 @@ services remain on the host/shared side for now.
 - `agent.py` — `AudiobookConnector.parse_input(text)` parses a `key=value`-per-line
   config block into a dict with defaults (`voice="alloy"`, `chunk_tokens=1500`),
   and raises `ValueError` if `input=` or `output=` is missing.
-- `panel.py` — owns the Convert and Listen layouts, the library scan, selection,
-  resume and playback actions. It exposes temporary control aliases on the host
-  while paid conversion handlers still live in `main.py` (see TODO).
+- `panel.py` — owns the Convert and Listen layouts, source discovery, exact-text
+  cost estimation, paid conversion authorization/process/result lifecycle,
+  library scan, resume and playback actions. Temporary host aliases remain for
+  shared integrations and backwards-compatible entry points (see TODO).
 - `recommendations.py` — exports `RECOMMENDATION_PROFILE`, an `AgentProfile`
   (from `services.recommendations`) describing what this agent needs from an
   AI provider/model: tagged `narration`, `longform`, `reliability`, weighted
@@ -25,4 +27,4 @@ services remain on the host/shared side for now.
   shared `RecommendationEngine` to recommend a provider/model for narration jobs.
 
 User guidance: `docs/agents/audiobook.md`.  Run focused coverage with
-`pytest tests/test_audiobook_player.py tests/test_media_generation.py`.
+`pytest tests/test_audiobook_player.py tests/test_request_guard.py -k audiobook`.
