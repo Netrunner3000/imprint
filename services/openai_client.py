@@ -117,9 +117,8 @@ class OpenAIClientWrapper:
         with urllib.request.urlopen(url, timeout=REQUEST_TIMEOUT_SECONDS) as handle:
             return handle.read()
 
-    # The Sora job methods (create/poll/wait/download and the
-    # OpenAIVideoJob dataclass) were deleted when OpenAI shut the
-    # Videos API down on 2026-09-24 with no successor.
+    # The Sora job methods (create/poll/wait/download and OpenAIVideoJob) were
+    # removed ahead of OpenAI's scheduled 2026-09-24 Videos API shutdown.
 
     def stream_chat(self, messages, model="gpt-4o-mini"):
         if not self.client:

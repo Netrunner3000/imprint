@@ -42,8 +42,28 @@ import requests
 from services.api_limits import REQUEST_TIMEOUT_SECONDS
 
 BASE_URL = "https://api.higgsfield.ai"
-DEFAULT_TEXT_ENDPOINT = "/bytedance/seedance/v1/lite/text-to-video"
-DEFAULT_IMAGE_ENDPOINT = "/bytedance/seedance/v1/lite/image-to-video"
+
+# Endpoint pairs (text-to-video, image-to-video) per selectable Seedance
+# generation — paths verified against open.higgsfield.ai on 2026-09-21.
+# 2.5 is the default: native audio in one pass, 4–30 s clips. 2.0 stays as
+# the verified fallback while 2.5 burns in; the 1.0-lite paths remain so an
+# explicitly injected legacy endpoint keeps working.
+SEEDANCE_ENDPOINTS = {
+    "seedance-2.5": ("/bytedance/seedance-2.5/text-to-video",
+                     "/bytedance/seedance-2.5/image-to-video"),
+    "seedance-2.0": ("/bytedance/seedance-2.0/text-to-video",
+                     "/bytedance/seedance-2.0/image-to-video"),
+    "seedance-1.0-lite": ("/bytedance/seedance/v1/lite/text-to-video",
+                          "/bytedance/seedance/v1/lite/image-to-video"),
+}
+SEEDANCE_DURATION_BOUNDS = {
+    "seedance-2.5": (4, 30),
+    "seedance-2.0": (4, 15),
+    "seedance-1.0-lite": (2, 12),
+}
+DEFAULT_SEEDANCE_MODEL = "seedance-2.5"
+DEFAULT_TEXT_ENDPOINT, DEFAULT_IMAGE_ENDPOINT = (
+    SEEDANCE_ENDPOINTS[DEFAULT_SEEDANCE_MODEL])
 TERMINAL_STATUSES = frozenset({"completed", "failed", "nsfw", "canceled"})
 RETRYABLE_STATUS_CODES = frozenset({500, 502, 503, 504})
 SUPPORTED_UPLOAD_TYPES = frozenset({
@@ -300,13 +320,27 @@ class HiggsfieldClient:
     def prepare_video(self, prompt: str, *, duration: int = 5,
                       reference_image: str | None = None,
                       aspect_ratio: str | None = None,
-                      resolution: str | None = None) -> PreparedVideoRequest:
+                      resolution: str | None = None,
+                      model: str = DEFAULT_SEEDANCE_MODEL,
+                      generate_audio: bool | None = None) -> PreparedVideoRequest:
         check_prompt(prompt, reference_image)
         self._require_key()
-        if not 2 <= int(duration) <= 12:
-            raise ValueError("Higgsfield video duration must be between 2 and 12 seconds.")
-        endpoint = self.image_endpoint if reference_image else self.text_endpoint
+        if model not in SEEDANCE_ENDPOINTS:
+            raise ValueError(f"Unsupported Higgsfield model: {model}")
+        low, high = SEEDANCE_DURATION_BOUNDS[model]
+        if not low <= int(duration) <= high:
+            raise ValueError(
+                f"{model} clips must be between {low} and {high} seconds.")
+        if model == DEFAULT_SEEDANCE_MODEL:
+            # The constructor/env endpoint override applies to the default
+            # selection, so tests and custom deployments keep working.
+            text_ep, image_ep = self.text_endpoint, self.image_endpoint
+        else:
+            text_ep, image_ep = SEEDANCE_ENDPOINTS[model]
+        endpoint = image_ep if reference_image else text_ep
         payload: dict = {"prompt": prompt, "duration": int(duration)}
+        if generate_audio is not None:
+            payload["generate_audio"] = bool(generate_audio)
         if reference_image:
             payload["image_url"] = self.upload_file(reference_image)
         if aspect_ratio is not None:

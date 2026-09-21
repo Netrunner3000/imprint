@@ -11,7 +11,7 @@
 - Topic/source facts, target format, and acceptance checklist are ready.
 - Script/narration/visual/stock keys required by the chosen route are eligible.
 - The output directory is writable and ffmpeg is available for assembly routes.
-- Sora is retired for new Imprint jobs ahead of its 24 September 2026 API
+- Sora and its adapter are removed ahead of its 24 September 2026 API
   shutdown. Choose Gemini, Qwen or Higgsfield for direct video, or GPT Image
   for an assembled video.
 

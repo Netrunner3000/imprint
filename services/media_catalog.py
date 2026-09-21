@@ -17,9 +17,9 @@ OPENAI_IMAGE_MODELS = (
     "gpt-image-2.5-flare",
     "gpt-image-2",
 )
-# Sora is gone entirely: OpenAI shut the Videos API down on 2026-09-24 with
-# no successor, so the adapter identifiers, rates and retirement gate that
-# lived here were deleted rather than kept as legacy.
+# OpenAI scheduled the Sora Videos API to close on 2026-09-24 with no
+# successor. Imprint removed the adapter identifiers, rates and retirement
+# gate ahead of the cutoff rather than leave an unusable legacy route.
 GEMINI_VIDEO_MODELS = (
     "gemini-omni-1.1-flash",
     "veo-3.1-generate-preview",
@@ -92,9 +92,14 @@ MODELS = (
     MediaModel("Qwen", "wan2.7-t2v", "Wan 2.7 Text to Video",
                "direct_video", "Stable Wan text-to-video at 720p with audio.",
                tuple(range(2, 16))),
-    MediaModel("Higgsfield", "seedance-1.0-lite", "Seedance 1.0 Lite",
-               "direct_video", "Direct clip priced by Higgsfield before approval.",
-               (4, 8, 12)),
+    MediaModel("Higgsfield", "seedance-2.5", "Seedance 2.5",
+               "direct_video", "Current Seedance — native audio in one pass, "
+               "up to 30s. Priced by Higgsfield before approval.",
+               tuple(range(4, 31))),
+    MediaModel("Higgsfield", "seedance-2.0", "Seedance 2.0",
+               "direct_video", "Verified fallback while 2.5 burns in. Priced "
+               "by Higgsfield before approval.",
+               tuple(range(4, 16))),
     MediaModel("Pexels", "pexels-stock", "Pexels stock photography", "stock",
                "Stock visuals; requires PEXELS_API_KEY. Script and narration "
                "still use the configured pipeline providers."),

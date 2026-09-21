@@ -1,8 +1,8 @@
 """Contracts for the media-model catalog and OpenAI media adapters.
 
 These tests never call a paid API. They prove that every option shown in the
-Video workspace has a real route, and that retired DALL-E ids (and the deleted Sora
-adapters) cannot leak back into the new-job controls.
+Video workspace has a real route, and that retired DALL-E ids (and the removed
+Sora adapters) cannot leak back into the new-job controls.
 """
 
 import base64
@@ -49,7 +49,7 @@ def test_retired_dalle_models_are_not_selectable():
 
 
 def test_openai_offers_no_direct_video_model():
-    # Sora's rows, rates and adapters were deleted with the 2026-09-24
+    # Sora's rows, rates and adapters were removed ahead of the 2026-09-24
     # Videos API shutdown; OpenAI direct video must never quietly return.
     assert all(model.kind != "direct_video" for model in models_for("OpenAI"))
     assert all(not m.startswith("sora") for m in DIRECT_VIDEO_USD_PER_SECOND)

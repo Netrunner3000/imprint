@@ -46,11 +46,10 @@ DALL·E 2 and DALL·E 3 are intentionally absent: OpenAI retired and removed
 their APIs. The GPT Image entries are the supported replacements.
 
 Sora is different: OpenAI scheduled its API to shut down on **24 September
-2026**. Imprint has retired Sora from the new-job menu ahead of that date, and
-the render handler rejects a legacy selection before any paid request. Legacy
-adapter code remains for previously submitted jobs. OpenAI has not announced
-a direct-video successor; choose Gemini, Qwen or Higgsfield for direct clips,
-or GPT Image for a narrated scene-image pipeline.
+2026**. Imprint removed Sora's catalog rows and adapter ahead of that date, and
+the render handler still rejects a stale selection before any paid request.
+OpenAI has not announced a direct-video successor; choose Gemini, Qwen or
+Higgsfield for direct clips, or GPT Image for a narrated scene-image pipeline.
 See [OpenAI's discontinuation notice](https://help.openai.com/en/articles/20001152-what-to-know-about-the-sora-discontinuation).
 
 ## Long-form and clips are the same pipeline
@@ -81,10 +80,10 @@ Pipeline cancellation is cooperative, through the reporter. Higgsfield uses its 
 | `agents/video/studio.py` | The bridge: import, availability, config, clip overrides, pre-run estimate, library. |
 | `ui/workers.py → VideoWorker` | Runs `produce()` on a thread; bridges vidforge's `Reporter` to Qt signals. |
 | `services/media_catalog.py` | Explicit visual provider/model capabilities, durations, aspects and 720p pricing. |
-| `services/openai_client.py` | GPT Image generation plus retained legacy Sora adapter methods. |
+| `services/openai_client.py` | GPT Image generation; the discontinued Sora adapter is removed. |
 | `services/gemini_client.py` | Gemini Omni interaction plus Veo create/poll/download. |
 | `services/qwen_client.py` | Wan asynchronous create/poll/download through DashScope. |
-| `ui/workers.py → OpenAIVideoWorker / VideoGenerationWorker` | Runs direct jobs off the UI thread and preserves completed output. |
+| `ui/workers.py → VideoGenerationWorker` | Runs supported direct jobs off the UI thread and preserves completed output. |
 | `vidforge/vidforge/pipeline.py` | `produce()` — the eight stages. |
 | `vidforge/vidforge/progress.py` | `Reporter`, `STAGES`, `overall_fraction`, `Cancelled`. |
 | `main.py: build_video_panel()` | Render and Library tabs. |

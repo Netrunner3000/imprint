@@ -168,8 +168,8 @@ def media_candidate(model, duration: int | None = None) -> Candidate:
     if duration and model.kind == "direct_video":
         rate = direct_video_rate_usd(model.model_id)
         estimated = rate * duration if rate is not None else None
-    # No retirement gate any more: the only dated retirement was Sora, and
-    # its rows left the media catalog entirely with the 2026-09-24 shutdown.
+    # No retirement gate is needed: Sora's rows left the media catalog ahead
+    # of the scheduled 2026-09-24 shutdown.
     retired = False
     return Candidate(
         provider=model.provider,

@@ -1428,10 +1428,10 @@ and Ollama stay available for writing but are not shown as video renderers
 because their APIs do not return generated video.
 
 DALL·E 2 and 3 are not selectable because OpenAI retired and removed both APIs;
-GPT Image is their supported replacement. Sora is no longer offered for new
-jobs in Imprint ahead of the **24 September 2026** API shutdown. Existing
-Sora adapter code remains for legacy jobs; no OpenAI direct-video successor
-has been announced. Use Gemini, Qwen or Higgsfield for direct clips.
+GPT Image is their supported replacement. Sora and its adapter are no longer
+present in Imprint ahead of the **24 September 2026** Videos API shutdown; no
+OpenAI direct-video successor has been announced. Use Gemini, Qwen or
+Higgsfield for direct clips.
 
 For scene visuals, `Long-form` uses `config.yaml` as-is and `Social clip`
 overrides width, height, image shape, target length and scene cadence — the same

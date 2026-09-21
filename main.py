@@ -3795,9 +3795,9 @@ class GodAI(QWidget):
             # Defensive: no OpenAI direct_video row exists in the catalog any
             # more, but a stale selection must still refuse cleanly.
             QMessageBox.warning(
-                self, "Sora is gone",
-                "OpenAI shut the Sora Videos API down on 24 September 2026 "
-                "with no successor — Imprint no longer starts Sora jobs. "
+                self, "Sora is being discontinued",
+                "OpenAI is shutting the Sora Videos API down on 24 September "
+                "2026 with no successor — Imprint no longer starts Sora jobs. "
                 "Choose Gemini, Qwen or Higgsfield for direct video, or "
                 "OpenAI GPT Image for a narrated scene-based video.")
             return
@@ -3889,7 +3889,8 @@ class GodAI(QWidget):
             self.video_status_label.setText("Preparing Higgsfield estimate…")
             self.video_estimate_worker = HiggsfieldEstimateWorker(
                 client, topic, duration=seconds,
-                aspect_ratio=provider_aspect, resolution="720")
+                aspect_ratio=provider_aspect, resolution="720",
+                model=selection.model_id)
             self.video_worker = self.video_estimate_worker
             self.video_estimate_worker.status_signal.connect(
                 self.video_status_label.setText)

@@ -505,7 +505,7 @@ def test_video_provider_model_controls_only_offer_working_routes(app, window):
             for i in range(window.video_visual_model_box.count()))
 
     assert offered.isdisjoint(RETIRED_DALLE_MODELS)
-    # Sora ids were deleted with the 2026-09-24 shutdown; nothing may offer them.
+    # Sora ids were removed ahead of the 2026-09-24 shutdown.
     assert not any(m.startswith("sora") for m in offered)
     window.video_visual_provider_box.setCurrentText("OpenAI")
     image_index = next(

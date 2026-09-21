@@ -219,9 +219,11 @@ class HiggsfieldEstimateWorker(QThread):
     def __init__(self, client, prompt: str, *, duration: int = 5,
                  reference_image: str | None = None,
                  aspect_ratio: str | None = None,
-                 resolution: str | None = None):
+                 resolution: str | None = None,
+                 model: str | None = None):
         super().__init__()
         self.client = client
+        self.model = model
         self.prompt = prompt
         self.duration = duration
         self.reference_image = reference_image
@@ -239,10 +241,13 @@ class HiggsfieldEstimateWorker(QThread):
             self.status_signal.emit(
                 "Uploading reference image…" if self.reference_image
                 else "Preparing render estimate…")
-            request = self.client.prepare_video(
-                self.prompt, duration=self.duration,
-                reference_image=self.reference_image,
-                aspect_ratio=self.aspect_ratio, resolution=self.resolution)
+            kwargs = dict(duration=self.duration,
+                          reference_image=self.reference_image,
+                          aspect_ratio=self.aspect_ratio,
+                          resolution=self.resolution)
+            if self.model:
+                kwargs["model"] = self.model
+            request = self.client.prepare_video(self.prompt, **kwargs)
             if self._cancel_requested:
                 self.error_signal.emit("Cancelled.")
                 return
@@ -256,8 +261,8 @@ class HiggsfieldEstimateWorker(QThread):
             self.error_signal.emit(str(exc))
 
 
-# OpenAIVideoWorker (Sora) was deleted with the 2026-09-24 Videos API
-# shutdown; no successor exists.
+# OpenAIVideoWorker (Sora) was removed ahead of the scheduled 2026-09-24
+# Videos API shutdown; no successor exists.
 
 
 class VideoGenerationWorker(QThread):

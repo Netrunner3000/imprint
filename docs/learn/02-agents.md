@@ -176,8 +176,9 @@ models fill the scene-image role. DeepSeek, Anthropic, Kimi, and Ollama can
 write scripts or prompts but do not expose official video-generation output,
 so they are not presented as renderers.
 
-OpenAI's Sora API is scheduled to end on 24 September 2026. Imprint no longer
-offers Sora for new jobs; use Gemini, Qwen or Higgsfield for a direct clip.
+OpenAI's Sora API is scheduled to end on 24 September 2026. Imprint removed
+the Sora adapter ahead of the cutoff; use Gemini, Qwen or Higgsfield for a
+direct clip.
 
 ## Social → Social Media Campaign Manager (`social`)
 
