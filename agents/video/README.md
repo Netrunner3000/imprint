@@ -7,13 +7,18 @@ Vidforge remains a separately versioned companion repository.  This package is
 the ownership boundary for Imprint orchestration; `studio.py` is its adapter to
 Vidforge.  User guidance: `docs/agents/video.md`.
 
-Run focused coverage with `pytest tests/test_media_generation.py tests/test_vidforge_contract.py`.
+Run focused coverage with `pytest tests/test_media_generation.py tests/test_vidforge_contract.py tests/test_panel_layout.py -k video`.
 
 ## Files
 
-- `__init__.py` — package ownership boundary: sets `AGENT_KEY = "video"` and
-  re-exports the `studio` module as `video_studio` for callers outside the
-  package.
+- `__init__.py` — package ownership boundary: sets `AGENT_KEY = "video"`,
+  re-exports `studio` as `video_studio`, and lazily exposes `VideoPanel` so
+  non-GUI consumers do not import Qt.
+- `panel.py` — owns the Render/Library workspace, provider/model constraints,
+  preflight estimates, exact request tokens, pipeline and direct-provider
+  lifecycles, safe cancellation semantics, progress, errors and the shared
+  vidforge output library. The umbrella retains only compatibility delegates
+  and worker visibility for global shutdown.
 - `studio.py` — the adapter to `vidforge`, a **separate git repository**
   nested at `imprint/vidforge/` and imported rather than vendored, so the
   standalone `vidforge.app` and Imprint's Video mode share one checkout, one

@@ -78,6 +78,7 @@ Pipeline cancellation is cooperative, through the reporter. Higgsfield uses its 
 | Location | Role |
 |---|---|
 | `agents/video/studio.py` | The bridge: import, availability, config, clip overrides, pre-run estimate, library. |
+| `agents/video/panel.py` | Owns the Render/Library UI and every guarded pipeline/direct-provider request, progress, result and Stop lifecycle. |
 | `ui/workers.py → VideoWorker` | Runs `produce()` on a thread; bridges vidforge's `Reporter` to Qt signals. |
 | `services/media_catalog.py` | Explicit visual provider/model capabilities, durations, aspects and 720p pricing. |
 | `services/openai_client.py` | GPT Image generation; the discontinued Sora adapter is removed. |
@@ -86,8 +87,7 @@ Pipeline cancellation is cooperative, through the reporter. Higgsfield uses its 
 | `ui/workers.py → VideoGenerationWorker` | Runs supported direct jobs off the UI thread and preserves completed output. |
 | `vidforge/vidforge/pipeline.py` | `produce()` — the eight stages. |
 | `vidforge/vidforge/progress.py` | `Reporter`, `STAGES`, `overall_fraction`, `Cancelled`. |
-| `main.py: build_video_panel()` | Render and Library tabs. |
-| `main.py: video_render()` | Estimate, authorise, start the worker. |
+| `main.py` compatibility entries | Delegate older umbrella call sites to `VideoPanel`; no Video implementation remains there. |
 
 ## Requirements
 `OPENAI_API_KEY` for the default script/narration pipeline and GPT Image. `GOOGLE_API_KEY` (or `GEMINI_API_KEY`) for Gemini Omni and Veo. `DASHSCOPE_API_KEY` for Wan; `DASHSCOPE_VIDEO_BASE_URL` can select a workspace-scoped regional endpoint. `HF_API_KEY_ID` plus `HF_API_KEY_SECRET` for Higgsfield. `PEXELS_API_KEY` for Pexels. `ffmpeg` on PATH. YouTube upload additionally needs `google-api-python-client`, `google-auth-oauthlib` and an OAuth client secret in vidforge's `.secrets/`.

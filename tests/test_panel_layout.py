@@ -117,6 +117,30 @@ def test_client_gigs_workspace_is_owned_by_fiverr_package(window):
         assert getattr(window, name) is getattr(window.fiverr_panel, name)
 
 
+def test_video_workspace_is_owned_by_video_package(window):
+    from agents.video import VideoPanel
+
+    assert isinstance(window.video_panel, VideoPanel)
+    assert window.video_panel.video_tabs.count() == 2
+    for name in VideoPanel.HOST_CONTROLS:
+        assert getattr(window, name) is getattr(window.video_panel, name)
+
+
+def test_video_compatibility_entries_delegate_to_owned_panel(window, monkeypatch):
+    calls = []
+    panel = window.video_panel
+    monkeypatch.setattr(panel, "render", lambda: calls.append("render"))
+    monkeypatch.setattr(panel, "stop", lambda: calls.append("stop"))
+    monkeypatch.setattr(panel, "refresh_library",
+                        lambda: calls.append("refresh"))
+
+    window.video_render()
+    window.video_stop()
+    window.refresh_video_library()
+
+    assert calls == ["render", "stop", "refresh"]
+
+
 def test_fiverr_compatibility_entries_delegate_to_owned_panel(window, monkeypatch):
     calls = []
     panel = window.fiverr_panel
