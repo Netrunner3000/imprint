@@ -239,10 +239,9 @@ class FiverrPanel(QWidget):
 
         layout.addWidget(self.fiverr_tabs, 1)
 
-        # Shared recommendation and tooltip wiring still resolves these on
-        # the host; ownership and lifecycle are local to this panel.
-        for name in self.HOST_CONTROLS:
-            setattr(host, name, getattr(self, name))
+        # Aliases retired 2026-09-21: shared wiring resolves controls
+        # through host._find_control(); HOST_CONTROLS stays as the
+        # published contract of what this panel owns.
         host.fiverr_panel = self
         self.update_estimate()
         self.hide()

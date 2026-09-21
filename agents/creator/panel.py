@@ -313,11 +313,9 @@ class CreatorPanel(QWidget):
 
         layout.addWidget(self.creator_tabs, 1)
 
-        # Shared recommendation, tooltip and OnlyFans-handoff wiring still
-        # resolves these on the host; ownership and lifecycle are local to
-        # this panel. Workers stay host attributes for the shutdown sweep.
-        for name in self.HOST_CONTROLS:
-            setattr(host, name, getattr(self, name))
+        # Aliases retired 2026-09-21: shared wiring resolves controls
+        # through host._find_control(); HOST_CONTROLS stays as the
+        # published contract of what this panel owns.
         host.creator_panel = self
         host.creator_worker = None
         host.creator_video_estimate_worker = None

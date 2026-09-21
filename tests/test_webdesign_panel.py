@@ -69,7 +69,9 @@ def test_denied_site_request_leaves_generate_usable(app):
     panel = WebdesignPanel(host)
     try:
         assert host.webdesign_panel is panel
-        assert host.webdesign_model_box is panel.webdesign_model_box
+        # Aliases retired: the panel owns its controls; nothing is mirrored.
+        assert not hasattr(host, "webdesign_model_box")
+        assert panel.webdesign_model_box is panel.webdesign_panel_base.model_box
         panel.webdesign_brief_input.setPlainText("A three-section landing page")
         panel.generate()
         assert host.authorized[0][:3] == ("webdesign", "anthropic", "test-model")

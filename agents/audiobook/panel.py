@@ -179,8 +179,9 @@ class AudiobookPanel(QWidget):
         self.audiobook_tabs.addTab(self.audiobook_convert_scroll, "Convert")
         self.audiobook_tabs.addTab(self._build_library_tab(host), "Listen")
 
-        for name in self.HOST_CONTROLS:
-            setattr(host, name, getattr(self, name))
+        # Aliases retired 2026-09-21: shared wiring resolves controls
+        # through host._find_control(); HOST_CONTROLS stays as the
+        # published contract of what this panel owns.
         host.audiobook_panel = self
         self.hide()
 

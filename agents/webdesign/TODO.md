@@ -10,7 +10,7 @@
 ## v1 — current
 
 - [x] `P1` Site Builder's panel, guarded generation lifecycle, output parsing, copy and export now live in `panel.py`.
-- [ ] `P2` Retire temporary host-control aliases after recommendation and tooltip bindings use the panel contract directly.
+- [x] `P2` Retire temporary host-control aliases after recommendation and tooltip bindings use the panel contract directly. Done 2026-09-21, in the sweep that finished the pattern music started: the panel no longer mirrors its widgets onto the host, every shared consumer (tooltips, recommendation installs, context watchers, panel_base lookup) resolves through `GodAI._find_control()`, and the ownership test asserts the absence of aliases.
 - [ ] `P2` Export structured multi-file projects, not only one response blob.
 - [ ] `P2` Add automated HTML and accessibility validation before export.
 - [ ] `P3` Add safe local preview with explicit external-resource controls.

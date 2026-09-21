@@ -213,11 +213,9 @@ class ManuscriptPanel(QWidget):
         self.manuscript_status_label.setObjectName("EstimateLine")
         layout.addWidget(self.manuscript_status_label)
 
-        # Shared recommendation, tooltip and next-step wiring still resolves
-        # these on the host; ownership and lifecycle are local to this panel.
-        # The workers stay host attributes for the global shutdown sweep.
-        for name in self.HOST_CONTROLS:
-            setattr(host, name, getattr(self, name))
+        # Aliases retired 2026-09-21: shared wiring resolves controls
+        # through host._find_control(); HOST_CONTROLS stays as the
+        # published contract of what this panel owns.
         host.manuscript_panel = self
         self.refresh_connections_status()
         self.hide()

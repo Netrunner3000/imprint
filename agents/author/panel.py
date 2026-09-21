@@ -602,12 +602,9 @@ class AuthorPanel(QWidget):
 
         self.author_draft_box.textChanged.connect(self._update_counts)
 
-        # Shared recommendation, tooltip and next-step wiring still resolves
-        # these on the host; ownership and lifecycle are local to this panel.
-        # The three workers stay host attributes so the global Stop chain and
-        # shutdown sweep keep seeing them.
-        for name in self.HOST_CONTROLS:
-            setattr(host, name, getattr(self, name))
+        # Aliases retired 2026-09-21: shared wiring resolves controls
+        # through host._find_control(); HOST_CONTROLS stays as the
+        # published contract of what this panel owns.
         host.author_panel = self
         host.author_worker = None
         host.author_pub_worker = None

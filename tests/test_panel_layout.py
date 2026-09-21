@@ -103,7 +103,11 @@ def test_site_builder_workspace_is_owned_by_its_package(window):
     assert isinstance(window.webdesign_panel, WebdesignPanel)
     assert window.webdesign_panel.webdesign_tabs.count() == 3
     for name in WebdesignPanel.HOST_CONTROLS:
-        assert getattr(window, name) is getattr(window.webdesign_panel, name)
+        owned = getattr(window.webdesign_panel, name)
+        assert owned is not None
+        assert window._find_control(name) is owned
+        assert getattr(window, name, None) is None, (
+            f"{name} is still aliased onto the host")
 
 
 def test_audiobook_workspace_is_owned_by_its_package(window):
@@ -112,7 +116,11 @@ def test_audiobook_workspace_is_owned_by_its_package(window):
     assert isinstance(window.audiobook_panel, AudiobookPanel)
     assert window.audiobook_panel.audiobook_tabs.count() == 2
     for name in AudiobookPanel.HOST_CONTROLS:
-        assert getattr(window, name) is getattr(window.audiobook_panel, name)
+        owned = getattr(window.audiobook_panel, name)
+        assert owned is not None
+        assert window._find_control(name) is owned
+        assert getattr(window, name, None) is None, (
+            f"{name} is still aliased onto the host")
 
 
 def test_client_gigs_workspace_is_owned_by_fiverr_package(window):
@@ -121,7 +129,11 @@ def test_client_gigs_workspace_is_owned_by_fiverr_package(window):
     assert isinstance(window.fiverr_panel, FiverrPanel)
     assert window.fiverr_panel.fiverr_tabs.count() == 4
     for name in FiverrPanel.HOST_CONTROLS:
-        assert getattr(window, name) is getattr(window.fiverr_panel, name)
+        owned = getattr(window.fiverr_panel, name)
+        assert owned is not None
+        assert window._find_control(name) is owned
+        assert getattr(window, name, None) is None, (
+            f"{name} is still aliased onto the host")
 
 
 def test_video_workspace_is_owned_by_video_package(window):
@@ -130,7 +142,11 @@ def test_video_workspace_is_owned_by_video_package(window):
     assert isinstance(window.video_panel, VideoPanel)
     assert window.video_panel.video_tabs.count() == 2
     for name in VideoPanel.HOST_CONTROLS:
-        assert getattr(window, name) is getattr(window.video_panel, name)
+        owned = getattr(window.video_panel, name)
+        assert owned is not None
+        assert window._find_control(name) is owned
+        assert getattr(window, name, None) is None, (
+            f"{name} is still aliased onto the host")
 
 
 def test_video_compatibility_entries_delegate_to_owned_panel(window, monkeypatch):
@@ -324,9 +340,9 @@ def test_section_headings_are_readable_not_field_label_small_caps(app, window):
 def test_audiobook_source_list_does_not_push_settings_below_the_fold(app, window):
     window.select_agent("audiobook")
     _settle(app, window, (1400, 900), "audiobook")
-    assert window.audiobook_book_list.maximumHeight() <= 180
-    assert window.audiobook_source_stack.height() <= 180
-    assert window.audiobook_start_btn.text() == "Convert audiobook"
+    assert window.audiobook_panel.audiobook_book_list.maximumHeight() <= 180
+    assert window.audiobook_panel.audiobook_source_stack.height() <= 180
+    assert window.audiobook_panel.audiobook_start_btn.text() == "Convert audiobook"
 
 
 def test_audiobook_convert_form_is_one_vertical_scroll_surface(app, window):
@@ -334,19 +350,19 @@ def test_audiobook_convert_form_is_one_vertical_scroll_surface(app, window):
     from PySide6.QtCore import Qt
 
     _settle(app, window, (1000, 600), "audiobook")
-    area = window.audiobook_convert_scroll
+    area = window.audiobook_panel.audiobook_convert_scroll
     content = area.widget()
     assert content is not None
-    assert content.isAncestorOf(window.audiobook_input_path)
-    assert content.isAncestorOf(window.audiobook_output_path)
-    assert content.isAncestorOf(window.audiobook_start_btn)
+    assert content.isAncestorOf(window.audiobook_panel.audiobook_input_path)
+    assert content.isAncestorOf(window.audiobook_panel.audiobook_output_path)
+    assert content.isAncestorOf(window.audiobook_panel.audiobook_start_btn)
     assert area.horizontalScrollBarPolicy() == Qt.ScrollBarAlwaysOff
     assert area.verticalScrollBar().maximum() > 0
 
 
 def test_audiobook_refresh_controls_keep_separate_jobs(app, window):
-    assert window.audiobook_refresh_btn.text() == "Refresh List"
-    assert window.audiobook_library_refresh_btn.text() == "Rescan"
+    assert window.audiobook_panel.audiobook_refresh_btn.text() == "Refresh List"
+    assert window.audiobook_panel.audiobook_library_refresh_btn.text() == "Rescan"
 
 
 def test_fixed_utility_rail_never_grows_a_horizontal_scrollbar(app, window):
@@ -365,21 +381,21 @@ def test_author_compose_remains_whole_with_profile_open(app, window):
 
     _settle(app, window, (1760, 820), "author")
     window._author_set_mode("write")
-    was_open = window.author_profile_section.content.isVisible()
+    was_open = window.author_panel.author_profile_section.content.isVisible()
     if not was_open:
-        window.author_profile_section.header_btn.click()
+        window.author_panel.author_profile_section.header_btn.click()
     for _ in range(6):
         app.processEvents()
 
-    card = window.author_compose_card
+    card = window.author_panel.author_compose_card
     for control in (
-        window.author_direction_input,
-        window.author_task_box,
-        window.author_provider_box,
-        window.author_model_box,
-        window.author_write_btn,
-        window.author_continue_btn,
-        window.author_stop_btn,
+        window.author_panel.author_direction_input,
+        window.author_panel.author_task_box,
+        window.author_panel.author_provider_box,
+        window.author_panel.author_model_box,
+        window.author_panel.author_write_btn,
+        window.author_panel.author_continue_btn,
+        window.author_panel.author_stop_btn,
     ):
         top_left = control.mapTo(card, QPoint(0, 0))
         bottom_right = control.mapTo(card, control.rect().bottomRight())
@@ -387,7 +403,7 @@ def test_author_compose_remains_whole_with_profile_open(app, window):
         assert card.rect().contains(bottom_right), _describe(control)
 
     if not was_open:
-        window.author_profile_section.header_btn.click()
+        window.author_panel.author_profile_section.header_btn.click()
 
 
 def test_author_footer_prioritises_primary_actions_when_narrow(app, window):
@@ -397,13 +413,13 @@ def test_author_footer_prioritises_primary_actions_when_narrow(app, window):
     for _ in range(6):
         app.processEvents()
 
-    assert not window.author_word_metric.isVisible()
-    assert not window.author_export_author_input.isVisible()
-    assert window.author_save_btn.isVisible()
-    assert window.author_export_format_box.isVisible()
-    assert window.author_export_btn.isVisible()
-    assert window.author_save_btn.text() == "Save"
-    assert window.author_export_btn.text() == "Export"
+    assert not window.author_panel.author_word_metric.isVisible()
+    assert not window.author_panel.author_export_author_input.isVisible()
+    assert window.author_panel.author_save_btn.isVisible()
+    assert window.author_panel.author_export_format_box.isVisible()
+    assert window.author_panel.author_export_btn.isVisible()
+    assert window.author_panel.author_save_btn.text() == "Save"
+    assert window.author_panel.author_export_btn.text() == "Export"
 
 
 def test_dropdowns_use_the_shared_polished_popup(app, window):
@@ -412,7 +428,7 @@ def test_dropdowns_use_the_shared_polished_popup(app, window):
     from ui.widgets import DropdownItemDelegate, POPUP_MAX_WIDTH
 
     _settle(app, window, (1760, 820), "author")
-    combo = window.author_model_box
+    combo = window.author_panel.author_model_box
     view = combo.view()
 
     assert combo.property("imprintModernDropdown") is True
@@ -454,7 +470,7 @@ def test_dropdowns_created_after_startup_are_polished(app, window):
 def test_short_dropdown_popup_tracks_its_field_instead_of_defaulting_to_640(app, window):
     """A two-item selector must not span most of the author canvas."""
     _settle(app, window, (1760, 820), "author")
-    combo = window.author_content_type_box
+    combo = window.author_panel.author_content_type_box
     combo.showPopup()
     for _ in range(3):
         app.processEvents()
@@ -492,9 +508,9 @@ def test_every_provider_model_selector_has_an_explained_best_fit(app, window):
             }
 
     window.refresh_video_recommendations()
-    for combo in (window.video_visual_provider_box,
-                  window.video_visual_model_box,
-                  window.fiverr_image_model_box):
+    for combo in (window.video_panel.video_visual_provider_box,
+                  window.video_panel.video_visual_model_box,
+                  window.fiverr_panel.fiverr_image_model_box):
         assert sum(bool(combo.itemData(i, RECOMMENDED_ROLE))
                    for i in range(combo.count())) == 1
 
@@ -504,11 +520,11 @@ def test_model_best_fit_recomputes_inside_each_selected_provider(app, window):
 
     window.select_agent("social")
     for provider in ("openai", "deepseek", "gemini", "anthropic", "qwen"):
-        window.social_provider_box.setCurrentText(provider)
+        window.social_panel.social_provider_box.setCurrentText(provider)
         for _ in range(3):
             app.processEvents()
-        marked = [i for i in range(window.social_model_box.count())
-                  if window.social_model_box.itemData(i, RECOMMENDED_ROLE)]
+        marked = [i for i in range(window.social_panel.social_model_box.count())
+                  if window.social_panel.social_model_box.itemData(i, RECOMMENDED_ROLE)]
         assert len(marked) == 1, provider
 
 
@@ -542,7 +558,7 @@ def test_creator_compose_grid_has_no_empty_cells(app, window, kind, expected):
     window._creator_kind_changed(kind)
     _settle(app, window, (1500, 950), "creator")
 
-    grid = window.creator_compose_grid
+    grid = window.creator_panel.creator_compose_grid
     positions = sorted(grid.getItemPosition(i)[:2] for i in range(grid.count()))
     assert len(positions) == expected, (
         f"[{kind}] expected {expected} fields, packed {len(positions)}")
@@ -558,33 +574,33 @@ def test_video_provider_model_controls_only_offer_working_routes(app, window):
     window.select_agent("video")
     offered = set()
     for provider in ("OpenAI", "Higgsfield", "Pexels", "Local"):
-        window.video_visual_provider_box.setCurrentText(provider)
+        window.video_panel.video_visual_provider_box.setCurrentText(provider)
         app.processEvents()
-        assert window.video_visual_model_box.count() > 0
+        assert window.video_panel.video_visual_model_box.count() > 0
         offered.update(
-            window.video_visual_model_box.itemData(i).model_id
-            for i in range(window.video_visual_model_box.count()))
+            window.video_panel.video_visual_model_box.itemData(i).model_id
+            for i in range(window.video_panel.video_visual_model_box.count()))
 
     assert offered.isdisjoint(RETIRED_DALLE_MODELS)
     # Sora ids were removed ahead of the 2026-09-24 shutdown.
     assert not any(m.startswith("sora") for m in offered)
-    window.video_visual_provider_box.setCurrentText("OpenAI")
+    window.video_panel.video_visual_provider_box.setCurrentText("OpenAI")
     image_index = next(
-        i for i in range(window.video_visual_model_box.count())
-        if window.video_visual_model_box.itemData(i).kind == "scene_images")
-    window.video_visual_model_box.setCurrentIndex(image_index)
+        i for i in range(window.video_panel.video_visual_model_box.count())
+        if window.video_panel.video_visual_model_box.itemData(i).kind == "scene_images")
+    window.video_panel.video_visual_model_box.setCurrentIndex(image_index)
     app.processEvents()
-    assert window.video_format_box.isEnabled()
-    assert "Sora is no longer offered" in window.video_visual_note.text()
-    assert "no successor" in window.video_visual_note.text()
+    assert window.video_panel.video_format_box.isEnabled()
+    assert "Sora is no longer offered" in window.video_panel.video_visual_note.text()
+    assert "no successor" in window.video_panel.video_visual_note.text()
 
-    window.video_visual_provider_box.setCurrentText("Gemini")
+    window.video_panel.video_visual_provider_box.setCurrentText("Gemini")
     direct_index = next(
-        i for i in range(window.video_visual_model_box.count())
-        if window.video_visual_model_box.itemData(i).kind == "direct_video")
-    window.video_visual_model_box.setCurrentIndex(direct_index)
+        i for i in range(window.video_panel.video_visual_model_box.count())
+        if window.video_panel.video_visual_model_box.itemData(i).kind == "direct_video")
+    window.video_panel.video_visual_model_box.setCurrentIndex(direct_index)
     app.processEvents()
-    assert not window.video_format_box.isEnabled()
+    assert not window.video_panel.video_format_box.isEnabled()
 
 
 def test_video_refuses_a_legacy_sora_selection_before_authorization(window, monkeypatch):

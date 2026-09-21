@@ -292,8 +292,8 @@ def window(app):
 
 
 def test_creator_panel_has_every_tab(window):
-    titles = [window.creator_tabs.tabText(i)
-              for i in range(window.creator_tabs.count())]
+    titles = [window.creator_panel.creator_tabs.tabText(i)
+              for i in range(window.creator_panel.creator_tabs.count())]
     for expected in ("Draft", "Calendar", "Earnings", "Voice", "Media",
                      "Agency", "Records"):
         assert any(expected in t for t in titles), f"missing {expected} tab"
@@ -336,9 +336,9 @@ def test_onlyfans_handoff_loads_a_structured_creator_campaign(window):
     }
     window._onlyfans_create_campaign(context)
     assert window._current_agent == "creator"
-    assert window.creator_platform_box.currentText() == "OnlyFans"
-    assert window.creator_kind_box.currentText() == "campaign"
-    brief = window.creator_brief_input.toPlainText()
+    assert window.creator_panel.creator_platform_box.currentText() == "OnlyFans"
+    assert window.creator_panel.creator_kind_box.currentText() == "campaign"
+    brief = window.creator_panel.creator_brief_input.toPlainText()
     assert "POV mini-series" in brief
     assert "Demonstration dataset" in brief
     assert "posting plan" in brief
@@ -363,41 +363,41 @@ def test_onlyfans_teaser_uses_creator_higgsfield_pipeline(window, monkeypatch):
     window._onlyfans_generate_teaser(context)
 
     assert window._current_agent == "creator"
-    assert window.creator_platform_box.currentText() == "OnlyFans"
-    assert "POV mini-series" in window.creator_brief_input.toPlainText()
+    assert window.creator_panel.creator_platform_box.currentText() == "OnlyFans"
+    assert "POV mini-series" in window.creator_panel.creator_brief_input.toPlainText()
     assert calls == [True]
 
 
 def test_consent_fields_appear_only_for_managed_accounts(window):
     window._creator_type_changed("own")
-    assert not window.creator_consent_input.isVisible()
+    assert not window.creator_panel.creator_consent_input.isVisible()
     window._creator_type_changed("managed")
-    assert window.creator_consent_input.isVisibleTo(window.creator_panel)
+    assert window.creator_panel.creator_consent_input.isVisibleTo(window.creator_panel)
 
 
 def test_persona_fields_appear_only_for_personas(window):
     window._creator_type_changed("persona")
-    assert window.creator_disclosure_input.isVisibleTo(window.creator_panel)
+    assert window.creator_panel.creator_disclosure_input.isVisibleTo(window.creator_panel)
     window._creator_type_changed("own")
-    assert not window.creator_disclosure_input.isVisible()
+    assert not window.creator_panel.creator_disclosure_input.isVisible()
 
 
 def test_price_shows_only_for_ppv(window):
     window._creator_kind_changed("post")
-    assert not window.creator_price_input.isVisible()
+    assert not window.creator_panel.creator_price_input.isVisible()
     window._creator_kind_changed("ppv")
-    assert window.creator_price_input.isVisibleTo(window.creator_panel)
+    assert window.creator_panel.creator_price_input.isVisibleTo(window.creator_panel)
 
 
 def test_segment_shows_only_where_it_means_something(window):
     window._creator_kind_changed("welcome")
-    assert window.creator_segment_box.isVisibleTo(window.creator_panel)
+    assert window.creator_panel.creator_segment_box.isVisibleTo(window.creator_panel)
     window._creator_kind_changed("bio")
-    assert not window.creator_segment_box.isVisible()
+    assert not window.creator_panel.creator_segment_box.isVisible()
 
 
 def test_drafting_without_an_account_does_not_crash(window):
-    window.creator_account_box.clear()
+    window.creator_panel.creator_account_box.clear()
     window.creator_generate()          # warns and returns
 
 

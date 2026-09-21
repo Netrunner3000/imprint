@@ -830,12 +830,16 @@ class GodAI(QWidget):
             self._set_chat_status(
                 f"Muse Glimmer: {status} — {done / 1e9:.1f} / {total / 1e9:.1f} GB ({pct}%)"
             )
-            self.tool_progress.setValue(pct)
+            bar = self._find_control("tool_progress")
+            if bar is not None:
+                bar.setValue(pct)
         else:
             self._set_chat_status(f"Muse Glimmer: {status}")
 
     def _on_muse_pull_finished(self, model: str) -> None:
-        self.tool_progress.setValue(100)
+        bar = self._find_control("tool_progress")
+        if bar is not None:
+            bar.setValue(100)
         self._set_chat_status(f"Muse Glimmer installed ({model}).")
         self.get_muse_btn.setEnabled(True)
         self.refresh_muse_button()
@@ -850,7 +854,9 @@ class GodAI(QWidget):
         )
 
     def _on_muse_pull_error(self, message: str) -> None:
-        self.tool_progress.setValue(0)
+        bar = self._find_control("tool_progress")
+        if bar is not None:
+            bar.setValue(0)
         self._set_chat_status("Muse Glimmer download failed.")
         self.get_muse_btn.setEnabled(True)
         QMessageBox.warning(self, "Download Failed", message)
@@ -1100,7 +1106,7 @@ class GodAI(QWidget):
 
     def _install_audiobook_recommendation(self) -> None:
         """Narrator has a voice selector rather than a provider/model pair."""
-        voice_box = getattr(self, "audiobook_voice_box", None)
+        voice_box = self._find_control("audiobook_voice_box")
         if voice_box is None:
             return
         voice = "alloy"
@@ -1113,13 +1119,16 @@ class GodAI(QWidget):
         voice_box.setToolTip(tooltip)
 
     def refresh_video_recommendations(self) -> None:
-        provider_box = getattr(self, "video_visual_provider_box", None)
-        model_box = getattr(self, "video_visual_model_box", None)
-        if provider_box is None or model_box is None:
+        provider_box = self._find_control("video_visual_provider_box")
+        model_box = self._find_control("video_visual_model_box")
+        length_box = self._find_control("video_length_box")
+        format_box = self._find_control("video_format_box")
+        aspect_box = self._find_control("video_aspect_box")
+        if None in (provider_box, model_box, length_box, format_box, aspect_box):
             return
         from services.media_catalog import MODELS
 
-        duration_text = self.video_length_box.currentText().rstrip("s")
+        duration_text = length_box.currentText().rstrip("s")
         duration = int(duration_text) if duration_text.isdigit() else None
         candidates = [media_candidate(item, duration) for item in MODELS]
         candidates = [
@@ -1128,12 +1137,12 @@ class GodAI(QWidget):
             if item.provider.casefold() not in {"local", "pexels"} else item
             for item in candidates
         ]
-        if self.video_format_box.currentText() == "Long-form":
+        if format_box.currentText() == "Long-form":
             candidates = [item for item in candidates if item.kind != "direct_video"]
         context = RecommendationContext(
             agent="video", modality="visual",
-            task=self.video_format_box.currentText(),
-            aspect=self.video_aspect_box.currentText(), duration=duration,
+            task=format_box.currentText(),
+            aspect=aspect_box.currentText(), duration=duration,
             budget_remaining=max(0.0, self.session_budget_eur - self.session_cost_total),
         )
         profile = profile_for("video")
@@ -1165,7 +1174,7 @@ class GodAI(QWidget):
             model_box.setToolTip(tip)
 
     def _refresh_fiverr_image_recommendation(self) -> None:
-        combo = getattr(self, "fiverr_image_model_box", None)
+        combo = self._find_control("fiverr_image_model_box")
         if combo is None:
             return
         from services.media_catalog import find_model
@@ -1221,17 +1230,11 @@ class GodAI(QWidget):
 
         self.refresh_video_recommendations()
         self._refresh_fiverr_image_recommendation()
-        for widget in (getattr(self, "video_format_box", None),
-                       getattr(self, "video_aspect_box", None),
-                       getattr(self, "video_length_box", None)):
+        for name in ("video_format_box", "video_aspect_box", "video_length_box",
+                     "video_visual_provider_box", "video_visual_model_box"):
+            widget = self._find_control(name)
             if widget is not None:
                 widget.currentTextChanged.connect(self.refresh_video_recommendations)
-        if getattr(self, "video_visual_provider_box", None) is not None:
-            self.video_visual_provider_box.currentTextChanged.connect(
-                self.refresh_video_recommendations)
-        if getattr(self, "video_visual_model_box", None) is not None:
-            self.video_visual_model_box.currentTextChanged.connect(
-                self.refresh_video_recommendations)
         for provider in ("openai", "deepseek", "kimi", "gemini", "anthropic",
                          "qwen", "higgsfield"):
             checkbox = getattr(self, f"allow_{provider}_checkbox", None)
@@ -1861,13 +1864,14 @@ class GodAI(QWidget):
     def _onlyfans_create_campaign(self, context: dict) -> None:
         """Carry a selected business signal into the shared Creator tool."""
         self.select_agent("creator")
-        self.creator_platform_box.setCurrentText("OnlyFans")
-        self.creator_kind_box.setCurrentText("campaign")
-        self.creator_brief_input.setPlainText(format_creator_brief(context))
-        self.creator_tabs.setCurrentIndex(0)
-        self.creator_status_label.setText(
+        panel = self.creator_panel
+        panel.creator_platform_box.setCurrentText("OnlyFans")
+        panel.creator_kind_box.setCurrentText("campaign")
+        panel.creator_brief_input.setPlainText(format_creator_brief(context))
+        panel.creator_tabs.setCurrentIndex(0)
+        panel.creator_status_label.setText(
             "OnlyFans opportunity loaded — choose an account, review the brief, then Draft.")
-        self.creator_brief_input.setFocus()
+        panel.creator_brief_input.setFocus()
 
     def _onlyfans_generate_teaser(self, context: dict) -> None:
         """Generate a real SFW clip through Creator's Higgsfield pipeline."""
@@ -2019,9 +2023,14 @@ class GodAI(QWidget):
         Ordered write → publish → market, so it walks the whole book lifecycle."""
         import os
 
-        profile = self._author_get_book_profile()
-        draft_words = len(self.author_draft_box.toPlainText().split())
-        outline = self.author_outline_box.toPlainText().strip()
+        panel = getattr(self, "author_panel", None)
+        if panel is None:
+            # Advisor asked before the Book Author workspace exists.
+            return ("Start here — fill in Title, Author and Type in the Project Bar, then open "
+                    "Book Profile and click Save Profile. Everything downstream reuses it.")
+        profile = panel.get_book_profile()
+        draft_words = len(panel.author_draft_box.toPlainText().split())
+        outline = panel.author_outline_box.toPlainText().strip()
 
         # ── Writing phase ──
         if not profile["title"]:
