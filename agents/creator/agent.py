@@ -40,10 +40,10 @@ starting points for the creator's own voice, not a stand-in for them.
 
 from __future__ import annotations
 
-from services.creator_profile import (
+from agents.creator.profile import (
     SEGMENTS, persona_block, voice_block,
 )
-from services.creator_platform_policy import get_policy
+from agents.creator.platform_policy import get_policy
 
 ACCOUNT_TYPES = ("own", "managed", "persona")
 
@@ -244,7 +244,7 @@ class CreatorAgent:
         appearance = ""
         account_id = account.get("id")
         if account_id and (account.get("account_type") or "").lower() == "persona":
-            from services.creator_profile import load_persona
+            from agents.creator.profile import load_persona
             appearance = (load_persona(account_id) or {}).get("appearance", "")
 
         subject = f"{appearance.strip()}. {descriptor}" if appearance else descriptor

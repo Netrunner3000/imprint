@@ -5,7 +5,7 @@ deliberately pure Python and free: deciding *when* to post is a cadence
 problem, not a language problem, and paying a model to lay dates out would be
 both slower and worse.
 
-The cadence comes from `services/content_calendar.py`, which the Publish mode
+The cadence comes from `agents/manuscript/content_calendar.py`, which the Publish mode
 has used for book quotes since before this existed. Same numbers, so a book
 promoted through Social and a book promoted through Publish do not disagree
 about how often to post on Instagram.

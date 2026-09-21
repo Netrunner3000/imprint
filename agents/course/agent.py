@@ -6,10 +6,10 @@ import os
 from pathlib import Path
 from typing import Optional
 
-from services.course.models import (
+from .models import (
     CourseRequest, CourseOutline, CourseAssets, LessonAssets, DifficultyLevel,
 )
-from services.course import content_generator, slide_generator, video_assembler, packager
+from . import content_generator, slide_generator, video_assembler, packager
 from providers.avatar.base import AvatarProvider, AvatarConfig
 from providers.voice.base import VoiceProvider, VoiceConfig
 

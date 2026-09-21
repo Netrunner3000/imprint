@@ -51,16 +51,16 @@ umbrella and owns its own venture rules.  User guidance:
       channel="", segment="", price_history="")` — the main entry point.
       Calls `require_ready` first, then assembles account context, the
       persona bible and voice-sample block (via
-      `services.creator_profile.persona_block` / `voice_block`) — the voice
+      `agents.creator.profile.persona_block` / `voice_block`) — the voice
       block is what keeps output from reading like generic AI copy — the
       requested `kind`, audience-segment notes
-      (`services.creator_profile.SEGMENTS`), PPV price / price-history
+      (`agents.creator.profile.SEGMENTS`), PPV price / price-history
       framing, promo-channel framing, and finally the brief itself.
     - `build_video_prompt(account, brief)` — builds a Higgsfield
       teaser-clip prompt. Deliberately safe-for-work only (Higgsfield
       moderates prompts, references and output, and prohibits explicit
       material), and pulls a persona's locked `appearance` via
-      `services.creator_profile.load_persona` so repeated renders stay the
+      `agents.creator.profile.load_persona` so repeated renders stay the
       same character rather than drifting between requests.
 
 - **`recommendations.py`** — registers Creator's `RECOMMENDATION_PROFILE`

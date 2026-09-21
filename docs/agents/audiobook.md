@@ -87,7 +87,7 @@ immediately stopping. **Start Over** clears that flag.
 
 | Location | Role |
 |---|---|
-| `services/audiobook_library.py` | Scan, resume bookkeeping, time formatting. |
-| `ui/audio_player.py` | `AudiobookPlayer` widget. |
+| `agents/audiobook/audiobook_library.py` | Scan, resume bookkeeping, time formatting. |
+| `agents/audiobook/audio_player.py` | `AudiobookPlayer` widget. |
 | `agents/audiobook/panel.py: _build_library_tab()` | The Listen tab layout and actions; the host retains compatibility entry points for workspace switching. |
 | `audiobook_progress` table | Path, position, duration, finished, last played. |

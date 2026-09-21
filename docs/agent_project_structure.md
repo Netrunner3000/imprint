@@ -74,12 +74,16 @@ permissions and ranking policy. See `docs/recommendation_system.md`.
 ## Extraction sequence
 
 1. Move flat agent implementations behind package public APIs. **Done.**
-2. Move each panel and its handlers into `agents/<key>/panel.py`. **OnlyFans,
-   Music, Site Builder, Audiobook, Client Gigs and Video done.
-   Remaining panels are incremental work. Extracted panels still expose
-   temporary host aliases for shared integrations.**
+2. Move each panel and its handlers into `agents/<key>/panel.py`. **Done
+   2026-09-21 for all ten workspaces. The temporary host aliases are retired:
+   shared integrations resolve controls through `GodAI._find_control()`.**
 3. Move purely domain-specific services under their owner; keep cross-agent
-   storage, providers, budgets and request guards shared.
+   storage, providers, budgets and request guards shared. **Done 2026-09-21:
+   book export (author); calendar, LLM parsing, PublishDrive, KDP CSV, quote
+   graphics, shorts + their widgets/worker (manuscript); platforms, publishing,
+   store (social); earnings CSV, profile, insights, platform policy (creator);
+   library + player (audiobook); the course pipeline (course). `services/`
+   retains only cross-agent modules.**
 4. Move focused tests into each agent project while retaining umbrella contract
    tests.
 5. Only then publish selected agents as repositories and attach them as proper

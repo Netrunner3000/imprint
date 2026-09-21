@@ -26,8 +26,8 @@ def db(tmp_path, monkeypatch):
     monkeypatch.setattr(database, "DB_PATH", tmp_path / "t.db")
     database.init_db()
 
-    import services.creator_profile as profile
-    import services.creator_insights as insights
+    import agents.creator.profile as profile
+    import agents.creator.insights as insights
     monkeypatch.setattr(profile, "get_connection", database.get_connection)
     monkeypatch.setattr(insights, "get_connection", database.get_connection)
 
@@ -43,14 +43,14 @@ def db(tmp_path, monkeypatch):
 
 # ── Voice ────────────────────────────────────────────────────────────────────
 def test_voice_block_is_empty_when_nothing_is_recorded(db):
-    from services.creator_profile import voice_block
+    from agents.creator.profile import voice_block
     _, account_id = db
     assert voice_block(account_id) == ""
 
 
 def test_voice_block_carries_the_samples(db):
     """Samples are what the model imitates — the rules only stop it drifting."""
-    from services.creator_profile import save_voice, voice_block
+    from agents.creator.profile import save_voice, voice_block
     _, account_id = db
     save_voice(account_id, samples="first post\nsecond post", tone="dry")
     block = voice_block(account_id)
@@ -60,14 +60,14 @@ def test_voice_block_carries_the_samples(db):
 
 def test_voice_samples_are_capped(db):
     """Beyond a handful the marginal value drops and the prompt just costs more."""
-    from services.creator_profile import MAX_SAMPLES, save_voice, voice_block
+    from agents.creator.profile import MAX_SAMPLES, save_voice, voice_block
     _, account_id = db
     save_voice(account_id, samples="\n".join(f"post {i}" for i in range(30)))
     assert voice_block(account_id).count("  — ") == MAX_SAMPLES
 
 
 def test_saving_voice_twice_updates_rather_than_duplicates(db):
-    from services.creator_profile import load_voice, save_voice
+    from agents.creator.profile import load_voice, save_voice
     database, account_id = db
     save_voice(account_id, tone="first")
     save_voice(account_id, tone="second")
@@ -80,7 +80,7 @@ def test_saving_voice_twice_updates_rather_than_duplicates(db):
 def test_voice_reaches_the_draft_prompt(db):
     """The point of the whole feature: it has to be in the prompt."""
     from agents.creator import CreatorAgent
-    from services.creator_profile import save_voice
+    from agents.creator.profile import save_voice
     _, account_id = db
     save_voice(account_id, samples="a line only this creator would write")
     messages = CreatorAgent().build_draft_prompt(
@@ -92,7 +92,7 @@ def test_voice_reaches_the_draft_prompt(db):
 # ── Persona ──────────────────────────────────────────────────────────────────
 def test_persona_block_reaches_persona_accounts_only(db):
     from agents.creator import CreatorAgent
-    from services.creator_profile import save_persona
+    from agents.creator.profile import save_persona
     _, account_id = db
     save_persona(account_id, appearance="silver hair", backstory="from Lisbon")
 
@@ -107,7 +107,7 @@ def test_persona_block_reaches_persona_accounts_only(db):
 
 
 def test_persona_seed_is_kept_for_consistent_renders(db):
-    from services.creator_profile import persona_seed, save_persona
+    from agents.creator.profile import persona_seed, save_persona
     _, account_id = db
     save_persona(account_id, appearance="x", seed=4821)
     assert persona_seed(account_id) == 4821
@@ -116,7 +116,7 @@ def test_persona_seed_is_kept_for_consistent_renders(db):
 def test_persona_appearance_is_reused_in_video_prompts(db):
     """Without it every render is a different character."""
     from agents.creator import CreatorAgent
-    from services.creator_profile import save_persona
+    from agents.creator.profile import save_persona
     _, account_id = db
     save_persona(account_id, appearance="silver hair, green coat")
     prompt = CreatorAgent().build_video_prompt(
@@ -155,13 +155,13 @@ def _post(database, account_id, price, revenue, kind="ppv"):
 
 
 def test_price_history_is_empty_without_data(db):
-    from services.creator_insights import price_history
+    from agents.creator.insights import price_history
     _, account_id = db
     assert price_history(account_id) == ""
 
 
 def test_price_history_reports_the_average_per_price(db):
-    from services.creator_insights import price_history
+    from agents.creator.insights import price_history
     database, account_id = db
     _post(database, account_id, 10.0, 40.0)
     _post(database, account_id, 10.0, 60.0)
@@ -172,14 +172,14 @@ def test_price_history_reports_the_average_per_price(db):
 def test_thin_evidence_is_labelled(db):
     """Three sales at $15 is an anecdote, and presenting it as a finding is
     worse than not presenting it."""
-    from services.creator_insights import price_history
+    from agents.creator.insights import price_history
     database, account_id = db
     _post(database, account_id, 15.0, 20.0)
     assert "few sends" in price_history(account_id)
 
 
 def test_asset_outcome_keeps_currency_and_evidence_separate(db):
-    from services.creator_insights import asset_outcomes, record_outcome
+    from agents.creator.insights import asset_outcomes, record_outcome
     database, account_id = db
     conn = database.get_connection()
     cur = conn.execute(
@@ -206,7 +206,7 @@ def test_asset_outcome_keeps_currency_and_evidence_separate(db):
 
 def test_price_history_reaches_the_ppv_prompt(db):
     from agents.creator import CreatorAgent
-    from services.creator_insights import price_history
+    from agents.creator.insights import price_history
     database, account_id = db
     _post(database, account_id, 12.0, 90.0)
     messages = CreatorAgent().build_draft_prompt(
@@ -216,7 +216,7 @@ def test_price_history_reaches_the_ppv_prompt(db):
 
 
 def test_recording_revenue_marks_it_posted(db):
-    from services.creator_insights import record_revenue
+    from agents.creator.insights import record_revenue
     database, account_id = db
     conn = database.get_connection()
     conn.execute(
@@ -235,13 +235,13 @@ def test_recording_revenue_marks_it_posted(db):
 
 def test_account_summary_handles_no_subscribers(db):
     """Division by zero is the obvious way this breaks on a new account."""
-    from services.creator_insights import account_summary
+    from agents.creator.insights import account_summary
     _, account_id = db
     assert account_summary(account_id)["per_subscriber"] == 0.0
 
 
 def test_agency_overview_lists_every_account(db):
-    from services.creator_insights import agency_overview
+    from agents.creator.insights import agency_overview
     database, _ = db
     conn = database.get_connection()
     conn.execute(
@@ -255,7 +255,7 @@ def test_agency_overview_lists_every_account(db):
 
 @pytest.mark.parametrize("rate,expected_manager", [(0, 0.0), (20, 200.0), (100, 1000.0)])
 def test_commission_split(rate, expected_manager):
-    from services.creator_insights import commission
+    from agents.creator.insights import commission
     split = commission(1000.0, rate)
     assert split["manager"] == pytest.approx(expected_manager)
     assert split["manager"] + split["creator"] == pytest.approx(1000.0)
@@ -263,7 +263,7 @@ def test_commission_split(rate, expected_manager):
 
 def test_commission_rate_is_clamped():
     """A typo in a percentage field should not invent money."""
-    from services.creator_insights import commission
+    from agents.creator.insights import commission
     assert commission(1000.0, 500)["manager"] == pytest.approx(1000.0)
     assert commission(1000.0, -50)["manager"] == pytest.approx(0.0)
 

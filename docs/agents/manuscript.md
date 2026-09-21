@@ -29,23 +29,23 @@ Five tabs covering the post-draft, pre/post-launch side of publishing a book:
 Sales JSON and chat responses in the Overview text browser. PNGs in `data/quote_graphics/`. MP4s in `data/shorts/`. Todos persisted in the `manuscript_todos` DB table. Calendar exports a CSV wherever you choose to save it.
 
 ## How it works
-`ManuscriptAgent.build_messages()` injects the last-fetched sales JSON as system-prompt context so Q&A stays grounded. `build_quote_suggestions_messages()` uses a dedicated prompt that requires quotes to be exact substrings of the source (verified in testing — the model does not paraphrase). `services/quote_graphics.py` renders a vertical gradient + wrapped serif text with Pillow — no external API. `services/shorts_generator.py` narrates via `providers/voice/` (mock/system `say` by default, ElevenLabs optional) then combines the narration with the quote-graphic PNG via a single `ffmpeg -loop 1 -i image -i audio` call — the exact pattern used by `services/course/video_assembler.py`.
+`ManuscriptAgent.build_messages()` injects the last-fetched sales JSON as system-prompt context so Q&A stays grounded. `build_quote_suggestions_messages()` uses a dedicated prompt that requires quotes to be exact substrings of the source (verified in testing — the model does not paraphrase). `agents/manuscript/quote_graphics.py` renders a vertical gradient + wrapped serif text with Pillow — no external API. `agents/manuscript/shorts_generator.py` narrates via `providers/voice/` (mock/system `say` by default, ElevenLabs optional) then combines the narration with the quote-graphic PNG via a single `ffmpeg -loop 1 -i image -i audio` call — the exact pattern used by `agents/course/video_assembler.py`.
 
-**Calendar** splits scheduling from writing deliberately: `services/content_calendar.py: build_calendar()` is pure Python (no LLM) that assigns quotes to day/platform/format slots by a fixed weekly cadence per platform (TikTok 4/wk short, Instagram 3/wk alternating graphic/short, Pinterest 7/wk graphic), cycling quotes if there are more slots than quotes — deterministic and free. Captions are the one LLM step: all slots go out in a *single* batched call (`build_calendar_caption_messages()`), not one call per post, and come back as a JSON array parsed by the same `_parse_quote_list()` helper Quote Finder uses. Each row's Graphic / Short button reuses the exact same generation path as Quote Finder and Shorts — `render_quote_graphic()` / `ShortsWorker` — so there's one asset pipeline, not three.
+**Calendar** splits scheduling from writing deliberately: `agents/manuscript/content_calendar.py: build_calendar()` is pure Python (no LLM) that assigns quotes to day/platform/format slots by a fixed weekly cadence per platform (TikTok 4/wk short, Instagram 3/wk alternating graphic/short, Pinterest 7/wk graphic), cycling quotes if there are more slots than quotes — deterministic and free. Captions are the one LLM step: all slots go out in a *single* batched call (`build_calendar_caption_messages()`), not one call per post, and come back as a JSON array parsed by the same `_parse_quote_list()` helper Quote Finder uses. Each row's Graphic / Short button reuses the exact same generation path as Quote Finder and Shorts — `render_quote_graphic()` / `ShortsWorker` — so there's one asset pipeline, not three.
 
 ## Under the hood — files & functions
 | Location | Role |
 |---|---|
 | `agents/manuscript_agent.py` | `ManuscriptAgent` — sales-summary, PublishDrive/KDP parsing, quote-suggestion, and calendar-caption prompts. |
-| `services/publishdrive_client.py` | PublishDrive REST wrapper (`PUBLISHDRIVE_API_KEY`). |
-| `services/kdp_csv_parser.py` | KDP CSV ingestion + dedup; `manuscript_seed_todos()` seeds the checklist. |
-| `services/quote_graphics.py` | `render_quote_graphic()` — Pillow gradient + text render, 3 themes, 2 sizes. |
-| `services/shorts_generator.py` | `render_short()` — TTS + ffmpeg image/audio combine. |
-| `services/content_calendar.py` | `build_calendar()` — pure scheduling, no LLM, no deps. |
+| `agents/manuscript/publishdrive_client.py` | PublishDrive REST wrapper (`PUBLISHDRIVE_API_KEY`). |
+| `agents/manuscript/kdp_csv_parser.py` | KDP CSV ingestion + dedup; `manuscript_seed_todos()` seeds the checklist. |
+| `agents/manuscript/quote_graphics.py` | `render_quote_graphic()` — Pillow gradient + text render, 3 themes, 2 sizes. |
+| `agents/manuscript/shorts_generator.py` | `render_short()` — TTS + ffmpeg image/audio combine. |
+| `agents/manuscript/content_calendar.py` | `build_calendar()` — pure scheduling, no LLM, no deps. |
 | `providers/voice/mock.py` / `elevenlabs.py` | TTS backends (free macOS `say`, or ElevenLabs). |
 | `services/narrator/converter.py: load_text()` | Reused for Quote Finder's file loader (pdf/epub/mobi/txt extraction). |
 | `main.py: build_manuscript_panel()` + tab builders | 5-tab UI. |
-| `main.py: quote_finder_*`, `manuscript_generate_*`, `_quote_finder_*` | Handlers + the `ShortsWorker` background thread. |
+| `agents/manuscript/panel.py` | Handlers (`quote_finder_*`, `manuscript_generate_*`, `_quote_finder_*`) + the `ShortsWorker` background thread (`agents/manuscript/workers.py`). |
 | `main.py: manuscript_generate_calendar()`, `calendar_generate_asset()`, `manuscript_export_calendar_csv()` | Calendar handlers. |
 | `services/database.py` | `manuscript_metrics`, `manuscript_kdp_ingested`, `manuscript_todos` tables. |
 

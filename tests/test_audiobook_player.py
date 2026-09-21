@@ -31,7 +31,7 @@ def library(tmp_path, monkeypatch):
     import services.database as database
     monkeypatch.setattr(database, "DB_PATH", tmp_path / "t.db")
     database.init_db()
-    import services.audiobook_library as lib
+    import agents.audiobook.audiobook_library as lib
     monkeypatch.setattr(lib, "get_connection", database.get_connection)
     return lib
 
@@ -176,7 +176,7 @@ def test_stopping_does_not_overwrite_the_saved_position(app, audio_file,
                                                         library, monkeypatch):
     """The bug that defeated the whole feature: stop() saved the real position,
     then QMediaPlayer reset to 0 and the state change saved over it."""
-    import ui.audio_player as player_module
+    import agents.audiobook.audio_player as player_module
     monkeypatch.setattr(player_module, "save_position", library.save_position)
 
     player = player_module.AudiobookPlayer()
@@ -193,7 +193,7 @@ def test_a_reopened_player_resumes_where_it_stopped(app, audio_file,
                                                     library, monkeypatch):
     """The second bug: the seek was applied before the media was seekable, so
     it looked applied and played from the beginning anyway."""
-    import ui.audio_player as player_module
+    import agents.audiobook.audio_player as player_module
     monkeypatch.setattr(player_module, "save_position", library.save_position)
 
     first = player_module.AudiobookPlayer()
@@ -213,19 +213,19 @@ def test_a_reopened_player_resumes_where_it_stopped(app, audio_file,
 
 
 def test_saving_with_nothing_loaded_is_harmless(app, library, monkeypatch):
-    import ui.audio_player as player_module
+    import agents.audiobook.audio_player as player_module
     monkeypatch.setattr(player_module, "save_position", library.save_position)
     player_module.AudiobookPlayer().save_now()
 
 
 def test_controls_are_disabled_until_something_is_loaded(app):
-    from ui.audio_player import AudiobookPlayer
+    from agents.audiobook.audio_player import AudiobookPlayer
     assert not AudiobookPlayer().play_btn.isEnabled()
 
 
 def test_player_has_sleep_and_keyboard_transport_controls(app, library, audio_file):
     from PySide6.QtGui import QShortcut
-    from ui.audio_player import AudiobookPlayer
+    from agents.audiobook.audio_player import AudiobookPlayer
 
     player = AudiobookPlayer()
     player.load(audio_file)

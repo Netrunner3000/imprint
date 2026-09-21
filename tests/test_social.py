@@ -23,7 +23,7 @@ from agents.social.agent import (  # noqa: E402
     ANGLES, build_clip_brief_messages, build_post_messages, over_limit,
     split_variants,
 )
-from services import social_platforms  # noqa: E402
+from agents.social import platforms  # noqa: E402
 
 
 CAMPAIGN = {
@@ -35,7 +35,7 @@ CAMPAIGN = {
 
 # ── Platforms ────────────────────────────────────────────────────────────────
 def test_every_platform_declares_a_format_it_supports():
-    for platform in social_platforms.PLATFORMS:
+    for platform in platforms.PLATFORMS:
         assert platform.formats, f"{platform.name} lists no formats"
         assert set(platform.formats) <= {"text", "image", "clip"}
 
@@ -47,19 +47,19 @@ def test_a_platform_that_cannot_post_says_why():
     difference between "not wired up yet" and "needs a business account and an
     app review", and act accordingly.
     """
-    for platform in social_platforms.PLATFORMS:
+    for platform in platforms.PLATFORMS:
         if not platform.ready_to_post:
             assert len(platform.posting_note) > 40, (
                 f"{platform.name} is drafting-only with no useful explanation")
 
 
 def test_name_lookup_round_trips():
-    for platform in social_platforms.PLATFORMS:
-        assert social_platforms.key_for_name(platform.name) == platform.key
+    for platform in platforms.PLATFORMS:
+        assert platforms.key_for_name(platform.name) == platform.key
 
 
 # ── Drafting ─────────────────────────────────────────────────────────────────
-@pytest.mark.parametrize("platform", social_platforms.PLATFORMS,
+@pytest.mark.parametrize("platform", platforms.PLATFORMS,
                          ids=lambda p: p.key)
 def test_the_prompt_carries_the_platform_limit_and_guidance(platform):
     """A post written without the platform in the prompt is a generic post.
@@ -79,7 +79,7 @@ def test_the_prompt_carries_the_platform_limit_and_guidance(platform):
 def test_the_system_prompt_forbids_inventing_evidence():
     """A promotion tool that invents a testimonial is a liability, not a
     feature — and it is the user who finds out last."""
-    system = build_post_messages(CAMPAIGN, social_platforms.get("x"),
+    system = build_post_messages(CAMPAIGN, platforms.get("x"),
                                  "launch")[0]["content"]
     for forbidden in ("testimonials", "sales figures", "engagement bait"):
         assert forbidden in system
@@ -87,15 +87,15 @@ def test_the_system_prompt_forbids_inventing_evidence():
 
 @pytest.mark.parametrize("angle", list(ANGLES))
 def test_every_angle_reaches_the_prompt(angle):
-    prompt = build_post_messages(CAMPAIGN, social_platforms.get("reddit"),
+    prompt = build_post_messages(CAMPAIGN, platforms.get("reddit"),
                                  angle)[-1]["content"]
     assert ANGLES[angle][:30] in prompt
 
 
 def test_variants_are_asked_for_only_when_more_than_one_is_wanted():
-    one = build_post_messages(CAMPAIGN, social_platforms.get("x"), "launch",
+    one = build_post_messages(CAMPAIGN, platforms.get("x"), "launch",
                               variants=1)[-1]["content"]
-    three = build_post_messages(CAMPAIGN, social_platforms.get("x"), "launch",
+    three = build_post_messages(CAMPAIGN, platforms.get("x"), "launch",
                                 variants=3)[-1]["content"]
     assert "genuinely different" not in one
     assert "3 genuinely different" in three
@@ -106,20 +106,20 @@ def test_a_clip_brief_asks_for_one_sentence_not_a_script():
     scripts from, which is why adding video cost a prompt rather than a second
     pipeline."""
     prompt = build_clip_brief_messages(
-        CAMPAIGN, social_platforms.get("tiktok"), 30)[-1]["content"]
+        CAMPAIGN, platforms.get("tiktok"), 30)[-1]["content"]
     assert "single sentence" in prompt
     assert "30 seconds" in prompt
 
 
 # ── Limits and variants ──────────────────────────────────────────────────────
 def test_over_limit_counts_the_overshoot():
-    x = social_platforms.get("x")
+    x = platforms.get("x")
     assert over_limit("short", x) == 0
     assert over_limit("y" * 300, x) == 20
 
 
 def test_a_platform_without_a_limit_never_reports_an_overshoot():
-    reddit = social_platforms.get("reddit")
+    reddit = platforms.get("reddit")
     assert over_limit("y" * 50_000, reddit) >= 0
 
 
@@ -142,7 +142,8 @@ def test_a_response_that_ignored_the_separator_is_still_usable():
 # ── Scheduling ───────────────────────────────────────────────────────────────
 @pytest.fixture
 def store(tmp_path):
-    from services import database, social_store
+    from services import database
+    from agents.social import store
 
     original = database.DB_PATH
     database.DB_PATH = tmp_path / "social.db"
@@ -151,7 +152,7 @@ def store(tmp_path):
     conn.commit()
     conn.close()
     try:
-        yield social_store
+        yield store
     finally:
         database.DB_PATH = original
 
@@ -229,52 +230,52 @@ def test_no_publisher_claims_to_be_ready_without_its_credentials(monkeypatch):
     """`configured` is what gates the Post button. A publisher that reports
     ready without credentials produces a failure at the moment of posting,
     which is the worst possible moment."""
-    from services import social_publishing
+    from agents.social import publishing
 
     for name in ("REDDIT_CLIENT_ID", "REDDIT_CLIENT_SECRET",
                  "REDDIT_USERNAME", "REDDIT_PASSWORD",
                  "PINTEREST_ACCESS_TOKEN"):
         monkeypatch.delenv(name, raising=False)
 
-    assert not social_publishing.PUBLISHERS["reddit"].configured
-    assert not social_publishing.PUBLISHERS["pinterest"].configured
+    assert not publishing.PUBLISHERS["reddit"].configured
+    assert not publishing.PUBLISHERS["pinterest"].configured
 
 
 def test_an_unconfigured_publisher_names_what_is_missing(monkeypatch):
-    from services import social_publishing
+    from agents.social import publishing
 
     for name in ("REDDIT_CLIENT_ID", "REDDIT_CLIENT_SECRET",
                  "REDDIT_USERNAME", "REDDIT_PASSWORD"):
         monkeypatch.delenv(name, raising=False)
-    why = social_publishing.PUBLISHERS["reddit"].why_not()
+    why = publishing.PUBLISHERS["reddit"].why_not()
     assert "REDDIT_CLIENT_ID" in why
 
 
 def test_status_lines_cover_every_platform_not_just_the_postable_ones():
     """The panel has to explain the drafting-only platforms too, or five of
     eight buttons look broken rather than gated."""
-    from services import social_publishing
+    from agents.social import publishing
 
-    names = {name for name, _, _ in social_publishing.status_lines()}
-    assert names == set(social_platforms.names())
+    names = {name for name, _, _ in publishing.status_lines()}
+    assert names == set(platforms.names())
 
 
 def test_reddit_refuses_to_post_without_a_subreddit_and_title(monkeypatch):
     """Both are required by the API, and guessing either is how a promotion
     post lands in the wrong community."""
-    from services import social_publishing
+    from agents.social import publishing
 
-    publisher = social_publishing.RedditPublisher()
+    publisher = publishing.RedditPublisher()
     monkeypatch.setattr(publisher, "_token", lambda: "token")
-    with pytest.raises(social_publishing.PublishError, match="subreddit"):
+    with pytest.raises(publishing.PublishError, match="subreddit"):
         publisher.publish("body", title="t")
-    with pytest.raises(social_publishing.PublishError, match="title"):
+    with pytest.raises(publishing.PublishError, match="title"):
         publisher.publish("body", subreddit="books")
 
 
 def test_youtube_refuses_to_upload_without_a_file():
-    from services import social_publishing
+    from agents.social import publishing
 
-    publisher = social_publishing.YouTubePublisher()
-    with pytest.raises(social_publishing.PublishError, match="clip"):
+    publisher = publishing.YouTubePublisher()
+    with pytest.raises(publishing.PublishError, match="clip"):
         publisher.publish("description", media_path="", title="t")

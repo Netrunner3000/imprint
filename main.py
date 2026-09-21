@@ -64,7 +64,7 @@ from services.chat_projects import (
 from services.report_exporter import ReportExporter
 from services.usage_tracker import UsageTracker
 from services.tool_runner import ToolRunner
-from services.database import init_db, get_setting, save_setting, get_connection
+from services.database import init_db, save_setting
 from services.registry import Registry
 from services.validator import Validator
 from services.run_logger import RunLogger
@@ -77,7 +77,7 @@ from agents.webdesign import WebdesignAgent, WebdesignPanel
 from agents.music import MusicAgent, MusicPanel
 from agents.fiverr import FiverrAgent, FiverrPanel
 from agents.video import VideoPanel
-from agents.manuscript import ManuscriptPanel
+from agents.manuscript import ManuscriptPanel, ShortsWorker
 from agents.creator import CreatorPanel
 from agents.author import AuthorPanel
 from agents.creator import (
@@ -89,27 +89,6 @@ from services.recommendations import RecommendationContext, RecommendationEngine
 from services.recommendations.catalog import (
     media_candidate, text_candidates,
 )
-from services.higgsfield_client import (
-    HiggsfieldClient, ContentPolicyError, check_prompt,
-)
-from services.creator_csv import ingest_creator_csv
-from services.creator_profile import (
-    SEGMENTS, load_persona, load_voice, reference_images,
-    save_persona, save_voice,
-)
-from services.creator_insights import (
-    account_summary, agency_overview, asset_outcomes, commission,
-    hook_results, price_history, price_points, record_outcome,
-    record_revenue, top_content,
-)
-from ui.book_widgets import (
-    make_theme_box, make_size_box, make_voice_source_box,
-    theme_key, size_key, unique_output_path,
-)
-from ui.creator_earnings import CreatorEarningsView
-from ui.creator_outcome_dialog import CreatorOutcomeDialog
-from ui.creator_policy_dialog import CreatorPolicyDialog
-from services.creator_platform_policy import get_policy, save_policy
 
 
 # Writable base = project root in dev, ~/Library/Application Support/Imprint when frozen.
@@ -168,12 +147,7 @@ AGENT_PRETTY_NAMES = {spec.key: spec.label for spec in AGENT_SPECS}
 
 
 from ui.panels.base import AgentPanel
-from ui.workers import (
-    VideoWorker,
-    ChatWorker, ModelPullWorker, FiverrImageWorker, ShortsWorker,
-    HiggsfieldEstimateWorker, HiggsfieldWorker,
-    VideoGenerationWorker,
-)
+from ui.workers import ChatWorker, ModelPullWorker, FiverrImageWorker
 from ui.forms import (
     CONTENT_MAX_WIDTH, CONTROL_HEIGHT, HEADER_HEIGHT, LG, MD, RAIL_LEFT_WIDTH,
     RAIL_RIGHT_WIDTH, SM, XS, Meter, StatBlock, combo, field, form_grid,
@@ -2595,7 +2569,7 @@ class GodAI(QWidget):
             self.refresh_audiobook_books()
             self.refresh_audiobook_library()
         elif agent_name == "manuscript":
-            from services.kdp_csv_parser import manuscript_seed_todos
+            from agents.manuscript import manuscript_seed_todos
             manuscript_seed_todos()
             self._load_manuscript_todos()
             self._refresh_next_step_tip()

@@ -7,10 +7,10 @@ and Publisher (manuscript) agents.
 These cover the parts of the book pipeline that have no GUI and no LLM
 dependency, so they run fast and deterministically:
 
-  * services/book_exporter.py   — chapter detection, offsets, EPUB/DOCX/PDF export
-  * services/content_calendar.py — posting-schedule generation
-  * services/kdp_csv_parser.py  — KDP sales CSV summarisation
-  * services/llm_parsing.py     — tolerant parsing of LLM list responses
+  * agents/author/book_exporter.py — chapter detection, offsets, EPUB/DOCX/PDF export
+  * agents/manuscript/content_calendar.py — posting-schedule generation
+  * agents/manuscript/kdp_csv_parser.py — KDP sales CSV summarisation
+  * agents/manuscript/llm_parsing.py — tolerant parsing of LLM list responses
 
 Deliberately NOT covered here: anything that renders pixels (quote_graphics),
 shells out to ffmpeg (shorts_generator), or calls a live LLM.
@@ -28,12 +28,12 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from datetime import date
 from pathlib import Path
 
-from services.book_exporter import (
+from agents.author.book_exporter import (
     split_into_chapters, find_chapter_offsets, export_book,
 )
-from services.content_calendar import build_calendar, CADENCE
-from services.kdp_csv_parser import summarise_kdp_rows, parse_kdp_csv
-from services.llm_parsing import parse_string_list
+from agents.manuscript.content_calendar import build_calendar, CADENCE
+from agents.manuscript.kdp_csv_parser import summarise_kdp_rows, parse_kdp_csv
+from agents.manuscript.llm_parsing import parse_string_list
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -387,7 +387,7 @@ class TestUniqueOutputPath:
     two graphics inside the same tick silently overwrote the first."""
 
     def test_rapid_calls_never_collide(self, tmp_path):
-        from ui.book_widgets import unique_output_path
+        from agents.manuscript.book_widgets import unique_output_path
         paths = []
         for _ in range(10):
             p = unique_output_path(tmp_path, "quote", ".png")
@@ -396,13 +396,13 @@ class TestUniqueOutputPath:
         assert len(set(paths)) == 10
 
     def test_respects_stem_and_suffix(self, tmp_path):
-        from ui.book_widgets import unique_output_path
+        from agents.manuscript.book_widgets import unique_output_path
         p = unique_output_path(tmp_path, "short", ".mp4")
         assert p.name.startswith("short_")
         assert p.suffix == ".mp4"
 
     def test_creates_missing_directory(self, tmp_path):
-        from ui.book_widgets import unique_output_path
+        from agents.manuscript.book_widgets import unique_output_path
         target = tmp_path / "nested" / "dir"
         p = unique_output_path(target, "quote", ".png")
         assert target.exists()
@@ -410,7 +410,7 @@ class TestUniqueOutputPath:
 
     def test_paired_png_and_mp4_share_a_stem(self, tmp_path):
         # Shorts derive the image path from the video path, so they must match.
-        from ui.book_widgets import unique_output_path
+        from agents.manuscript.book_widgets import unique_output_path
         video = unique_output_path(tmp_path, "short", ".mp4")
         image = video.with_suffix(".png")
         assert video.stem == image.stem

@@ -10,7 +10,7 @@
 ## v1 — current
 
 - [x] `P1` `security` Bill and guard course runs. Fixed 2026-09-21: `run_course.py` prints an upper-bound estimate (1 outline call + modules × lessons lesson calls, priced through `UsageTracker.calculate_cost_eur`), shows today's studio spend, requires y/N (`--yes` for scripted runs), and warns that ElevenLabs/HeyGen provider billing is outside the estimate. `content_generator` builds its client with the shared api_limits timeout/retry policy, degrades gracefully on a missing key, tallies real token usage per call (also on failure partway), joins text blocks instead of indexing `content[0]`, and the CLI logs the run's actual spend through `UsageTracker` under `agent='course'` — course runs land in the same daily totals the GUI enforces.
-- [ ] `P1` Move `services/course/` under this package after dependency review.
+- [x] `P1` Move `services/course/` under this package after dependency review. Done 2026-09-21: `models.py`, `content_generator.py`, `slide_generator.py`, `video_assembler.py` and `packager.py` now live at `agents/course/`; `agent.py` imports them relatively, `run_course.py` via `agents.course.*`; docs updated; `services/course/` removed.
 - [ ] `P2` Add a supported Imprint workspace instead of CLI-only operation.
 - [ ] `P2` Add resumable stage manifests and artifact validation.
 - [ ] `P3` Add focused tests for provider and packaging failures.

@@ -179,7 +179,7 @@ def test_video_job_done_states():
 
 # ── Earnings CSV ─────────────────────────────────────────────────────────────
 def test_earnings_csv_totals(tmp_path):
-    from services.creator_csv import parse_creator_csv
+    from agents.creator.earnings_csv import parse_creator_csv
 
     csv_path = tmp_path / "statement.csv"
     csv_path.write_text(
@@ -198,7 +198,7 @@ def test_earnings_csv_totals(tmp_path):
 def test_earnings_csv_survives_unknown_columns(tmp_path):
     """Export formats differ per platform and change over time; an unfamiliar
     header should yield zeros, not an exception."""
-    from services.creator_csv import parse_creator_csv
+    from agents.creator.earnings_csv import parse_creator_csv
 
     csv_path = tmp_path / "odd.csv"
     csv_path.write_text("Foo,Bar\n1,2\n", encoding="utf-8")
@@ -208,7 +208,7 @@ def test_earnings_csv_survives_unknown_columns(tmp_path):
 
 
 def test_empty_earnings_csv_is_handled(tmp_path):
-    from services.creator_csv import parse_creator_csv
+    from agents.creator.earnings_csv import parse_creator_csv
 
     csv_path = tmp_path / "empty.csv"
     csv_path.write_text("", encoding="utf-8")

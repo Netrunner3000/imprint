@@ -18,9 +18,9 @@ narration, optional avatar video and a packaged course.  Its public API is
   - `CourseAgent.build_messages(prompt)` — chat-panel system prompt that asks
     for topic, difficulty, target audience and scope up front.
   - `CourseAgent.run(request)` — the full pipeline: generates the outline via
-    `services.course.content_generator`, writes `outline.json`, renders the
+    `agents.course.content_generator`, writes `outline.json`, renders the
     title slide, runs `_process_lesson` for every lesson in every module, then
-    packages everything into a browsable course via `services.course.packager`.
+    packages everything into a browsable course via `agents.course.packager`.
   - `CourseAgent._process_lesson(...)` — per lesson: generates script/slides/
     quiz content, saves `script.txt` and `quiz.json`, renders slide images and
     a `slides.pptx`, synthesizes narration audio, generates the avatar video,
@@ -30,5 +30,6 @@ narration, optional avatar video and a packaged course.  Its public API is
   - `_safe_name(s)` — filesystem-safe slug helper used for output directory
     and file names.
 
-Course-specific generation services currently live under `services/course/`.
+Course-specific generation modules live in this package: `models.py`,
+`content_generator.py`, `slide_generator.py`, `video_assembler.py`, `packager.py`.
 User guidance: `docs/agents/course.md`.

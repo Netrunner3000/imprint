@@ -181,34 +181,6 @@ class FiverrImageWorker(QThread):
         self.all_done_signal.emit(paths)
 
 
-class ShortsWorker(QThread):
-    """Narrates a quote and renders it into a short vertical MP4."""
-    status_signal = Signal(str)
-    done_signal = Signal(str)   # output video path
-    error_signal = Signal(str)
-
-    def __init__(self, quote: str, image_path: Path, output_path: Path,
-                 use_elevenlabs: bool, voice_id: str):
-        super().__init__()
-        self.quote = quote
-        self.image_path = image_path
-        self.output_path = output_path
-        self.use_elevenlabs = use_elevenlabs
-        self.voice_id = voice_id
-
-    def run(self):
-        from services.shorts_generator import render_short
-        try:
-            self.status_signal.emit("[Narrating…]")
-            render_short(
-                self.quote, self.image_path, self.output_path,
-                use_elevenlabs=self.use_elevenlabs, voice_id=self.voice_id,
-            )
-            self.done_signal.emit(str(self.output_path))
-        except Exception as e:
-            self.error_signal.emit(str(e))
-
-
 class HiggsfieldEstimateWorker(QThread):
     """Upload any reference image and price the exact request off the UI thread."""
 

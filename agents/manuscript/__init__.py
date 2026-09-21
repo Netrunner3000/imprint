@@ -2,7 +2,8 @@
 
 from .agent import ManuscriptAgent
 
-__all__ = ["ManuscriptAgent", "ManuscriptPanel"]
+__all__ = ["ManuscriptAgent", "ManuscriptPanel", "ShortsWorker",
+           "manuscript_seed_todos"]
 
 
 def __getattr__(name):
@@ -11,4 +12,10 @@ def __getattr__(name):
     if name == "ManuscriptPanel":
         from .panel import ManuscriptPanel
         return ManuscriptPanel
+    if name == "ShortsWorker":
+        from .workers import ShortsWorker
+        return ShortsWorker
+    if name == "manuscript_seed_todos":
+        from .kdp_csv_parser import manuscript_seed_todos
+        return manuscript_seed_todos
     raise AttributeError(name)

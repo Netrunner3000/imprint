@@ -9,7 +9,7 @@ import os
 from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont
 
-GRAPHICS_DIR = Path(__file__).resolve().parent.parent / "data" / "quote_graphics"
+GRAPHICS_DIR = Path(__file__).resolve().parents[2] / "data" / "quote_graphics"
 GRAPHICS_DIR.mkdir(parents=True, exist_ok=True)
 
 SIZES = {

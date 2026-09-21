@@ -1,6 +1,6 @@
 # SOCIAL MEDIA CAMPAIGN MANAGER — the public funnel
 
-`key: social` · class: `agents/social/agent.py → build_post_messages()` · panel: `build_social_panel()` · storage: `services/social_store.py` · posting: `services/social_publishing.py`
+`key: social` · class: `agents/social/agent.py → build_post_messages()` · panel: `build_social_panel()` · storage: `agents/social/store.py` · posting: `agents/social/publishing.py`
 
 ## What it does
 Promotes anything the studio made — a book, a release, a product, a gig — across the public platforms. Writes per platform, schedules at each platform's own cadence, and posts directly where the API allows it.
@@ -33,7 +33,7 @@ A launch announcement and a behind-the-scenes note are different writing jobs, a
 `launch` is the one everyone reaches for and the one that works least often.
 
 ## Written per platform, not written once
-The same announcement is a different piece of writing on each platform, and not because of length. `services/social_platforms.py` carries the guidance per platform and it goes into the prompt verbatim — Reddit removes posts that read as marketing, Pinterest is a search engine wearing a mood board, X gives you seven words. Character limits are checked live in the editor, because models overshoot them and an over-length post is a rejected API call at the worst moment.
+The same announcement is a different piece of writing on each platform, and not because of length. `agents/social/platforms.py` carries the guidance per platform and it goes into the prompt verbatim — Reddit removes posts that read as marketing, Pinterest is a search engine wearing a mood board, X gives you seven words. Character limits are checked live in the editor, because models overshoot them and an over-length post is a rejected API call at the worst moment.
 
 ## What can actually post
 | Platform | Status |
@@ -64,7 +64,7 @@ not sales attribution; compare like audiences and windows before changing the
 campaign. Drafts and scheduled items cannot carry observed metrics.
 
 ## Cadence
-`services/social_store.CADENCE` — posts per week per platform, spread through the week rather than stacked. Reddit is one. That is not timidity: posting more often than that is how promotional accounts get banned, whatever the API allows.
+`agents/social/store.CADENCE` — posts per week per platform, spread through the week rather than stacked. Reddit is one. That is not timidity: posting more often than that is how promotional accounts get banned, whatever the API allows.
 
 ## Cooperation with Video
 **Make a Clip** writes a one-sentence topic brief, hands it to the same `produce()` the Video tab uses at the platform's aspect and length, and files the finished mp4 against the campaign. Social owns no rendering of its own — adding video to social cost a prompt, not a second pipeline.
@@ -73,7 +73,7 @@ campaign. Drafts and scheduled items cannot carry observed metrics.
 | Location | Role |
 |---|---|
 | `agents/social_agent.py` | Prompts, angles, variant splitting, limit checks. |
-| `services/social_platforms.py` | Per-platform limits, guidance, formats, and what posting really takes. |
-| `services/social_store.py` | Campaigns, posts, and the cadence arithmetic. Pure Python, no LLM. |
-| `services/social_publishing.py` | The publishers that can actually post, and why the others cannot. |
+| `agents/social/platforms.py` | Per-platform limits, guidance, formats, and what posting really takes. |
+| `agents/social/store.py` | Campaigns, posts, and the cadence arithmetic. Pure Python, no LLM. |
+| `agents/social/publishing.py` | The publishers that can actually post, and why the others cannot. |
 | `main.py: build_social_panel()` | Campaign, Compose, and the Draft / Schedule / Accounts tabs. |

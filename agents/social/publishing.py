@@ -1,6 +1,6 @@
 """Actually posting, for the platforms where that is possible today.
 
-`services/social_platforms.py` says which those are and why. This module is the
+`agents/social/platforms.py` says which those are and why. This module is the
 mechanics for them, and it is written to fail loudly and early rather than
 half-post: every publisher answers `configured` before it is offered, and a
 publisher that cannot run says what is missing in the same sentence.
@@ -20,7 +20,7 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
-from services.social_platforms import get as get_platform
+from agents.social.platforms import get as get_platform
 
 
 class PublishError(RuntimeError):
@@ -259,7 +259,7 @@ def status_lines() -> list[tuple[str, bool, str]]:
     say plainly which are drafting-only and why rather than leaving the user
     to work out that four of the buttons do nothing.
     """
-    from services.social_platforms import PLATFORMS
+    from agents.social.platforms import PLATFORMS
 
     lines = []
     for platform in PLATFORMS:

@@ -11,9 +11,9 @@ from __future__ import annotations
 from PySide6.QtWidgets import QComboBox, QLineEdit
 
 from providers.voice.registry import VOICE_SOURCES, list_voices_for_source
-from services.quote_graphics import THEMES
+from agents.manuscript.quote_graphics import THEMES
 
-# Display order for the theme dropdown; values map to services.quote_graphics.THEMES keys.
+# Display order for the theme dropdown; values map to agents.manuscript.quote_graphics.THEMES keys.
 THEME_LABELS = [name.capitalize() for name in THEMES]
 
 SIZE_SQUARE = "Square (1080×1080)"
@@ -29,7 +29,7 @@ def make_theme_box() -> QComboBox:
 
 
 def theme_key(box: QComboBox) -> str:
-    """The services.quote_graphics theme key for the current selection."""
+    """The agents.manuscript.quote_graphics theme key for the current selection."""
     return box.currentText().lower()
 
 
@@ -50,13 +50,6 @@ def make_voice_source_box() -> QComboBox:
     box = QComboBox()
     box.addItems(VOICE_SOURCES)
     return box
-
-
-def make_attribution_input(placeholder: str = "Your book title") -> QLineEdit:
-    """Optional attribution line rendered under a quote."""
-    field = QLineEdit()
-    field.setPlaceholderText(placeholder)
-    return field
 
 
 def populate_voice_box(voice_box: QComboBox, source: str) -> None:

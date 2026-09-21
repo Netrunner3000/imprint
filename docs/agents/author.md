@@ -1,6 +1,6 @@
 # BOOK AUTHOR — Long-form writing studio
 
-`key: author` · class: `agents/author_agent.py → AuthorAgent` · panel: `build_author_panel()` · handlers: `author_write()`, `author_continue()`, `author_pub_generate()`, `author_mkt_generate()`
+`key: author` · class: `agents/author/agent.py → AuthorAgent` · panel: `build_author_panel()` · handlers: `author_write()`, `author_continue()`, `author_pub_generate()`, `author_mkt_generate()`
 
 > Hands off where this agent's Publish/Market modes stop short (real sales data, quote content, launch checklist): see the **Publishing Manager**, `key: manuscript` — [manuscript.md](manuscript.md).
 
@@ -34,28 +34,28 @@ Write mode tabs: **Draft**, **Outline**, **Characters**, **World**, **Chapters**
 
 **Consistency memory**: `_author_build_consistency_context()` reads the Characters and World tabs (and, for fresh Write calls only, a bounded 3,000-char tail of the current Draft — Continue already sends the full draft another way, so it's skipped there to avoid duplicating it) and prepends them to the system prompt as a "CONTINUITY CONTEXT" block, after the Book Profile block. Empty tabs produce an empty context string — zero prompt overhead for a fresh project. Verified: injected details (e.g. which hand a scar is on) are respected in generated scenes.
 
-**Chapters tab**: not a separate stored model — chapters are parsed live from the Draft text on every tab-switch via `services/book_exporter.py: split_into_chapters()` / `find_chapter_offsets()`, so there's never a second source of truth to drift from the actual draft. Double-clicking a chapter moves the Draft cursor to that heading and switches tabs.
+**Chapters tab**: not a separate stored model — chapters are parsed live from the Draft text on every tab-switch via `agents/author/book_exporter.py: split_into_chapters()` / `find_chapter_offsets()`, so there's never a second source of truth to drift from the actual draft. Double-clicking a chapter moves the Draft cursor to that heading and switches tabs.
 
-Export (`author_export_book()`) hands the raw Draft text to `services/book_exporter.py`, which splits it into chapters by detecting `Chapter N` / `Part N` / `Prologue` / `Epilogue` heading lines (falls back to one unlabeled chapter if none are found — export always works, headings just improve structure) and renders a title page + chapters via EbookLib (EPUB), python-docx (DOCX), or reportlab (PDF, built directly — no DOCX→PDF conversion step, so no LibreOffice dependency).
+Export (`AuthorPanel.export_book()`) hands the raw Draft text to `agents/author/book_exporter.py`, which splits it into chapters by detecting `Chapter N` / `Part N` / `Prologue` / `Epilogue` heading lines (falls back to one unlabeled chapter if none are found — export always works, headings just improve structure) and renders a title page + chapters via EbookLib (EPUB), python-docx (DOCX), or reportlab (PDF, built directly — no DOCX→PDF conversion step, so no LibreOffice dependency).
 
 ## Under the hood — files & functions
 | Location | Role |
 |---|---|
-| `agents/author_agent.py` | `AuthorAgent` — `SYSTEM_PROMPT`/`SYSTEM_PROMPT_NONFICTION` craft prompts + markers; all three `build_*_messages()` accept `book_profile_context`; `build_messages()` also takes `content_type`. |
-| `services/book_exporter.py` | `split_into_chapters()`, `find_chapter_offsets()`, `export_epub()/export_docx()/export_pdf()`, `export_book()`. |
+| `agents/author/agent.py` | `AuthorAgent` — `SYSTEM_PROMPT`/`SYSTEM_PROMPT_NONFICTION` craft prompts + markers; all three `build_*_messages()` accept `book_profile_context`; `build_messages()` also takes `content_type`. |
+| `agents/author/book_exporter.py` | `split_into_chapters()`, `find_chapter_offsets()`, `export_epub()/export_docx()/export_pdf()`, `export_book()`. |
 | `main.py: author_write()/author_continue()` | Write mode. |
 | `main.py: _author_on_content_type_changed()` | Swaps the Task list to match Fiction/Non-Fiction. |
 | `main.py: _author_get_book_profile()/_author_build_book_profile_block()` | Book Profile → system-prompt block. |
 | `main.py: author_save_profile()/_author_load_profile()` | Profile persistence via `services/database.py` settings table. |
 | `main.py: _author_build_consistency_context()/_author_start_worker()` | Continuity injection. |
 | `main.py: _author_refresh_chapters()/_author_jump_to_chapter()` | Chapters navigator. |
-| `main.py: author_export_book()` | Export handler — chapter detection + file dialog + format dispatch. |
+| `agents/author/panel.py: AuthorPanel.export_book()` | Export handler — chapter detection + file dialog + format dispatch. |
 | `main.py: author_pub_generate()/_copy()/_save()` | Publish mode. |
 | `main.py: author_mkt_generate()/_copy()/_save()` | Market mode. |
 | `main.py: _parse_author_sections()/_populate_author_tabs()` | Marker routing. |
 
 ## Extend it
-- **Structured chapter model**: Chapters is currently a *view* derived from the Draft text, not a stored model — a real `Book`/`Chapter` data model (mirroring `services/course/models.py`) would additionally enable per-chapter regeneration, status tracking, and reordering.
+- **Structured chapter model**: Chapters is currently a *view* derived from the Draft text, not a stored model — a real `Book`/`Chapter` data model (mirroring `agents/course/models.py`) would additionally enable per-chapter regeneration, status tracking, and reordering.
 - **Editing pass**: nothing currently re-reads a full draft for continuity/pacing/repetition — an "Editor" mode is the natural next addition.
 - **Autonomous drive loop**: seed a premise → auto-expand outline → auto-draft each chapter → auto-compile, using the Book Profile, consistency context, and chapter navigator now in place as the foundation.
 - **BookProfile auto-fill**: Publish/Market's own per-mode Hook/Comp-Titles fields aren't yet pre-filled from the Book Profile — they're independent fields you can still override per document, but nothing copies the Book Profile's Hook/Comps into them automatically.

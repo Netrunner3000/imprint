@@ -64,12 +64,12 @@ Each step logs as it goes when `verbose=True`, which `run_course.py` sets.
 ## Under the hood — files & functions
 | Location | Role |
 |---|---|
-| `agents/course_agent.py` | `CourseAgent.run()` / `_process_lesson()` — orchestration. |
-| `services/course/models.py` | `CourseRequest`, `CourseOutline`, `CourseAssets`, `DifficultyLevel`. |
-| `services/course/content_generator.py` | Outline and lesson script generation. |
-| `services/course/slide_generator.py` | Slide rendering, including the title slide. |
-| `services/course/video_assembler.py` | Narration + avatar video per lesson. |
-| `services/course/packager.py` | `build_index_html()` / `package_course()`. |
+| `agents/course/agent.py` | `CourseAgent.run()` / `_process_lesson()` — orchestration. |
+| `agents/course/models.py` | `CourseRequest`, `CourseOutline`, `CourseAssets`, `DifficultyLevel`. |
+| `agents/course/content_generator.py` | Outline and lesson script generation. |
+| `agents/course/slide_generator.py` | Slide rendering, including the title slide. |
+| `agents/course/video_assembler.py` | Narration + avatar video per lesson. |
+| `agents/course/packager.py` | `build_index_html()` / `package_course()`. |
 | `providers/avatar/`, `providers/voice/` | Pluggable avatar and voice backends (`mock` by default). |
 | `run_course.py` | CLI entry point and flag parsing. |
 

@@ -53,7 +53,7 @@ class SocialPanel(QWidget):
 
     def __init__(self, host):
         super().__init__()
-        from services import social_platforms
+        from agents.social import platforms
 
         self.host = host
         self._write_token = None
@@ -113,7 +113,7 @@ class SocialPanel(QWidget):
         # ── Compose ─────────────────────────────────────────────────────
         layout.addWidget(section("Compose"))
 
-        self.social_platform_box = combo(list(social_platforms.names()))
+        self.social_platform_box = combo(list(platforms.names()))
         self.social_platform_box.currentTextChanged.connect(self._platform_changed)
         self.social_angle_box = combo(list(ANGLES))
         self.social_variants_box = combo(["1", "2", "3"], "2")
@@ -313,10 +313,10 @@ class SocialPanel(QWidget):
         self.social_panel_base.load_models()
 
     def refresh_campaigns(self):
-        from services import social_store
+        from agents.social import store
         self.social_campaign_box.blockSignals(True)
         self.social_campaign_box.clear()
-        for campaign in social_store.list_campaigns():
+        for campaign in store.list_campaigns():
             self.social_campaign_box.addItem(
                 campaign["name"] or campaign["subject"] or "Untitled",
                 campaign["id"])
@@ -324,9 +324,9 @@ class SocialPanel(QWidget):
         self._campaign_changed(self.social_campaign_box.currentIndex())
 
     def current_campaign(self) -> dict | None:
-        from services import social_store
+        from agents.social import store
         campaign_id = self.social_campaign_box.currentData()
-        return social_store.get_campaign(campaign_id) if campaign_id else None
+        return store.get_campaign(campaign_id) if campaign_id else None
 
     def _campaign_changed(self, _index):
         campaign = self.current_campaign()
@@ -344,9 +344,9 @@ class SocialPanel(QWidget):
         self.refresh_schedule()
 
     def new_campaign(self):
-        from services import social_store
+        from agents.social import store
         subject = self.social_subject_input.text().strip() or "Untitled"
-        campaign_id = social_store.create_campaign(
+        campaign_id = store.create_campaign(
             name=subject, subject=subject,
             subject_kind=self.social_kind_box.currentText(),
             goal=self.social_goal_input.text().strip(),
@@ -359,13 +359,13 @@ class SocialPanel(QWidget):
         self.social_status_label.setText(f"Created “{subject}”")
 
     def save_campaign(self):
-        from services import social_store
+        from agents.social import store
         campaign = self.current_campaign()
         if not campaign:
             self.new_campaign()
             return
         subject = self.social_subject_input.text().strip()
-        social_store.update_campaign(
+        store.update_campaign(
             campaign["id"], name=subject or campaign["name"], subject=subject,
             subject_kind=self.social_kind_box.currentText(),
             goal=self.social_goal_input.text().strip(),
@@ -375,7 +375,7 @@ class SocialPanel(QWidget):
         self.social_status_label.setText("Saved")
 
     def delete_campaign(self):
-        from services import social_store
+        from agents.social import store
         campaign = self.current_campaign()
         if not campaign:
             return
@@ -385,14 +385,14 @@ class SocialPanel(QWidget):
             QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
         if confirm != QMessageBox.Yes:
             return
-        social_store.delete_campaign(campaign["id"])
+        store.delete_campaign(campaign["id"])
         self.refresh_campaigns()
 
     # ── platform and limit ──────────────────────────────────────────────
     def _platform(self):
-        from services import social_platforms
-        return social_platforms.get(
-            social_platforms.key_for_name(self.social_platform_box.currentText()))
+        from agents.social import platforms
+        return platforms.get(
+            platforms.key_for_name(self.social_platform_box.currentText()))
 
     def _platform_changed(self, _name=""):
         self._update_limit()
@@ -596,14 +596,14 @@ class SocialPanel(QWidget):
         clip_worker.start()
 
     def _on_clip_rendered(self, slug: str, path: str):
-        from services import social_store
+        from agents.social import store
         token, self._clip_video_token = self._clip_video_token, None
         if token:
             self.host.record_request(token, f"social clip {slug}")
         campaign = self.current_campaign()
         platform_key, _seconds = self._pending_clip
         if campaign:
-            social_store.add_post(
+            store.add_post(
                 campaign["id"], platform_key,
                 self.social_draft_box.toPlainText().strip(),
                 fmt="clip", media_path=path,
@@ -632,7 +632,7 @@ class SocialPanel(QWidget):
     # ── drafts and schedule ─────────────────────────────────────────────
     def save_draft(self):
         """Split the editor on its variant separators and store each as a post."""
-        from services import social_store
+        from agents.social import store
         campaign = self.current_campaign()
         if not campaign:
             QMessageBox.warning(self, "No Campaign", "Create a campaign first.")
@@ -644,7 +644,7 @@ class SocialPanel(QWidget):
         pieces = [p.strip() for p in text.split("—" * 30)]
         pieces = [p for p in pieces if p]
         for piece in pieces:
-            social_store.add_post(campaign["id"], platform.key, piece,
+            store.add_post(campaign["id"], platform.key, piece,
                                   fmt="text", angle=self.social_angle_box.currentText())
         self.refresh_schedule()
         self.social_tabs.setCurrentIndex(1)
@@ -655,18 +655,18 @@ class SocialPanel(QWidget):
         """Give every undated draft a date at its platform's own cadence."""
         from datetime import date
 
-        from services import social_store
+        from agents.social import store
         campaign = self.current_campaign()
         if not campaign:
             return
-        undated = [p for p in social_store.list_posts(campaign["id"])
+        undated = [p for p in store.list_posts(campaign["id"])
                    if not p.get("scheduled_for")]
         if not undated:
             self.social_status_label.setText("Nothing undated to schedule")
             return
 
         platforms = sorted({p["platform"] for p in undated})
-        slots = social_store.build_schedule(platforms, weeks=4,
+        slots = store.build_schedule(platforms, weeks=4,
                                             start=date.today())
         by_platform: dict[str, list] = {}
         for day, platform_key in slots:
@@ -677,7 +677,7 @@ class SocialPanel(QWidget):
             days = by_platform.get(post["platform"], [])
             if not days:
                 continue
-            social_store.update_post(post["id"],
+            store.update_post(post["id"],
                                      scheduled_for=days.pop(0).isoformat(),
                                      status="scheduled")
             scheduled += 1
@@ -685,14 +685,14 @@ class SocialPanel(QWidget):
         self.social_status_label.setText(f"{scheduled} post(s) scheduled")
 
     def refresh_schedule(self):
-        from services import social_platforms, social_store
+        from agents.social import platforms, store
         campaign = self.current_campaign()
-        posts = social_store.list_posts(campaign["id"]) if campaign else []
+        posts = store.list_posts(campaign["id"]) if campaign else []
         self.social_schedule_table.setRowCount(0)
         for post in posts:
             row = self.social_schedule_table.rowCount()
             self.social_schedule_table.insertRow(row)
-            platform = social_platforms.get(post["platform"])
+            platform = platforms.get(post["platform"])
             body = " ".join(post["body"].split())
             values = [
                 post.get("scheduled_for") or "—",
@@ -710,10 +710,10 @@ class SocialPanel(QWidget):
         self.refresh_analytics(posts)
 
     def refresh_analytics(self, posts: list[dict] | None = None):
-        from services import social_store
+        from agents.social import store
         if posts is None:
             campaign = self.current_campaign()
-            posts = social_store.list_posts(campaign["id"]) if campaign else []
+            posts = store.list_posts(campaign["id"]) if campaign else []
         self.social_analytics_table.setRowCount(0)
         for post in posts:
             if post["status"] != "posted" or not post.get("metric_source"):
@@ -731,7 +731,7 @@ class SocialPanel(QWidget):
                 self.social_analytics_table.setItem(row, column, item)
 
     def record_metrics(self):
-        from services import social_store
+        from agents.social import store
         post = self._selected_post()
         if not post:
             QMessageBox.information(self, "Select a post",
@@ -762,7 +762,7 @@ class SocialPanel(QWidget):
         if not ok:
             return
         try:
-            social_store.record_metrics(post["id"], reach=reach, clicks=clicks,
+            store.record_metrics(post["id"], reach=reach, clicks=clicks,
                                         source=source, window=window)
         except ValueError as exc:
             QMessageBox.warning(self, "Metrics not saved", str(exc))
@@ -771,13 +771,13 @@ class SocialPanel(QWidget):
         self.social_tabs.setCurrentIndex(2)
 
     def _selected_post(self) -> dict | None:
-        from services import social_store
+        from agents.social import store
         row = self.social_schedule_table.currentRow()
         if row < 0:
             return None
         item = self.social_schedule_table.item(row, 0)
         post_id = item.data(Qt.UserRole) if item else None
-        return social_store.get_post(post_id) if post_id else None
+        return store.get_post(post_id) if post_id else None
 
     def copy_selected(self):
         post = self._selected_post()
@@ -787,30 +787,30 @@ class SocialPanel(QWidget):
         self.social_status_label.setText("Copied")
 
     def mark_posted(self):
-        from services import social_store
+        from agents.social import store
         post = self._selected_post()
         if not post:
             return
-        social_store.mark_posted(post["id"])
+        store.mark_posted(post["id"])
         self.refresh_schedule()
 
     def delete_post(self):
-        from services import social_store
+        from agents.social import store
         post = self._selected_post()
         if not post:
             return
-        social_store.delete_post(post["id"])
+        store.delete_post(post["id"])
         self.refresh_schedule()
 
     def post_selected(self):
         """Publish one post. Never more than one, never unattended."""
-        from services import social_platforms, social_publishing, social_store
+        from agents.social import platforms, publishing, store
 
         post = self._selected_post()
         if not post:
             return
-        platform = social_platforms.get(post["platform"])
-        publisher = social_publishing.publisher_for(post["platform"])
+        platform = platforms.get(post["platform"])
+        publisher = publishing.publisher_for(post["platform"])
         if publisher is None or not publisher.configured:
             QMessageBox.information(
                 self, f"{platform.name if platform else post['platform']} cannot post",
@@ -852,21 +852,21 @@ class SocialPanel(QWidget):
             result = publisher.publish(post["body"], post.get("media_path", ""),
                                        **extra)
         except Exception as exc:
-            social_store.mark_failed(post["id"], str(exc))
+            store.mark_failed(post["id"], str(exc))
             self.refresh_schedule()
             QMessageBox.warning(self, "Post failed", str(exc))
             self.social_status_label.setText("[Error] post failed")
             return
-        social_store.mark_posted(post["id"], result.permalink)
+        store.mark_posted(post["id"], result.permalink)
         self.refresh_schedule()
         self.social_status_label.setText(f"Posted — {result.permalink or 'done'}")
 
     def refresh_accounts(self):
         """What can post today, and what stands in the way of the rest."""
-        from services import social_publishing
+        from agents.social import publishing
 
         rows = []
-        for name, ready, note in social_publishing.status_lines():
+        for name, ready, note in publishing.status_lines():
             colour = ACCENT if ready else TEXT_MUTE
             label = "ready" if ready else "drafting only"
             rows.append(

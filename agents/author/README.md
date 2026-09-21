@@ -5,8 +5,7 @@ continuation and revision for fiction and non-fiction.  Imprint imports
 `AuthorAgent` from `agents.author`; the private implementation is `agent.py`.
 
 The umbrella owns the editor, project record, provider execution, request guard
-and export UI.  Shared book export remains in `services/book_exporter.py` until
-the panel/service extraction phase.
+and export UI.  Book export lives in this package's `book_exporter.py`.
 
 ## Files
 
@@ -32,6 +31,8 @@ the panel/service extraction phase.
   - `AuthorAgent.build_publish_messages(prompt, book_profile_context)` /
     `build_market_messages(prompt, book_profile_context)` — same pattern using
     `PUBLISH_SYSTEM_PROMPT` / `MARKET_SYSTEM_PROMPT`.
+- `book_exporter.py` — chapter detection (`split_into_chapters()`,
+  `find_chapter_offsets()`) and EPUB/DOCX/PDF export (`export_book()`).
 - `recommendations.py` — exports `RECOMMENDATION_PROFILE` (an `AgentProfile`)
   tagged `creative`, `longform`, `editing`, weighted heavily toward quality
   (0.48) and context (0.16) over cost (0.08), with affinity across most

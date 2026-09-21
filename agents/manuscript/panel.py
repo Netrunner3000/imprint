@@ -28,7 +28,7 @@ from PySide6.QtWidgets import (
 )
 
 from services.runtime_paths import user_data_base
-from ui.book_widgets import (
+from agents.manuscript.book_widgets import (
     make_size_box, make_theme_box, make_voice_source_box, populate_voice_box,
     size_key, theme_key, unique_output_path,
 )
@@ -540,7 +540,7 @@ class ManuscriptPanel(QWidget):
     def refresh_data(self):
         """Fetch PublishDrive data and display summary."""
         import json
-        from services.publishdrive_client import PublishDriveClient
+        from agents.manuscript.publishdrive_client import PublishDriveClient
         self.manuscript_status_label.setText("[Fetching…]")
         try:
             client = PublishDriveClient()
@@ -553,7 +553,7 @@ class ManuscriptPanel(QWidget):
 
     def ingest_kdp(self):
         """Ingest any new KDP CSV files from data/kdp_reports/."""
-        from services.kdp_csv_parser import ingest_new_reports
+        from agents.manuscript.kdp_csv_parser import ingest_new_reports
         ingested = ingest_new_reports()
         if ingested:
             self.manuscript_status_label.setText(
@@ -674,7 +674,7 @@ class ManuscriptPanel(QWidget):
         if not quote:
             QMessageBox.warning(self, "Missing Quote", "Please enter a quote.")
             return
-        from services.quote_graphics import GRAPHICS_DIR, render_quote_graphic
+        from agents.manuscript.quote_graphics import GRAPHICS_DIR, render_quote_graphic
 
         attribution = self.quote_graphic_attribution.text().strip()
         theme = theme_key(self.quote_graphic_theme_box)
@@ -692,7 +692,7 @@ class ManuscriptPanel(QWidget):
             self.manuscript_status_label.setText(f"[Error] {e}")
 
     def open_graphics_folder(self):
-        from services.quote_graphics import GRAPHICS_DIR
+        from agents.manuscript.quote_graphics import GRAPHICS_DIR
         QDesktopServices.openUrl(QUrl.fromLocalFile(str(GRAPHICS_DIR)))
 
     # ── shorts (ElevenLabs guard shared by three flows) ─────────────────
@@ -747,9 +747,9 @@ class ManuscriptPanel(QWidget):
         if not quote:
             QMessageBox.warning(self, "Missing Quote", "Please enter a quote.")
             return
-        from services.quote_graphics import render_quote_graphic
-        from services.shorts_generator import SHORTS_DIR
-        from ui.workers import ShortsWorker
+        from agents.manuscript.quote_graphics import render_quote_graphic
+        from agents.manuscript.shorts_generator import SHORTS_DIR
+        from agents.manuscript.workers import ShortsWorker
 
         attribution = self.shorts_attribution.text().strip()
         theme = theme_key(self.shorts_theme_box)
@@ -804,7 +804,7 @@ class ManuscriptPanel(QWidget):
             QDesktopServices.openUrl(QUrl.fromLocalFile(self._last_short_path))
 
     def open_shorts_folder(self):
-        from services.shorts_generator import SHORTS_DIR
+        from agents.manuscript.shorts_generator import SHORTS_DIR
         QDesktopServices.openUrl(QUrl.fromLocalFile(str(SHORTS_DIR)))
 
     # ── quote finder ────────────────────────────────────────────────────
@@ -892,7 +892,7 @@ class ManuscriptPanel(QWidget):
         self.manuscript_status_label.setText(f"[Error] {error}")
 
     def _parse_quote_list(self, text: str) -> list:
-        from services.llm_parsing import parse_string_list
+        from agents.manuscript.llm_parsing import parse_string_list
         return parse_string_list(text)
 
     def _build_quote_suggestion_row(self, quote: str) -> QWidget:
@@ -924,7 +924,7 @@ class ManuscriptPanel(QWidget):
         return row
 
     def quote_finder_generate_graphic(self, quote: str):
-        from services.quote_graphics import GRAPHICS_DIR, render_quote_graphic
+        from agents.manuscript.quote_graphics import GRAPHICS_DIR, render_quote_graphic
         theme = theme_key(self.quote_finder_theme_box)
         attribution = self.quote_finder_attribution.text().strip()
         output_path = unique_output_path(GRAPHICS_DIR, "quote", ".png")
@@ -941,9 +941,9 @@ class ManuscriptPanel(QWidget):
                 self, "Busy",
                 "A short is already generating — please wait for it to finish.")
             return
-        from services.quote_graphics import render_quote_graphic
-        from services.shorts_generator import SHORTS_DIR
-        from ui.workers import ShortsWorker
+        from agents.manuscript.quote_graphics import render_quote_graphic
+        from agents.manuscript.shorts_generator import SHORTS_DIR
+        from agents.manuscript.workers import ShortsWorker
 
         theme = theme_key(self.quote_finder_theme_box)
         attribution = self.quote_finder_attribution.text().strip()
@@ -1043,7 +1043,7 @@ class ManuscriptPanel(QWidget):
         weeks = int(self.calendar_weeks_box.currentText())
         start_date = self.calendar_start_date.date().toPython()
 
-        from services.content_calendar import build_calendar
+        from agents.manuscript.content_calendar import build_calendar
         slots = build_calendar(quotes, weeks, start_date, platforms)
         if not slots:
             self.manuscript_status_label.setText(
@@ -1117,13 +1117,13 @@ class ManuscriptPanel(QWidget):
         if row >= len(self._calendar_slots):
             return
         slot = self._calendar_slots[row]
-        from services.quote_graphics import render_quote_graphic
+        from agents.manuscript.quote_graphics import render_quote_graphic
 
         theme = theme_key(self.calendar_theme_box)
         attribution = self.calendar_attribution.text().strip()
 
         if slot.format == "graphic":
-            from services.quote_graphics import GRAPHICS_DIR
+            from agents.manuscript.quote_graphics import GRAPHICS_DIR
             output_path = unique_output_path(GRAPHICS_DIR, "quote", ".png")
             try:
                 render_quote_graphic(slot.quote, output_path, theme=theme,
@@ -1139,8 +1139,8 @@ class ManuscriptPanel(QWidget):
                 self, "Busy",
                 "A short is already generating — please wait for it to finish.")
             return
-        from services.shorts_generator import SHORTS_DIR
-        from ui.workers import ShortsWorker
+        from agents.manuscript.shorts_generator import SHORTS_DIR
+        from agents.manuscript.workers import ShortsWorker
         use_elevenlabs = (
             self.calendar_voice_source_box.currentText() == "ElevenLabs")
         voice_id = self.calendar_voice_box.currentData() or "default"

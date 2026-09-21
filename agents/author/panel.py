@@ -991,7 +991,7 @@ class AuthorPanel(QWidget):
         if not path:
             return
 
-        from services.book_exporter import export_book
+        from agents.author.book_exporter import export_book
         try:
             export_book(text, title, author_name, fmt, Path(path))
             self.author_status_label.setText(
@@ -1059,7 +1059,7 @@ class AuthorPanel(QWidget):
         """Re-derive the chapter list from the current Draft text — chapters aren't a
         separate stored model, they're parsed live from Draft using the same heading
         detection as book export, so there's never a second source of truth to drift."""
-        from services.book_exporter import find_chapter_offsets, split_into_chapters
+        from agents.author.book_exporter import find_chapter_offsets, split_into_chapters
 
         text = self.author_draft_box.toPlainText()
         self.author_chapters_list.clear()

@@ -28,7 +28,7 @@ if not os.environ.get("ANTHROPIC_API_KEY"):
 sys.path.insert(0, os.path.dirname(__file__))
 
 from agents.course import CourseAgent
-from services.course.models import CourseRequest, DifficultyLevel
+from agents.course.models import CourseRequest, DifficultyLevel
 
 
 def main():
@@ -82,7 +82,7 @@ def main():
     # calls (≤8192 out), input ~1.5k tokens per call.
     from services.database import init_db
     from services.usage_tracker import UsageTracker
-    from services.course.content_generator import (
+    from agents.course.content_generator import (
         COURSE_MODEL, reset_usage_tally, usage_tally)
 
     init_db()

@@ -22,7 +22,7 @@ def test_unknown_policy_blocks_platform_persona(policy_db):
 
 def test_policy_requires_source_date_and_explicit_owner_rule(policy_db):
     from agents.creator.agent import ConsentError, require_ready
-    from services.creator_platform_policy import get_policy, save_policy
+    from agents.creator.platform_policy import get_policy, save_policy
     values = dict(synthetic_persona="allowed", verified_owner_required="unknown",
                   ai_disclosure="#ai", publishing_method="manual_only",
                   source_url="", reviewed_on="")
@@ -41,7 +41,7 @@ def test_policy_requires_source_date_and_explicit_owner_rule(policy_db):
 
 def test_reviewed_disclosure_reaches_prompt(policy_db):
     from agents.creator.agent import CreatorAgent
-    from services.creator_platform_policy import save_policy
+    from agents.creator.platform_policy import save_policy
     save_policy("Example", synthetic_persona="allowed",
                 verified_owner_required="no", ai_disclosure="#ai",
                 publishing_method="manual_only",

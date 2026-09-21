@@ -25,8 +25,8 @@ Platform clients and credentials remain shared services.  User guidance:
   third party; bans engagement bait ("comment YES", fake urgency/scarcity);
   and caps hashtag use to a few specific tags rather than a wall of generic
   ones. `build_post_messages()` assembles one platform-specific prompt,
-  pulling per-platform tone/length guidance from `services/
-  social_platforms.py`'s `Platform` (used verbatim, on the reasoning that
+  pulling per-platform tone/length guidance from `agents/social/
+  platforms.py`'s `Platform` (used verbatim, on the reasoning that
   Reddit penalizes anything reading as marketing, Pinterest behaves like a
   search engine, and X gives about seven words before a scroll) and can
   request several genuinely-different variants in one call, separated by a

@@ -825,7 +825,7 @@ Platform format rules enforced by the Market system prompt:
 
 | Property | Value |
 |----------|-------|
-| Agent class | `agents/author_agent.py` — `AuthorAgent` |
+| Agent class | `agents/author/agent.py` — `AuthorAgent` |
 | Agent name (DB) | `author` |
 | Label | Manuscript |
 | Default provider | Anthropic |
@@ -833,10 +833,10 @@ Platform format rules enforced by the Market system prompt:
 | Publish system prompt | Document-by-document standards; word-count targets; pitch tone rules |
 | Market system prompt | Platform-by-platform format rules; 15 platforms incl. KDP Listing; copy principles |
 | Methods | `build_messages()` · `build_publish_messages()` · `build_market_messages()` — all three accept `book_profile_context`; `build_messages()` also takes `content_type` |
-| Export | `services/book_exporter.py` — `export_book()` (EPUB/DOCX/PDF), called by `main.py: author_export_book()` |
+| Export | `agents/author/book_exporter.py` — `export_book()` (EPUB/DOCX/PDF), called by `agents/author/panel.py: AuthorPanel.export_book()` |
 | Book Profile | `main.py: _author_get_book_profile()/_author_build_book_profile_block()`, persisted via `author_save_profile()`/`_author_load_profile()` (settings DB, key `author_book_profile`) |
 | Consistency memory | `main.py: _author_build_consistency_context()` — auto-injects Characters/World + recent draft into `build_messages()`'s `consistency_context` param |
-| Chapters navigator | `services/book_exporter.py: find_chapter_offsets()`, `main.py: _author_refresh_chapters()/_author_jump_to_chapter()` |
+| Chapters navigator | `agents/author/book_exporter.py: find_chapter_offsets()`, `agents/author/panel.py: AuthorPanel._refresh_chapters()/_jump_to_chapter()` |
 
 ---
 
@@ -1181,8 +1181,8 @@ Converting a book used to be the end of it — the MP3 existed and nothing in th
 app could find or play it. The audiobook panel now has two tabs, **Convert** and
 **Listen**.
 
-`services/audiobook_library.py` scans the configured output folder recursively
-for audio files and tracks progress; `ui/audio_player.py` is a `QMediaPlayer`
+`agents/audiobook/audiobook_library.py` scans the configured output folder recursively
+for audio files and tracks progress; `agents/audiobook/audio_player.py` is a `QMediaPlayer`
 widget with play/pause, 30-second skips, a scrubber and 0.75×–2× speed. The
 button reads *Resume at 1:24:03* and picks up exactly there.
 
@@ -1364,7 +1364,7 @@ Picks up where the Manuscript (writing studio) agent stops: real sales data, lau
 | Default provider | Anthropic (Overview tab; shared by Quote Finder) |
 | System prompts | Sales Q&A grounding prompt · PublishDrive/KDP JSON-extraction prompts · verbatim quote-suggestion prompt · calendar-caption prompt |
 | Methods | `build_messages()` · `build_publishdrive_parse_messages()` · `build_kdp_parse_messages()` · `build_quote_suggestions_messages()` · `build_calendar_caption_messages()` |
-| Supporting services | `services/publishdrive_client.py` · `services/kdp_csv_parser.py` · `services/quote_graphics.py` · `services/shorts_generator.py` · `services/content_calendar.py` |
+| Supporting services | `agents/manuscript/publishdrive_client.py` · `agents/manuscript/kdp_csv_parser.py` · `agents/manuscript/quote_graphics.py` · `agents/manuscript/shorts_generator.py` · `agents/manuscript/content_calendar.py` |
 | DB tables | `manuscript_metrics` · `manuscript_kdp_ingested` · `manuscript_todos` |
 
 ---
@@ -1373,7 +1373,7 @@ Picks up where the Manuscript (writing studio) agent stops: real sales data, lau
 
 **No left-panel button — this one runs from the terminal, not the GUI.**
 
-`run_course.py` drives `agents/course_agent.py` to generate a full mini-course
+`run_course.py` drives `agents/course/agent.py` to generate a full mini-course
 (modules → lessons → slides → narrated, avatar-presented video → a packaged
 `index.html`) from a single topic string. It has no left-panel entry, no
 `agent_box` row, and isn't wired into `main.py` at all — it is a standalone
@@ -1384,7 +1384,7 @@ python run_course.py --topic "Python for Beginners" --modules 2 --lessons 2
 python run_course.py --topic "Data Science" --avatar heygen --voice elevenlabs
 ```
 
-**Pipeline (`services/course/`):**
+**Pipeline (`agents/course/`):**
 
 | Stage | Module | What it does |
 |-------|--------|---------------|
@@ -1465,7 +1465,7 @@ per platform, scheduled at each platform's own cadence, and posted or exported.
 
 Written *per platform*, not written once and truncated. Reddit removes a post
 that reads as marketing; Pinterest is a search engine wearing a mood board; X
-gives you seven words. That guidance lives in `services/social_platforms.py`
+gives you seven words. That guidance lives in `agents/social/platforms.py`
 and goes into the prompt verbatim. Character limits are checked live while
 editing, because models overshoot them.
 
@@ -1503,7 +1503,7 @@ engagement bait, as a rule rather than a hope.
 
 ### 7.11 Creator Agent
 
-`key: creator` · `agents/creator_agent.py` · panel `build_creator_panel()` ·
+`key: creator` · `agents/creator/agent.py` · panel `build_creator_panel()` ·
 full sheet in `docs/agents/creator.md`
 
 The shared content-production workspace for every venture: books and
@@ -1537,7 +1537,7 @@ real person in a live conversation with a paying subscriber.
 
 #### Voice and character
 
-`services/creator_profile.py` stores a **voice profile** per account — up to six
+`agents/creator/profile.py` stores a **voice profile** per account — up to six
 of the creator's own posts plus tone, emoji habit, typical length and banned
 words — and injects it into every prompt. The samples are what the model
 imitates; without them every draft starts from nothing, which is exactly why
@@ -1573,11 +1573,11 @@ are watched through completion so their paid output is not lost.
 
 #### Earnings and attribution
 
-`services/creator_csv.py` imports statements exported from the platform — the
+`agents/creator/earnings_csv.py` imports statements exported from the platform — the
 same pattern as the KDP importer, because there is no API — keyed on
 `(account, filename)` so a re-import updates rather than double-counts.
 
-`services/creator_insights.py` turns that into a feedback loop:
+`agents/creator/insights.py` turns that into a feedback loop:
 `price_history()` feeds back into the PPV drafter so the price argument is
 written against what has actually earned. Thin evidence is labelled as such;
 three sends at $15 is an anecdote, and presenting it as a finding would be
@@ -2104,13 +2104,12 @@ imprint/
 │
 ├── ui/                            # Extracted from main.py (refactor Phases 1-3)
 │   ├── workers.py                 # ChatWorker, SubprocessWorker, ModelPullWorker,
-│   │                              #   FiverrImageWorker, ShortsWorker
+│   │                              #   FiverrImageWorker
 │   ├── widgets.py                 # FlowLayout, CollapsibleSection
 │   ├── style.py                   # GLOBAL_STYLESHEET
 │   ├── tooltips.py                # seed_tooltips(app)
 │   ├── dialogs.py                 # show_settings / show_model_guide /
 │   │                              #   show_cost_history / show_run_log
-│   ├── book_widgets.py            # Shared theme/size/voice controls + asset paths
 │   ├── host.py                    # AgentHost protocol (Phase 3)
 │   ├── docs_center.py             # Searchable technical reference browser
 │   ├── learning_center.py         # Learning Centre compatibility entry point
@@ -2129,17 +2128,9 @@ imprint/
 │   ├── usage_tracker.py           # Token/cost accounting and queries
 │   ├── run_logger.py              # Run lifecycle logging
 │   ├── api_limits.py              # Shared timeout/retry values for paid clients
-│   ├── llm_parsing.py             # Tolerant parsing of LLM list responses
 │   ├── ollama_client.py  openai_client.py  deepseek_client.py
 │   ├── kimi_client.py  gemini_client.py  anthropic_client.py  qwen_client.py
-│   ├── book_exporter.py           # Chapter detection + EPUB/DOCX/PDF export
-│   ├── quote_graphics.py          # Pillow quote-graphic renderer
-│   ├── shorts_generator.py        # TTS + ffmpeg vertical shorts
-│   ├── content_calendar.py        # Posting-schedule generation
-│   ├── publishdrive_client.py     # PublishDrive REST wrapper
-│   ├── kdp_csv_parser.py          # KDP sales CSV ingestion + todo seeding
 │   ├── narrator/converter.py      # Ebook -> MP3 (Narrator agent)
-│   ├── course/                    # Course generator (content, slides, video, packaging)
 │   ├── history_store.py  report_exporter.py
 │   ├── resource_monitor.py  tool_runner.py  model_router.py  runtime_paths.py
 │

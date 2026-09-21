@@ -1,6 +1,6 @@
 """Earnings CSV ingest for subscription creator accounts.
 
-Modelled on services/kdp_csv_parser.py, and for the same reason: the platform
+Modelled on agents/manuscript/kdp_csv_parser.py, and for the same reason: the platform
 has no public API, so the numbers only reach the app when the user exports a
 statement and imports it here.
 

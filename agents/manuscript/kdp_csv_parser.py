@@ -18,7 +18,7 @@ from datetime import datetime
 
 from services.database import DB_PATH
 
-KDP_REPORTS_DIR = Path(__file__).resolve().parent.parent / "data" / "kdp_reports"
+KDP_REPORTS_DIR = Path(__file__).resolve().parents[2] / "data" / "kdp_reports"
 KDP_REPORTS_DIR.mkdir(parents=True, exist_ok=True)
 
 # (title, platform, notes) — notes carry account/login guidance, shown as a tooltip in the app.

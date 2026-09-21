@@ -13,12 +13,12 @@ from PySide6.QtWidgets import (
     QTabWidget, QVBoxLayout, QWidget,
 )
 
-from services.audiobook_library import (
+from agents.audiobook.audiobook_library import (
     format_time, load_position, mark_unfinished, scan,
 )
 from services.openai_client import OpenAIClientWrapper
 from services.runtime_paths import is_frozen
-from ui.audio_player import AudiobookPlayer
+from agents.audiobook.audio_player import AudiobookPlayer
 from ui.forms import CONTROL_HEIGHT, LG, MD, SM, combo, field, line_edit, primary, rule, section
 from ui.widgets import scrollable
 

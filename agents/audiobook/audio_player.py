@@ -28,7 +28,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout, QWidget,
 )
 
-from services.audiobook_library import (
+from agents.audiobook.audiobook_library import (
     delete_mark, embedded_chapters, format_time, save_mark, saved_marks,
     save_position,
 )

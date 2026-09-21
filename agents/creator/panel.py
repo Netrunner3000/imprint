@@ -24,13 +24,13 @@ from PySide6.QtWidgets import (
 )
 
 from agents.creator import ConsentError, PROMO_CHANNELS
-from services.creator_csv import ingest_creator_csv
-from services.creator_insights import (
+from agents.creator.earnings_csv import ingest_creator_csv
+from agents.creator.insights import (
     account_summary, agency_overview, asset_outcomes, hook_results,
     price_history, price_points, record_outcome, record_revenue, top_content,
 )
-from services.creator_platform_policy import get_policy, save_policy
-from services.creator_profile import (
+from agents.creator.platform_policy import get_policy, save_policy
+from agents.creator.profile import (
     load_persona, load_voice, reference_images, save_persona, save_voice,
 )
 from services.database import get_connection

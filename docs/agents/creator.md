@@ -108,9 +108,9 @@ remain visible for like-for-like comparisons.
 ## Under the hood — files & functions
 | Location | Role |
 |---|---|
-| `agents/creator_agent.py` | `CreatorAgent`, `require_ready()`, prompt construction. |
+| `agents/creator/agent.py` | `CreatorAgent`, `require_ready()`, prompt construction. |
 | `services/higgsfield_client.py` | Official video API lifecycle, upload, estimate, cancellation and content-policy guard. |
-| `services/creator_csv.py` | Earnings statement parsing and ingest. |
+| `agents/creator/earnings_csv.py` | Earnings statement parsing and ingest. |
 | `main.py: build_creator_panel()` | Account section, compose section, seven tabs. |
 | `main.py: creator_generate()/creator_schedule()/creator_import_earnings()` | Lifecycle. |
 | `creator_accounts` / `creator_content` / `creator_earnings` | Tables. |

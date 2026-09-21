@@ -12,7 +12,7 @@ from pathlib import Path
 
 from providers.voice.base import VoiceConfig
 
-SHORTS_DIR = Path(__file__).resolve().parent.parent / "data" / "shorts"
+SHORTS_DIR = Path(__file__).resolve().parents[2] / "data" / "shorts"
 SHORTS_DIR.mkdir(parents=True, exist_ok=True)
 
 

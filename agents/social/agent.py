@@ -17,7 +17,7 @@ this a lookup instead of retyping. The kind shapes the prompt and nothing else.
 The same announcement is a different piece of writing on each platform, and not
 because of length. Reddit removes a post that reads as marketing; Pinterest is
 a search engine wearing a mood board; X gives you seven words before someone
-scrolls. `services/social_platforms.py` carries that guidance per platform and
+scrolls. `agents/social/platforms.py` carries that guidance per platform and
 it goes into the prompt verbatim, so the model is writing *for* somewhere
 rather than writing once and being truncated.
 
@@ -32,7 +32,7 @@ not find out about until someone else does.
 
 from __future__ import annotations
 
-from services.social_platforms import Platform
+from agents.social.platforms import Platform
 
 SUBJECT_KINDS = {
     "book": "a book the user wrote",
