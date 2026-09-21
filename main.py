@@ -75,7 +75,7 @@ from agents.author import AuthorAgent
 from agents.manuscript import ManuscriptAgent
 from agents.webdesign import WebdesignAgent, WebdesignPanel
 from agents.music import MusicAgent, MusicPanel
-from agents.fiverr import FiverrAgent
+from agents.fiverr import FiverrAgent, FiverrPanel
 from agents.creator import (
     CreatorAgent, ConsentError, PROMO_CHANNELS,
 )
@@ -262,8 +262,6 @@ class GodAI(QWidget):
         self.webdesign_worker: Optional[ChatWorker] = None
         self.fiverr_image_worker: Optional[FiverrImageWorker] = None
         self.fiverr_text_worker: Optional[ChatWorker] = None
-        self._fiverr_image_paths: list = []
-        self._fiverr_current_tab: int = 0
 
         self.agent_instances = {
             "chat": ChatAgent(),
@@ -2337,229 +2335,8 @@ class GodAI(QWidget):
     # ── Season Model handlers ────────────────────────────────────────────────
     # ── Fiverr Agent Panel ───────────────────────────────────────────────────
     def build_fiverr_panel(self):
-        """Client gigs: logo concepts, a delivery message, a gig listing.
-
-        Rebuilt on the shared form idiom. Three things changed beyond looks:
-
-        * The image model is now a control. "Generate Logos" is the only button
-          on this page that spends money per click, and until now the model it
-          used was hardcoded and invisible — the one visible model box drives
-          the *text* outputs only, which is why nothing appeared to recommend
-          GPT Image for the graphics work it was already doing.
-        * The Status / Est. Cost / Order Log sidebar is gone. Status is a line
-          under the buttons, the cost estimate sits beside the button that
-          incurs it, and the order log is a tab rather than a 190px column
-          with a three-column table squeezed into it.
-        * Stop is hidden until there is something to stop, so the action row
-          is three buttons with one clear answer instead of four.
-        """
-        from PySide6.QtWidgets import (
-            QHeaderView, QSpinBox, QTableWidget,
-        )
-        from services.openai_client import IMAGE_MODELS, DEFAULT_IMAGE_MODEL
-
-        self.fiverr_panel = QWidget()
-        self.fiverr_panel.setObjectName("FiverrPanel")
-        outer = QVBoxLayout(self.fiverr_panel)
-        outer.setContentsMargins(0, 0, 0, 0)
-
-        content = QWidget()
-        content.setObjectName("Transparent")
-        outer.addWidget(scrollable(content))
-        layout = QVBoxLayout(content)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(LG)
-
-        # ── Brief ───────────────────────────────────────────────────────
-        layout.addWidget(section("Client brief"))
-
-        self.fiverr_name_input = line_edit("Apex Fitness Studio")
-        self.fiverr_industry_input = line_edit("fitness, law firm, bakery")
-        self.fiverr_colors_input = line_edit("navy blue and gold")
-        self.fiverr_style_box = combo(
-            ["Minimalist", "Bold", "Vintage", "Playful", "Corporate",
-             "Luxury", "Futuristic"])
-        self.fiverr_count_spin = QSpinBox()
-        self.fiverr_count_spin.setRange(1, 4)
-        self.fiverr_count_spin.setValue(2)
-        self.fiverr_count_spin.valueChanged.connect(self._fiverr_update_estimate)
-
-        # Equal column stretch is what makes the second row's labels sit under
-        # the first row's, instead of each row packing to its own width.
-        brief = QGridLayout()
-        brief.setHorizontalSpacing(MD)
-        brief.setVerticalSpacing(MD)
-        brief.addWidget(field("Business name", self.fiverr_name_input), 0, 0, 1, 2,
-                        Qt.AlignTop)
-        brief.addWidget(field("Style", self.fiverr_style_box), 0, 2, Qt.AlignTop)
-        brief.addWidget(field("Industry / niche", self.fiverr_industry_input), 1, 0,
-                        Qt.AlignTop)
-        brief.addWidget(field("Primary colours", self.fiverr_colors_input), 1, 1,
-                        Qt.AlignTop)
-        brief.addWidget(field("Concepts", self.fiverr_count_spin), 1, 2, Qt.AlignTop)
-        for column in range(3):
-            brief.setColumnStretch(column, 1)
-        layout.addLayout(brief)
-
-        self.fiverr_notes_input = QTextEdit()
-        self.fiverr_notes_input.setPlaceholderText(
-            "Tagline, mood, target audience, competitors to avoid…")
-        self.fiverr_notes_input.setFixedHeight(70)
-        layout.addWidget(field("Notes", self.fiverr_notes_input))
-
-        # ── Models ──────────────────────────────────────────────────────
-        layout.addWidget(section("Models"))
-
-        self.fiverr_panel_base = AgentPanel(
-            self, "fiverr",
-            providers=("anthropic", "openai", "deepseek", "kimi", "gemini",
-                       "qwen", "ollama"),
-            default_provider="anthropic")
-        self.fiverr_provider_box = self.fiverr_panel_base.provider_box
-        self.fiverr_model_box = self.fiverr_panel_base.model_box
-
-        self.fiverr_image_model_box = combo(list(IMAGE_MODELS),
-                                            DEFAULT_IMAGE_MODEL)
-        self.fiverr_image_model_box.currentTextChanged.connect(
-            self._fiverr_update_estimate)
-
-        models = QGridLayout()
-        models.setHorizontalSpacing(MD)
-        models.setVerticalSpacing(MD)
-        models.addWidget(field("Text provider", self.fiverr_provider_box), 0, 0,
-                         Qt.AlignTop)
-        models.addWidget(field("Text model", self.fiverr_model_box), 0, 1, Qt.AlignTop)
-        models.addWidget(field("Image model", self.fiverr_image_model_box), 0, 2,
-                         Qt.AlignTop)
-        for column in range(3):
-            models.setColumnStretch(column, 1)
-        layout.addLayout(models)
-
-        # ── Actions ─────────────────────────────────────────────────────
-        # One filled button. The other two are real actions but not the answer
-        # to this screen, and the cost sits beside the control that spends it.
-        actions = QHBoxLayout()
-        actions.setSpacing(SM)
-
-        self.fiverr_generate_btn = primary("Generate Logos")
-        self.fiverr_generate_btn.setMinimumWidth(160)
-        self.fiverr_generate_btn.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
-        self.fiverr_generate_btn.clicked.connect(self.fiverr_generate_logos)
-        actions.addWidget(self.fiverr_generate_btn)
-
-        self.fiverr_delivery_btn = QPushButton("Delivery Message")
-        self.fiverr_delivery_btn.clicked.connect(self.fiverr_write_delivery)
-        actions.addWidget(self.fiverr_delivery_btn)
-
-        self.fiverr_gig_btn = QPushButton("Gig Description")
-        self.fiverr_gig_btn.clicked.connect(self.fiverr_write_gig)
-        actions.addWidget(self.fiverr_gig_btn)
-
-        # Hidden rather than disabled: a permanently greyed button is chrome.
-        self.fiverr_stop_btn = QPushButton("Stop")
-        self.fiverr_stop_btn.setObjectName("DangerAction")
-        self.fiverr_stop_btn.clicked.connect(self.fiverr_stop)
-        self.fiverr_stop_btn.hide()
-        actions.addWidget(self.fiverr_stop_btn)
-
-        actions.addStretch()
-        self.fiverr_cost_label = QLabel()
-        self.fiverr_cost_label.setObjectName("EstimateLine")
-        actions.addWidget(self.fiverr_cost_label)
-        layout.addLayout(actions)
-
-        self.fiverr_status_label = QLabel("Idle")
-        self.fiverr_status_label.setObjectName("EstimateLine")
-        self.fiverr_status_label.setWordWrap(True)
-        layout.addWidget(self.fiverr_status_label)
-
-        # ── Results ─────────────────────────────────────────────────────
-        self.fiverr_tabs = QTabWidget()
-
-        preview_widget = QWidget()
-        preview_widget.setObjectName("Transparent")
-        preview_layout = QVBoxLayout(preview_widget)
-        preview_layout.setContentsMargins(MD, MD, MD, MD)
-        preview_layout.setSpacing(MD)
-
-        preview_top = QHBoxLayout()
-        preview_top.setSpacing(SM)
-        self.fiverr_preview_status = QLabel("No logos yet — fill in the brief and generate.")
-        self.fiverr_preview_status.setObjectName("EstimateLine")
-        preview_top.addWidget(self.fiverr_preview_status)
-        preview_top.addStretch()
-        self.fiverr_save_images_btn = quiet("Save All Images")
-        self.fiverr_save_images_btn.setEnabled(False)
-        self.fiverr_save_images_btn.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
-        self.fiverr_save_images_btn.clicked.connect(self.fiverr_save_images)
-        preview_top.addWidget(self.fiverr_save_images_btn)
-        preview_layout.addLayout(preview_top)
-
-        self.fiverr_logo_grid = QWidget()
-        self.fiverr_logo_grid.setObjectName("Transparent")
-        self.fiverr_logo_grid_layout = QHBoxLayout(self.fiverr_logo_grid)
-        self.fiverr_logo_grid_layout.setContentsMargins(0, 0, 0, 0)
-        self.fiverr_logo_grid_layout.setSpacing(MD)
-        preview_layout.addWidget(self.fiverr_logo_grid)
-        preview_layout.addStretch()
-        self.fiverr_tabs.addTab(preview_widget, "Logo Preview")
-
-        self.fiverr_delivery_box = QTextEdit()
-        self.fiverr_delivery_box.setPlaceholderText(
-            "Generate a client delivery message with the button above.")
-        self.fiverr_tabs.addTab(self.fiverr_delivery_box, "Delivery Message")
-
-        self.fiverr_gig_box = QTextEdit()
-        self.fiverr_gig_box.setPlaceholderText(
-            "Generate a Fiverr gig listing with the button above.")
-        self.fiverr_tabs.addTab(self.fiverr_gig_box, "Gig Description")
-
-        # The order log was a 190px sidebar column holding a three-column
-        # table; every column was truncated. As a tab it gets the full width.
-        orders_widget = QWidget()
-        orders_widget.setObjectName("Transparent")
-        orders_layout = QVBoxLayout(orders_widget)
-        orders_layout.setContentsMargins(MD, MD, MD, MD)
-        orders_layout.setSpacing(MD)
-        self.fiverr_order_table = QTableWidget(0, 3)
-        self.fiverr_order_table.setHorizontalHeaderLabels(
-            ["Business", "Concepts", "Status"])
-        header = self.fiverr_order_table.horizontalHeader()
-        header.setSectionResizeMode(0, QHeaderView.Stretch)
-        header.setSectionResizeMode(1, QHeaderView.ResizeToContents)
-        header.setSectionResizeMode(2, QHeaderView.ResizeToContents)
-        self.fiverr_order_table.setEditTriggers(QTableWidget.NoEditTriggers)
-        self.fiverr_order_table.setSelectionBehavior(QTableWidget.SelectRows)
-        self.fiverr_order_table.verticalHeader().setVisible(False)
-        orders_layout.addWidget(self.fiverr_order_table)
-
-        clear_row = QHBoxLayout()
-        clear_row.addStretch()
-        self.fiverr_clear_btn = quiet("Clear log")
-        self.fiverr_clear_btn.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
-        self.fiverr_clear_btn.clicked.connect(self.fiverr_clear)
-        clear_row.addWidget(self.fiverr_clear_btn)
-        orders_layout.addLayout(clear_row)
-        self.fiverr_tabs.addTab(orders_widget, "Orders")
-
-        layout.addWidget(self.fiverr_tabs, 1)
-
-        self._fiverr_update_estimate()
-        self.fiverr_panel.hide()
-        self.fiverr_load_models()
-
-    def _fiverr_update_estimate(self, *_args):
-        """Keep the per-image estimate next to the button that spends it.
-
-        Priced from `config/pricing.json`, the same table the budget guard now
-        reads, so what the label promises and what gets billed are one number.
-        """
-        from services.per_unit_pricing import describe, image_cost_eur
-        model = self.fiverr_image_model_box.currentText()
-        count = self.fiverr_count_spin.value()
-        unit = f"{count} image{'s' if count != 1 else ''}"
-        self.fiverr_cost_label.setText(
-            describe(image_cost_eur(model, count), unit))
+        """Compose Client Gigs' independently owned workspace."""
+        self.fiverr_panel = FiverrPanel(self)
 
     # ── Social ───────────────────────────────────────────────────────────────
     def build_social_panel(self):
@@ -5335,325 +5112,66 @@ class GodAI(QWidget):
                 self.creator_agency_table.setItem(r, col, QTableWidgetItem(str(value)))
 
     # ── Fiverr handlers ──────────────────────────────────────────────────────
+    # Client Gigs compatibility entries. The owned panel contains the workflow.
     def fiverr_load_models(self):
-        """Kept as a method so existing call sites stay put."""
-        self.fiverr_panel_base.load_models()
+        self.fiverr_panel.load_models()
+
+    def _fiverr_update_estimate(self, *_args):
+        self.fiverr_panel.update_estimate(*_args)
 
     def _fiverr_get_brief(self) -> dict:
-        return {
-            "business_name": self.fiverr_name_input.text().strip(),
-            "industry": self.fiverr_industry_input.text().strip(),
-            "style": self.fiverr_style_box.currentText(),
-            "colors": self.fiverr_colors_input.text().strip(),
-            "notes": self.fiverr_notes_input.toPlainText().strip(),
-        }
+        return self.fiverr_panel._get_brief()
 
     def fiverr_generate_logos(self):
-        brief = self._fiverr_get_brief()
-        if not brief["business_name"]:
-            QMessageBox.warning(self, "Missing Input", "Please enter a business name.")
-            return
-        if not OpenAIClientWrapper.key_available():
-            QMessageBox.warning(
-                self, "No API Key",
-                "OPENAI_API_KEY is required to generate logo images.")
-            return
-
-        count = self.fiverr_count_spin.value()
-        provider = self.fiverr_provider_box.currentText()
-        model = self.fiverr_model_box.currentText()
-
-        agent = self.agent_instances["fiverr"]
-        messages = agent.build_image_prompt_request(brief)
-
-        self.fiverr_status_label.setText("Building image prompt...")
-        self.fiverr_generate_btn.setEnabled(False)
-        self.fiverr_delivery_btn.setEnabled(False)
-        self.fiverr_gig_btn.setEnabled(False)
-        self.fiverr_stop_btn.setEnabled(True)
-        self.fiverr_stop_btn.show()
-        self._fiverr_clear_logo_grid()
-
-        # Keep the token: "fiverr" is shared by the prompt request and the
-        # image request that follows it, plus the delivery/gig text flows.
-        token = self.authorize_request(
-            "fiverr", provider, model,
-            messages[-1]["content"] if messages else "")
-        if not token:
-            # Refused — re-enable the buttons disabled above, or the panel
-            # stays stuck until restart.
-            self._fiverr_reset_buttons()
-            return
-        self._fiverr_prompt_token = token
-        self.fiverr_text_worker = self._new_chat_worker(provider, model, messages, "")
-        self.fiverr_text_worker.finished_signal.connect(self._fiverr_on_prompt_ready)
-        self.fiverr_text_worker.usage_signal.connect(lambda u, t=token: self.note_request_usage(t, u))
-        self.fiverr_text_worker.error_signal.connect(self._fiverr_on_text_error)
-        self.fiverr_text_worker.start()
-        self._fiverr_pending_count = count
-        self._fiverr_pending_brief = brief
+        self.fiverr_panel.generate_logos()
 
     def _fiverr_on_prompt_ready(self, image_prompt: str):
-        from services.per_unit_pricing import image_cost_eur
-        token = getattr(self, "_fiverr_prompt_token", None)
-        self._fiverr_prompt_token = None
-        if token:
-            self.record_request(token, image_prompt)
-        image_prompt = image_prompt.strip()
-        count = self._fiverr_pending_count
-        brief = self._fiverr_pending_brief
-        save_dir = DATA_DIR / "fiverr_output" / datetime.now().strftime("%Y%m%d_%H%M%S")
-        self.fiverr_status_label.setText(f"Generating {count} concept(s)...")
-
-        # The images are a second paid request, billed per image rather than
-        # per token. Until the guard learned per-unit costs this ran entirely
-        # outside the budget caps.
-        image_model = self.fiverr_image_model_box.currentText()
-        image_cost = image_cost_eur(image_model, count)
-        if image_cost is None:
-            # A rate of 0 means unknown, not free. Coercing None to 0.0 here
-            # authorized unpriced models at €0.00 against every cap; refusing
-            # is the same posture the per-unit table documents. (Passing None
-            # through is no better — authorize_request would fall back to
-            # pricing the ~200-char prompt as a chat request.)
-            QMessageBox.warning(
-                self, "No Price Configured",
-                f"{image_model} has no per-image rate in config/pricing.json, "
-                "so the logo images cannot be billed against the budget caps. "
-                "Add a rate (0 means unknown) before generating.")
-            self._fiverr_reset_buttons()
-            return
-        image_token = self.authorize_request(
-            "fiverr", "openai", image_model,
-            f"{count} logo concepts: {image_prompt[:200]}",
-            label="logo images",
-            flat_cost_eur=image_cost)
-        if not image_token:
-            self._fiverr_reset_buttons()
-            return
-        self._fiverr_image_token = image_token
-
-        self.fiverr_image_worker = FiverrImageWorker(
-            self.openai, image_prompt, count, save_dir,
-            image_model=image_model)
-        self.fiverr_image_worker.image_ready_signal.connect(self._fiverr_on_image_ready)
-        self.fiverr_image_worker.all_done_signal.connect(self._fiverr_on_all_done)
-        self.fiverr_image_worker.error_signal.connect(self._fiverr_on_image_error)
-        self.fiverr_image_worker.status_signal.connect(lambda s: self.fiverr_status_label.setText(s))
-        self.fiverr_image_worker.start()
-
-        row = self.fiverr_order_table.rowCount()
-        self.fiverr_order_table.insertRow(row)
-        from PySide6.QtWidgets import QTableWidgetItem
-        self.fiverr_order_table.setItem(row, 0, QTableWidgetItem(brief.get("business_name", "")))
-        self.fiverr_order_table.setItem(row, 1, QTableWidgetItem(str(count)))
-        self.fiverr_order_table.setItem(row, 2, QTableWidgetItem("Generating"))
-        self._fiverr_order_row = row
+        self.fiverr_panel._on_prompt_ready(image_prompt)
 
     def _fiverr_on_image_ready(self, path: str, index: int):
-        from PySide6.QtGui import QPixmap
-        lbl = QLabel()
-        pixmap = QPixmap(path)
-        if not pixmap.isNull():
-            pixmap = pixmap.scaled(280, 280, Qt.KeepAspectRatio, Qt.SmoothTransformation)
-            lbl.setPixmap(pixmap)
-        else:
-            lbl.setText(f"[Concept {index + 1}]")
-        lbl.setToolTip(path)
-        lbl.setAlignment(Qt.AlignCenter)
-        self.fiverr_logo_grid_layout.addWidget(lbl)
-        self._fiverr_image_paths.append(path)
-        self.fiverr_preview_status.setText(f"Concept {index + 1} ready — {Path(path).name}")
-        self.fiverr_tabs.setCurrentIndex(0)
+        self.fiverr_panel._on_image_ready(path, index)
 
     def _fiverr_reset_buttons(self):
-        """Back to idle. Every exit path from a run goes through here."""
-        self.fiverr_generate_btn.setEnabled(True)
-        self.fiverr_delivery_btn.setEnabled(True)
-        self.fiverr_gig_btn.setEnabled(True)
-        self.fiverr_stop_btn.setEnabled(False)
-        self.fiverr_stop_btn.hide()
+        self.fiverr_panel._reset_buttons()
 
     def _fiverr_on_all_done(self, paths: list):
-        self._fiverr_image_paths = paths
-        self.fiverr_status_label.setText(f"Done — {len(paths)} logo(s) generated.")
-        # Closes out the image request authorised in _fiverr_on_prompt_ready,
-        # billing the per-image cost it was authorised against.
-        token = getattr(self, "_fiverr_image_token", None)
-        self._fiverr_image_token = None
-        if token:
-            self.record_request(token, f"{len(paths)} logo images")
-        self._fiverr_reset_buttons()
-        self.fiverr_save_images_btn.setEnabled(True)
-        if hasattr(self, "_fiverr_order_row"):
-            from PySide6.QtWidgets import QTableWidgetItem
-            self.fiverr_order_table.setItem(self._fiverr_order_row, 2, QTableWidgetItem("Done"))
+        self.fiverr_panel._on_all_done(paths)
 
     def _fiverr_on_image_error(self, error: str):
-        # A failed render still consumed whatever it managed before failing,
-        # but the authorised amount was for the full set — release it rather
-        # than bill for images that were never produced.
-        token = getattr(self, "_fiverr_image_token", None)
-        self._fiverr_image_token = None
-        if token:
-            self.abandon_request(token)
-        self.fiverr_status_label.setText(f"Error: {error}")
-        self.fiverr_preview_status.setText(f"[Error] {error}")
-        self._fiverr_reset_buttons()
-        if hasattr(self, "_fiverr_order_row"):
-            from PySide6.QtWidgets import QTableWidgetItem
-            self.fiverr_order_table.setItem(self._fiverr_order_row, 2, QTableWidgetItem("Error"))
+        self.fiverr_panel._on_image_error(error)
 
     def _fiverr_on_text_error(self, error: str):
-        # Shared by all three fiverr text flows (prompt, delivery, gig) —
-        # they are single-flight via the disabled buttons, so one token
-        # attribute covers them.
-        token = getattr(self, "_fiverr_prompt_token", None)
-        self._fiverr_prompt_token = None
-        if token:
-            self.abandon_request(token)
-        self.fiverr_status_label.setText(f"Error: {error}")
-        self._fiverr_reset_buttons()
+        self.fiverr_panel._on_text_error(error)
 
     def fiverr_write_delivery(self):
-        brief = self._fiverr_get_brief()
-        provider = self.fiverr_provider_box.currentText()
-        model = self.fiverr_model_box.currentText()
-        if not model:
-            QMessageBox.warning(self, "No Model", "Please select a model.")
-            return
-        agent = self.agent_instances["fiverr"]
-        messages = agent.build_messages("Write a professional delivery message for this logo order.", brief)
-        self.fiverr_delivery_box.clear()
-        self.fiverr_status_label.setText("Writing delivery message...")
-        self.fiverr_generate_btn.setEnabled(False)
-        self.fiverr_delivery_btn.setEnabled(False)
-        self.fiverr_gig_btn.setEnabled(False)
-        self.fiverr_stop_btn.setEnabled(True)
-        self.fiverr_stop_btn.show()
-        self.fiverr_tabs.setCurrentIndex(1)
-        token = self.authorize_request(
-            "fiverr", provider, model,
-            messages[-1]["content"] if messages else "")
-        if not token:
-            self._fiverr_reset_buttons()
-            return
-        self._fiverr_prompt_token = token
-        self.fiverr_text_worker = self._new_chat_worker(provider, model, messages, "")
-        self.fiverr_text_worker.token_signal.connect(self._fiverr_on_delivery_token)
-        self.fiverr_text_worker.finished_signal.connect(self._fiverr_on_delivery_done)
-        self.fiverr_text_worker.usage_signal.connect(lambda u, t=token: self.note_request_usage(t, u))
-        self.fiverr_text_worker.error_signal.connect(self._fiverr_on_text_error)
-        self.fiverr_text_worker.start()
+        self.fiverr_panel.write_delivery()
 
     def _fiverr_on_delivery_token(self, token: str):
-        self.fiverr_delivery_box.moveCursor(QTextCursor.End)
-        self.fiverr_delivery_box.insertPlainText(token)
+        self.fiverr_panel._on_delivery_token(token)
 
-    def _fiverr_on_delivery_done(self, _full: str):
-        token = getattr(self, "_fiverr_prompt_token", None)
-        self._fiverr_prompt_token = None
-        if token:
-            self.record_request(token, _full)
-        self.fiverr_status_label.setText("Delivery message ready.")
-        self.fiverr_generate_btn.setEnabled(True)
-        self.fiverr_delivery_btn.setEnabled(True)
-        self.fiverr_gig_btn.setEnabled(True)
-        self.fiverr_stop_btn.setEnabled(False)
-        self.fiverr_stop_btn.hide()
+    def _fiverr_on_delivery_done(self, full: str):
+        self.fiverr_panel._on_delivery_done(full)
 
     def fiverr_write_gig(self):
-        brief = self._fiverr_get_brief()
-        provider = self.fiverr_provider_box.currentText()
-        model = self.fiverr_model_box.currentText()
-        if not model:
-            QMessageBox.warning(self, "No Model", "Please select a model.")
-            return
-        agent = self.agent_instances["fiverr"]
-        messages = agent.build_messages("Write a complete Fiverr gig description for logo design services.", brief)
-        self.fiverr_gig_box.clear()
-        self.fiverr_status_label.setText("Writing gig description...")
-        self.fiverr_generate_btn.setEnabled(False)
-        self.fiverr_delivery_btn.setEnabled(False)
-        self.fiverr_gig_btn.setEnabled(False)
-        self.fiverr_stop_btn.setEnabled(True)
-        self.fiverr_stop_btn.show()
-        self.fiverr_tabs.setCurrentIndex(2)
-        token = self.authorize_request(
-            "fiverr", provider, model,
-            messages[-1]["content"] if messages else "")
-        if not token:
-            self._fiverr_reset_buttons()
-            return
-        self._fiverr_prompt_token = token
-        self.fiverr_text_worker = self._new_chat_worker(provider, model, messages, "")
-        self.fiverr_text_worker.token_signal.connect(self._fiverr_on_gig_token)
-        self.fiverr_text_worker.finished_signal.connect(self._fiverr_on_gig_done)
-        self.fiverr_text_worker.usage_signal.connect(lambda u, t=token: self.note_request_usage(t, u))
-        self.fiverr_text_worker.error_signal.connect(self._fiverr_on_text_error)
-        self.fiverr_text_worker.start()
+        self.fiverr_panel.write_gig()
 
     def _fiverr_on_gig_token(self, token: str):
-        self.fiverr_gig_box.moveCursor(QTextCursor.End)
-        self.fiverr_gig_box.insertPlainText(token)
+        self.fiverr_panel._on_gig_token(token)
 
-    def _fiverr_on_gig_done(self, _full: str):
-        token = getattr(self, "_fiverr_prompt_token", None)
-        self._fiverr_prompt_token = None
-        if token:
-            self.record_request(token, _full)
-        self.fiverr_status_label.setText("Gig description ready.")
-        self.fiverr_generate_btn.setEnabled(True)
-        self.fiverr_delivery_btn.setEnabled(True)
-        self.fiverr_gig_btn.setEnabled(True)
-        self.fiverr_stop_btn.setEnabled(False)
-        self.fiverr_stop_btn.hide()
+    def _fiverr_on_gig_done(self, full: str):
+        self.fiverr_panel._on_gig_done(full)
 
     def fiverr_stop(self):
-        if self.fiverr_image_worker is not None and self.fiverr_image_worker.isRunning():
-            self.fiverr_image_worker.cancel()
-        if self.fiverr_text_worker is not None and self.fiverr_text_worker.isRunning():
-            self.fiverr_text_worker.cancel()
-        # Release whatever this panel has pending — a stopped run must not
-        # leave an authorized request dangling for the next flow to clobber.
-        for attr in ("_fiverr_prompt_token", "_fiverr_image_token"):
-            token = getattr(self, attr, None)
-            setattr(self, attr, None)
-            if token:
-                self.abandon_request(token, reason="stopped")
-        self.fiverr_status_label.setText("Stopped.")
-        self.fiverr_generate_btn.setEnabled(True)
-        self.fiverr_delivery_btn.setEnabled(True)
-        self.fiverr_gig_btn.setEnabled(True)
-        self.fiverr_stop_btn.setEnabled(False)
-        self.fiverr_stop_btn.hide()
+        self.fiverr_panel.stop()
 
     def fiverr_save_images(self):
-        if not self._fiverr_image_paths:
-            return
-        dest_dir = QFileDialog.getExistingDirectory(self, "Choose folder to save logos")
-        if not dest_dir:
-            return
-        import shutil
-        for src in self._fiverr_image_paths:
-            shutil.copy(src, dest_dir)
-        self.fiverr_status_label.setText(f"Saved {len(self._fiverr_image_paths)} image(s).")
+        self.fiverr_panel.save_images()
 
     def fiverr_clear(self):
-        self._fiverr_clear_logo_grid()
-        self.fiverr_delivery_box.clear()
-        self.fiverr_gig_box.clear()
-        self.fiverr_status_label.setText("Idle")
-        self._fiverr_update_estimate()
-        self.fiverr_preview_status.setText("No logos generated yet.")
-        self.fiverr_save_images_btn.setEnabled(False)
-        self._fiverr_image_paths = []
+        self.fiverr_panel.clear()
 
     def _fiverr_clear_logo_grid(self):
-        while self.fiverr_logo_grid_layout.count():
-            item = self.fiverr_logo_grid_layout.takeAt(0)
-            if item.widget():
-                item.widget().deleteLater()
+        self.fiverr_panel._clear_logo_grid()
 
     def author_load_models(self):
         """Kept as a method so existing call sites stay put."""

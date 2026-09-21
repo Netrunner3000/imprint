@@ -533,3 +533,41 @@ class TestAudiobookBillingDecision:
                      text="🎉 ALL BOOKS COMPLETED SUCCESSFULLY!")
         assert win.usage_tracker.logged == []
         assert win._pending_requests == {}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 5. Client Gigs panel owns both paid phases and their exact tokens
+# ─────────────────────────────────────────────────────────────────────────────
+
+class TestFiverrPanelBillingDecision:
+
+    def test_completed_images_close_the_image_request_token(
+            self, win, monkeypatch):
+        panel = win.fiverr_panel
+        recorded = []
+        monkeypatch.setattr(
+            win, "record_request",
+            lambda token, result: recorded.append((token, result)))
+        panel.image_token = "image-token"
+        panel._on_all_done(["one.png", "two.png"])
+
+        assert recorded == [("image-token", "2 logo images")]
+        assert panel.image_token is None
+
+    def test_stop_releases_both_exact_phase_tokens(self, win, monkeypatch):
+        panel = win.fiverr_panel
+        panel.text_worker = None
+        panel.image_worker = None
+        abandoned = []
+        monkeypatch.setattr(
+            win, "abandon_request",
+            lambda token, reason="error": abandoned.append((token, reason)))
+        panel.prompt_token = "prompt-token"
+        panel.image_token = "image-token"
+
+        panel.stop()
+
+        assert panel.prompt_token is None
+        assert panel.image_token is None
+        assert abandoned == [
+            ("prompt-token", "stopped"), ("image-token", "stopped")]

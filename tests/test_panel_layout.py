@@ -108,6 +108,33 @@ def test_audiobook_workspace_is_owned_by_its_package(window):
         assert getattr(window, name) is getattr(window.audiobook_panel, name)
 
 
+def test_client_gigs_workspace_is_owned_by_fiverr_package(window):
+    from agents.fiverr import FiverrPanel
+
+    assert isinstance(window.fiverr_panel, FiverrPanel)
+    assert window.fiverr_panel.fiverr_tabs.count() == 4
+    for name in FiverrPanel.HOST_CONTROLS:
+        assert getattr(window, name) is getattr(window.fiverr_panel, name)
+
+
+def test_fiverr_compatibility_entries_delegate_to_owned_panel(window, monkeypatch):
+    calls = []
+    panel = window.fiverr_panel
+    monkeypatch.setattr(panel, "generate_logos",
+                        lambda: calls.append("generate"))
+    monkeypatch.setattr(panel, "write_delivery",
+                        lambda: calls.append("delivery"))
+    monkeypatch.setattr(panel, "write_gig", lambda: calls.append("gig"))
+    monkeypatch.setattr(panel, "stop", lambda: calls.append("stop"))
+
+    window.fiverr_generate_logos()
+    window.fiverr_write_delivery()
+    window.fiverr_write_gig()
+    window.fiverr_stop()
+
+    assert calls == ["generate", "delivery", "gig", "stop"]
+
+
 def test_audiobook_library_actions_use_owned_panel(window, monkeypatch, tmp_path):
     audio = tmp_path / "Example_Book.mp3"
     audio.write_bytes(b"audio")
