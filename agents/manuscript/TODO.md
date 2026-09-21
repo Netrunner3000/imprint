@@ -9,7 +9,7 @@
 
 ## v1 — current
 
-- [ ] `P1` Move the Publish panel and handlers from `main.py` into this package.
+- [x] `P1` Move the Publish panel and handlers from `main.py` into this package. Done 2026-09-21: `panel.py` owns the Overview (metrics, Ask, todos, Connections), Quote Finder, Quote Graphics, Shorts and Calendar tabs with all four guarded flows keeping per-flow request tokens (ask, quote suggestions, calendar captions, ElevenLabs narration); the umbrella keeps thin compatibility delegates, the cross-panel next-step banner, and the worker attributes its shutdown sweep watches.
 - [ ] `P1` Make one Project record the source for title, author and manuscript.
 - [ ] `P2` Replace monospace royalty summaries with shared charts.
 - [ ] `P2` Add explicit sync/error states for publishing integrations.
