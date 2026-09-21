@@ -10,7 +10,6 @@ execution path.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date
 
 
 OPENAI_IMAGE_MODELS = (
@@ -18,9 +17,9 @@ OPENAI_IMAGE_MODELS = (
     "gpt-image-2.5-flare",
     "gpt-image-2",
 )
-# Legacy adapter identifiers are retained for existing jobs, but no longer
-# appear in MODELS: OpenAI is shutting the Videos API down on 2026-09-24.
-OPENAI_VIDEO_MODELS = ("sora-2", "sora-2-pro")
+# Sora is gone entirely: OpenAI shut the Videos API down on 2026-09-24 with
+# no successor, so the adapter identifiers, rates and retirement gate that
+# lived here were deleted rather than kept as legacy.
 GEMINI_VIDEO_MODELS = (
     "gemini-omni-1.1-flash",
     "veo-3.1-generate-preview",
@@ -33,16 +32,11 @@ WAN_VIDEO_MODELS = (
     "wan2.7-t2v",
 )
 RETIRED_DALLE_MODELS = ("dall-e-2", "dall-e-3")
-SORA_SHUTDOWN_DATE = date(2026, 9, 24)
-
-# Official rates for 720p portrait/landscape Sora output, per generated second.
-SORA_USD_PER_SECOND = {"sora-2": 0.10, "sora-2-pro": 0.30}
 
 # 720p international list prices. Gemini Omni is token-billed at roughly this
 # amount per generated second, so its number is a budget reserve rather than a
 # provider quote. Failed Veo and Wan generations are not billed by their APIs.
 DIRECT_VIDEO_USD_PER_SECOND = {
-    **SORA_USD_PER_SECOND,
     "gemini-omni-1.1-flash": 0.10,
     "veo-3.1-generate-preview": 0.40,
     "veo-3.1-fast-generate-preview": 0.10,
@@ -122,14 +116,6 @@ def find_model(provider: str, model_id: str) -> MediaModel | None:
                  if model.provider == provider and model.model_id == model_id), None)
 
 
-def sora_cost_usd(model: str, seconds: int) -> float:
-    if model not in SORA_USD_PER_SECOND:
-        raise ValueError(f"Unsupported Sora model: {model}")
-    if int(seconds) not in (4, 8, 12):
-        raise ValueError("Sora clips must be 4, 8 or 12 seconds.")
-    return round(SORA_USD_PER_SECOND[model] * int(seconds), 2)
-
-
 def direct_video_cost_usd(model: str, seconds: int) -> float:
     """Return the configured 720p cost/reserve for a selectable direct model."""
     rate = direct_video_rate_usd(model)
@@ -147,10 +133,6 @@ def direct_video_rate_usd(model: str) -> float | None:
 
     override = rate_usd("direct_video", model)
     return override if override is not None else DIRECT_VIDEO_USD_PER_SECOND.get(model)
-
-
-def sora_is_retired(today: date | None = None) -> bool:
-    return (today or date.today()) >= SORA_SHUTDOWN_DATE
 
 
 def openai_image_reserve_usd(model: str) -> float:

@@ -256,58 +256,8 @@ class HiggsfieldEstimateWorker(QThread):
             self.error_signal.emit(str(exc))
 
 
-class OpenAIVideoWorker(QThread):
-    """Run a short Sora job and preserve its paid output locally.
-
-    The legacy Sora endpoint has no cancel operation. A stop request therefore
-    cannot safely abandon the result: the provider keeps rendering and billing,
-    so this worker continues polling and downloads the asset.
-    """
-
-    status_signal = Signal(str)
-    progress_signal = Signal(int, str)
-    job_signal = Signal(object)
-    done_signal = Signal(str)
-    error_signal = Signal(str)
-
-    def __init__(self, client, prompt: str, output_path, *, model: str,
-                 seconds: int, size: str, timeout: int = 900):
-        super().__init__()
-        self.client = client
-        self.prompt = prompt
-        self.output_path = Path(output_path)
-        self.model = model
-        self.seconds = seconds
-        self.size = size
-        self.timeout = timeout
-
-    def run(self):
-        try:
-            self.status_signal.emit("Submitting to OpenAI Sora…")
-            job = self.client.create_video(
-                self.prompt, model=self.model, seconds=self.seconds,
-                size=self.size)
-            self.job_signal.emit(job)
-
-            def progress(current):
-                self.job_signal.emit(current)
-                self.progress_signal.emit(
-                    current.progress,
-                    f"Sora rendering… {current.progress}% ({current.status})")
-
-            job = self.client.wait_video(
-                job, timeout=self.timeout, on_progress=progress)
-            self.job_signal.emit(job)
-            if job.status != "completed":
-                self.error_signal.emit(job.error or f"Sora render {job.status}")
-                return
-
-            self.status_signal.emit("Downloading Sora video…")
-            self.output_path.parent.mkdir(parents=True, exist_ok=True)
-            self.output_path.write_bytes(self.client.download_video(job.job_id))
-            self.done_signal.emit(str(self.output_path))
-        except Exception as exc:
-            self.error_signal.emit(str(exc))
+# OpenAIVideoWorker (Sora) was deleted with the 2026-09-24 Videos API
+# shutdown; no successor exists.
 
 
 class VideoGenerationWorker(QThread):

@@ -139,8 +139,6 @@ TOOL_PROMPTS_FILE = CONFIG_DIR / "tool_prompts.json"
 REGISTRY_FILE = CONFIG_DIR / "registry.json"
 README_FILE = RESOURCE_DIR / "README.md"
 
-SUPPORTED_EBOOKS = {".pdf", ".epub", ".txt", ".mobi"}
-
 # agent key -> (provider box attribute, model box attribute)
 AGENT_SETUP_WIDGETS = {
     "chat":        ("provider_box",             "model_box"),
@@ -3642,9 +3640,9 @@ class GodAI(QWidget):
             note = (
                 f"{selection.note} One image is generated for each scene. "
                 "DALL·E 2 and 3 are not listed because OpenAI retired and "
-                "removed both APIs. Sora is no longer offered for new clips "
-                "ahead of its 24 September 2026 API shutdown; choose Gemini, "
-                "Qwen or Higgsfield for direct video.")
+                "removed both APIs. Sora is no longer offered — its Videos "
+                "API shut down on 24 September 2026 with no successor; "
+                "choose Gemini, Qwen or Higgsfield for direct video.")
         else:
             note = selection.note
         self.video_visual_note.setText(note)
@@ -3794,12 +3792,14 @@ class GodAI(QWidget):
         from agents.video import video_studio
 
         if selection.provider == "OpenAI":
+            # Defensive: no OpenAI direct_video row exists in the catalog any
+            # more, but a stale selection must still refuse cleanly.
             QMessageBox.warning(
-                self, "Sora retired for new jobs",
-                "Imprint no longer starts new Sora jobs ahead of the "
-                "24 September 2026 API shutdown. Choose Gemini, Qwen or "
-                "Higgsfield for direct video, or OpenAI GPT Image for a "
-                "narrated scene-based video.")
+                self, "Sora is gone",
+                "OpenAI shut the Sora Videos API down on 24 September 2026 "
+                "with no successor — Imprint no longer starts Sora jobs. "
+                "Choose Gemini, Qwen or Higgsfield for direct video, or "
+                "OpenAI GPT Image for a narrated scene-based video.")
             return
 
         topic = self.video_topic_input.text().strip()
@@ -3977,7 +3977,7 @@ class GodAI(QWidget):
     def _video_on_error(self, error: str):
         provider_completed = (
             self._video_active_kind in {
-                "sora", "higgsfield", "gemini-video", "qwen-video"}
+                "higgsfield", "gemini-video", "qwen-video"}
             and self._video_external_context.get("provider_completed", False)
         )
         token, self._video_request_token = self._video_request_token, None
@@ -3999,10 +3999,9 @@ class GodAI(QWidget):
         self._video_visual_model_changed()
 
     def video_stop(self):
-        if self._video_active_kind in {"sora", "gemini-video", "qwen-video"}:
+        if self._video_active_kind in {"gemini-video", "qwen-video"}:
             provider = {
-                "sora": "Sora", "gemini-video": "Gemini",
-                "qwen-video": "Wan",
+                "gemini-video": "Gemini", "qwen-video": "Wan",
             }[self._video_active_kind]
             self.video_status_label.setText(
                 f"{provider} has no safe cancel operation here. Imprint will "
@@ -7876,404 +7875,49 @@ class GodAI(QWidget):
             self.output_label.setText("Output")
 
     def get_audiobook_defaults(self):
-        tool = self.tool_runner.tools["audiobook"]
-        return {
-            "input": tool["default_input"],
-            "output": tool["default_output"],
-            "voice": tool.get("default_voice", "alloy"),
-            "chunk_tokens": tool.get("default_chunk_tokens", 1400),
-        }
+        return self.audiobook_panel.defaults()
 
     def _update_audiobook_source_state(self, empty_message: str = "") -> None:
-        """Keep the source selector compact while leaving several books visible."""
-        count = self.audiobook_book_list.count()
-        if count == 0:
-            if empty_message:
-                self.audiobook_empty_state.setText(empty_message)
-            self.audiobook_source_stack.setCurrentWidget(
-                self.audiobook_empty_state)
-            self.audiobook_source_stack.setFixedHeight(
-                CONTROL_HEIGHT * 2 + SM)
-            return
-
-        self.audiobook_source_stack.setCurrentWidget(
-            self.audiobook_book_list)
-        rows = min(4, count)
-        row_height = self.audiobook_book_list.sizeHintForRow(0)
-        if row_height <= 0:
-            row_height = CONTROL_HEIGHT
-        height = min(
-            CONTROL_HEIGHT * 5 + MD,
-            max(CONTROL_HEIGHT * 2 + SM, rows * row_height + MD),
-        )
-        self.audiobook_source_stack.setFixedHeight(height)
+        self.audiobook_panel._update_source_state(empty_message)
 
     def refresh_audiobook_books(self):
-        defaults = self.get_audiobook_defaults()
-        input_folder = Path(defaults["input"]).expanduser()
-        output_folder = Path(defaults["output"]).expanduser()
-
-        self.audiobook_input_path.setText(str(input_folder))
-        self.audiobook_output_path.setText(str(output_folder))
-        self.audiobook_voice_box.setCurrentText(defaults["voice"])
-        self.audiobook_chunk_input.setText(str(defaults["chunk_tokens"]))
-        self.audiobook_book_list.clear()
-        self.tool_progress.setValue(0)
-
-        if not input_folder.exists():
-            self._update_audiobook_source_state(
-                "The input folder does not exist yet. Set it up, add a PDF, "
-                "EPUB, TXT, or MOBI file, then refresh the list.")
-            self.output_box.setPlainText(f"[Error] Input folder does not exist:\n{input_folder}")
-            self.audiobook_status_label.setText("Choose an input folder to add your first book.")
-            return
-
-        books = sorted(f for f in input_folder.iterdir() if f.is_file() and f.suffix.lower() in SUPPORTED_EBOOKS)
-
-        if not books:
-            self._update_audiobook_source_state(
-                "No supported books found in the input folder. Add a PDF, "
-                "EPUB, TXT, or MOBI file, then refresh the list.")
-            self.output_box.setPlainText(f"[Info] No supported ebooks found in:\n{input_folder}")
-            self.audiobook_status_label.setText("No books yet — add a PDF, EPUB, TXT, or MOBI file.")
-            return
-
-        for book in books:
-            item = QListWidgetItem(book.name)
-            item.setData(Qt.UserRole, str(book))
-            self.audiobook_book_list.addItem(item)
-
-        self._update_audiobook_source_state()
-
-        if len(books) == 1:
-            self.audiobook_book_list.setCurrentRow(0)
-
-        self.output_box.setPlainText(f"[Ready] Found {len(books)} book(s). Select one and click Start.")
-        self.audiobook_status_label.setText(f"[Ready] Found {len(books)} book(s).")
-        self.estimate_audiobook_cost_from_selection()
-
-    def show_empty_audiobook_folder_popup(self, folder_path: Path):
-        msg = QMessageBox(self)
-        msg.setWindowTitle("Audiobook Folder Empty")
-        msg.setText(f"No supported ebooks found in:\n{folder_path}")
-        open_btn = msg.addButton("Open Folder", QMessageBox.ActionRole)
-        msg.addButton(QMessageBox.Ok)
-        msg.exec()
-
-        if msg.clickedButton() == open_btn:
-            QDesktopServices.openUrl(QUrl.fromLocalFile(str(folder_path)))
+        self.audiobook_panel.refresh_books()
 
     def open_audiobook_input_folder(self):
-        folder = self.audiobook_input_path.text().strip()
-        if folder:
-            QDesktopServices.openUrl(QUrl.fromLocalFile(folder))
+        self.audiobook_panel.open_input_folder()
 
     def change_audiobook_output_folder(self):
-        folder = QFileDialog.getExistingDirectory(self, "Select Audiobook Output Folder")
-        if folder:
-            self.audiobook_output_path.setText(folder)
+        self.audiobook_panel.change_output_folder()
 
     def _audiobook_estimate(self, path: Path) -> dict | None:
-        """Real cost for converting `path`, from its actual text.
-
-        The converter has carried `load_text`, `count_text_tokens` and
-        `estimate_costs_usd` all along; the panel ignored all three and guessed
-        from the file size instead — `min(25, max(0.5, megabytes * 0.80))`,
-        a number with no relationship to what OpenAI charges. A PDF of scanned
-        images and a PDF of dense text are the same size and nothing like the
-        same price.
-        """
-        from services.narrator.converter import (
-            count_text_tokens, estimate_audio_seconds_from_text,
-            estimate_audio_tokens_from_seconds, estimate_costs_usd,
-        )
-        from services.per_unit_pricing import eur_per_usd
-
-        try:
-            text = self._audiobook_text(path)
-        except Exception:
-            return None
-        if not text.strip():
-            return None
-
-        text_tokens = count_text_tokens(text)
-        seconds = estimate_audio_seconds_from_text(text)
-        audio_tokens = estimate_audio_tokens_from_seconds(seconds)
-        usd = estimate_costs_usd(text_tokens, audio_tokens)["total_usd"]
-        return {
-            "characters": len(text),
-            "seconds": seconds,
-            "eur": round(usd * eur_per_usd(), 4),
-        }
+        return self.audiobook_panel._estimate(path)
 
     def _audiobook_text(self, path: Path) -> str:
-        """Extracted text for `path`, cached by (path, mtime).
-
-        Extraction is the expensive part and the selection handler runs on
-        every arrow-key press, so the same book is not re-parsed each time.
-        """
-        from services.narrator.converter import load_text
-
-        key = (str(path), path.stat().st_mtime_ns)
-        cache = getattr(self, "_audiobook_text_cache", None)
-        if cache is None:
-            cache = self._audiobook_text_cache = {}
-        if key not in cache:
-            cache.clear()          # one book at a time; books are large
-            cache[key] = load_text(path)
-        return cache[key]
+        return self.audiobook_panel._text(path)
 
     def estimate_audiobook_cost_from_selection(self):
-        item = self.audiobook_book_list.currentItem()
-        if not item:
-            self.audiobook_cost_label.setText("Select a book")
-            return
-
-        path = Path(item.data(Qt.UserRole))
-        estimate = self._audiobook_estimate(path)
-        if estimate is None:
-            self.audiobook_cost_label.setText("Cost: could not read this file")
-            return
-        minutes = estimate["seconds"] / 60
-        self.audiobook_cost_label.setText(
-            f"~{minutes:.0f} min audio · ≈ €{estimate['eur']:.2f}")
+        self.audiobook_panel.estimate_cost_from_selection()
 
     def start_selected_audiobook_book(self):
-        item = self.audiobook_book_list.currentItem()
-        if not item:
-            self.output_box.setPlainText("[Error] Please select a book first.")
-            return
-
-        book_path = item.data(Qt.UserRole)
-        output_path = self.audiobook_output_path.text().strip()
-        voice = self.audiobook_voice_box.currentText().strip()
-
-        # Preflight: narrator needs an OpenAI key for TTS. Catch the most common
-        # failure (missing key) before launching, so the user gets a clear message
-        # instead of a process that silently exits.
-        if not OpenAIClientWrapper.key_available():
-            self.audiobook_status_label.setText("[Error] OPENAI_API_KEY not set.")
-            QMessageBox.critical(
-                self,
-                "OpenAI API Key Required",
-                "Audiobook conversion uses OpenAI's text-to-speech API, but "
-                "OPENAI_API_KEY is not set.\n\n"
-                "Add your key to the .env file in the project root:\n"
-                "    OPENAI_API_KEY=sk-...\n\n"
-                "then restart Imprint and try again. "
-                "Get a key at platform.openai.com/api-keys.",
-            )
-            return
-
-        try:
-            chunk_tokens = int(self.audiobook_chunk_input.text().strip())
-        except ValueError:
-            QMessageBox.warning(self, "Invalid Value", "Chunk tokens must be a number.")
-            return
-
-        # Converting a book is a paid OpenAI call — often the most expensive
-        # single action in the app — and it went out with a hand-rolled Yes/No
-        # box instead of the guard: no budget check, no entry in the spend
-        # counters, nothing against the daily cap. Same class as the 19
-        # unguarded ChatWorker sites, and the last one left.
-        estimate = self._audiobook_estimate(Path(book_path))
-        if estimate is None:
-            QMessageBox.warning(
-                self, "Unreadable Book",
-                f"No text could be extracted from {Path(book_path).name}, so "
-                "the conversion cost cannot be estimated.")
-            return
-        token = self.authorize_request(
-            "audiobook", "openai", "gpt-4o-mini-tts",
-            f"{Path(book_path).name} · {estimate['characters']} characters",
-            label="audiobook", flat_cost_eur=estimate["eur"])
-        if not token:
-            return
-        self._audiobook_request_token = token
-
-        config = {"input": book_path, "output": output_path, "voice": voice, "chunk_tokens": chunk_tokens}
-
-        self.output_box.setPlainText(
-            f"[Starting]\nBook: {Path(book_path).name}\nOutput: {output_path}\nVoice: {voice}\nChunk tokens: {chunk_tokens}\n\n"
-        )
-        self.audiobook_status_label.setText(f"[Running] {Path(book_path).name}")
-        self.run_audiobook_live(config)
+        self.audiobook_panel.start_conversion()
 
     def run_audiobook_live(self, config):
-        self.tool_progress.setValue(0)
-        self.stop_btn.setEnabled(True)
-        self.stop_btn.show()
-        self.audiobook_start_btn.setEnabled(False)
-        self.audiobook_refresh_btn.setEnabled(False)
-
-        tool = self.tool_runner.tools["audiobook"]
-        project_root = str(Path(__file__).resolve().parent)
-        self.audiobook_process = QProcess(self)
-        self.audiobook_process.setProcessChannelMode(QProcess.MergedChannels)
-        # Run from the project root so "-m services.narrator.converter" resolves,
-        # using the app's own interpreter (no separate venv -> PyInstaller-friendly).
-        self.audiobook_process.setWorkingDirectory(project_root)
-
-        program = sys.executable
-        conv_args = [
-            "--input", config["input"],
-            "--output", config["output"],
-            "--voice", config["voice"],
-            "--chunk-tokens", str(config["chunk_tokens"]),
-        ]
-        if is_frozen():
-            # Packaged app: re-invoke our own executable with the worker sentinel
-            # (PyInstaller apps have no `python -m`).
-            arguments = ["--narrator-worker"] + conv_args
-        else:
-            arguments = ["-u", "-m", tool.get("module", "services.narrator.converter")] + conv_args
-
-        self.audiobook_process.readyReadStandardOutput.connect(self.handle_audiobook_stdout)
-        self.audiobook_process.finished.connect(self.handle_audiobook_finished)
-        self.audiobook_process.errorOccurred.connect(self.handle_audiobook_error)
-        self.audiobook_process.start(program, arguments)
+        self.audiobook_panel.run_conversion(config)
 
     def handle_audiobook_error(self, error):
-        """Fired when the process fails to start/crashes at the QProcess level
-        (e.g. interpreter not found) — distinct from a non-zero exit code."""
-        # FailedToStart still emits finished() on some platforms; on others it
-        # does not, so report here to guarantee the user sees something.
-        reason = {
-            QProcess.FailedToStart: "The converter process failed to start "
-                                    "(interpreter or module not found).",
-            QProcess.Crashed: "The converter process crashed.",
-            QProcess.Timedout: "The converter process timed out.",
-        }.get(error, "The converter process encountered an unknown error.")
-
-        self.stop_btn.setEnabled(False)
-        self.stop_btn.hide()
-        self.audiobook_start_btn.setEnabled(True)
-        self.audiobook_refresh_btn.setEnabled(True)
-        self.tool_progress.setValue(0)
-        self.audiobook_status_label.setText("[Error] Converter could not run.")
-        self.output_box.append(f"\n[Error] {reason}")
-        QMessageBox.critical(self, "Audiobook Conversion Failed", reason)
+        self.audiobook_panel.handle_error(error)
 
     def handle_audiobook_stdout(self):
-        data = self.audiobook_process.readAll().data().decode("utf-8", errors="replace")
-        if not data:
-            return
-
-        self.output_box.moveCursor(QTextCursor.End)
-        self.output_box.insertPlainText(data)
-        self.output_box.ensureCursorVisible()
-
-        matches = re.findall(r"(\d+(?:\.\d+)?)%\s+\((\d+)/(\d+)\)", data)
-        if matches:
-            percent = float(matches[-1][0])
-            done = matches[-1][1]
-            total = matches[-1][2]
-            self.tool_progress.setValue(int(percent))
-            self.audiobook_status_label.setText(f"[Running] {percent:.1f}% ({done}/{total})")
+        self.audiobook_panel.process = self.audiobook_process
+        self.audiobook_panel.handle_stdout()
 
     def handle_audiobook_finished(self):
-        self.stop_btn.setEnabled(False)
-        self.stop_btn.hide()
-        self.audiobook_start_btn.setEnabled(True)
-        self.audiobook_refresh_btn.setEnabled(True)
-
-        exit_code = self.audiobook_process.exitCode() if self.audiobook_process else 0
-        exit_status = self.audiobook_process.exitStatus() if self.audiobook_process else QProcess.NormalExit
-        output_text = self.output_box.toPlainText()
-        crashed = exit_status == QProcess.CrashExit
-
-        # The exit code is the protocol: converter.main() exits 0 only when
-        # every book completed, 1 on any failure or pause — its docstring
-        # promised the GUI keys off it, while this handler actually sniffed
-        # the celebration banner ("🎉"/"ALL BOOKS COMPLETED") out of stdout.
-        # The string checks below survive only for user-facing messaging.
-        success = exit_code == 0 and not crashed
-        quota_hit = any(k in output_text for k in (
-            "insufficient_quota", "exceeded your current quota", "Billing hard limit"))
-        paused = "Conversion paused" in output_text or "⏸️" in output_text
-
-        # Close out the request authorised in start_selected_audiobook_book.
-        # A conversion that was stopped, crashed or hit the quota billed some
-        # of the book but not the amount authorised for the whole of it, so it
-        # is released rather than charged in full.
-        token = getattr(self, "_audiobook_request_token", None)
-        self._audiobook_request_token = None
-        if token and success:
-            self.record_request(token, "conversion complete")
-        elif token:
-            self.abandon_request(token)
-
-        if quota_hit:
-            self.tool_progress.setValue(0)
-            self.audiobook_status_label.setText("[Blocked] OpenAI quota exceeded — top up your account.")
-            self.output_box.append(
-                "\n[Blocked] Your OpenAI account has run out of quota.\n"
-                "Top up your account at platform.openai.com/settings/billing,\n"
-                "then click Start on the same book to resume automatically."
-            )
-            QMessageBox.warning(
-                self, "OpenAI Quota Exceeded",
-                "Your OpenAI account has run out of quota. Top up at "
-                "platform.openai.com/settings/billing, then click Start to resume.",
-            )
-
-        elif paused and exit_code != 0:
-            self.tool_progress.setValue(0)
-            self.audiobook_status_label.setText("[Paused] Incomplete — click Start to resume.")
-            self.output_box.append(
-                "\n[Paused] Some chunks were not completed.\n"
-                "Click Start on the same book to resume automatically."
-            )
-
-        elif crashed or exit_code != 0:
-            reason = self._extract_audiobook_error(output_text)
-            self.tool_progress.setValue(0)
-            self.audiobook_status_label.setText("[Error] Conversion failed.")
-            self.output_box.append(
-                f"\n[Error] Conversion failed (exit code {exit_code}).\n{reason}"
-            )
-            QMessageBox.critical(
-                self, "Audiobook Conversion Failed",
-                f"The conversion did not complete.\n\n{reason}",
-            )
-
-        elif success:
-            self.tool_progress.setValue(100)
-            self.audiobook_status_label.setText("[Done] Audiobook created successfully.")
-            self.output_box.append("\n[Done] Audiobook created successfully.")
-
-        else:
-            # Exit 0 but no success marker — don't fake success.
-            reason = self._extract_audiobook_error(output_text)
-            self.tool_progress.setValue(0)
-            self.audiobook_status_label.setText("[Warning] Ended without confirming success.")
-            self.output_box.append(
-                "\n[Warning] The converter exited without reporting completion. "
-                f"Nothing may have been produced.\n{reason}"
-            )
-            QMessageBox.warning(
-                self, "Audiobook Conversion Incomplete",
-                "The converter exited without confirming the audiobook was "
-                f"created.\n\n{reason}",
-            )
-
-        self.refresh_audiobook_books()
+        self.audiobook_panel.process = self.audiobook_process
+        self.audiobook_panel.handle_finished()
 
     @staticmethod
     def _extract_audiobook_error(output_text: str) -> str:
-        """Pull the most informative error line out of the converter's output so
-        the user sees *why* it failed, not just that it did."""
-        lines = [ln.strip() for ln in output_text.splitlines() if ln.strip()]
-        # Prefer lines that name a concrete cause over generic failure notices.
-        specific = ("not found", "not set", "Fatal error", "Traceback", "Exception",
-                    "quota", "Authentication", "401", "Failed to read")
-        for ln in reversed(lines):
-            if any(m in ln for m in specific):
-                return ln
-        for ln in reversed(lines):
-            if "❌" in ln or "Error" in ln:
-                return ln
-        return lines[-1] if lines else "No output was produced by the converter."
+        return AudiobookPanel.extract_error(output_text)
 
     def load_models(self):
         self.model_box.clear()
@@ -8975,22 +8619,7 @@ class GodAI(QWidget):
             self.fiverr_stop()
             return
 
-        stopped = False
-        if self.audiobook_process is not None:
-            if self.audiobook_process.state() != QProcess.NotRunning:
-                self.audiobook_process.kill()
-                stopped = True
-
-        self.stop_btn.setEnabled(False)
-        self.stop_btn.hide()
-        self.audiobook_start_btn.setEnabled(True)
-        self.audiobook_refresh_btn.setEnabled(True)
-
-        if stopped:
-            self.output_box.append("\n[Stopped] Current task stopped by user.")
-            self.audiobook_status_label.setText("[Stopped]")
-        else:
-            self.output_box.append("\n[Info] No running task to stop.")
+        self.audiobook_panel.stop_conversion()
 
     def update_resource_label(self):
         stats = self.monitor.snapshot()
@@ -9570,8 +9199,10 @@ class GodAI(QWidget):
 
     def closeEvent(self, event):
         try:
-            if self.audiobook_process is not None and self.audiobook_process.state() != QProcess.NotRunning:
-                self.audiobook_process.kill()
+            audiobook_process = self.audiobook_panel.process
+            if (audiobook_process is not None and
+                    audiobook_process.state() != QProcess.NotRunning):
+                audiobook_process.kill()
             # Every worker, not just chat: quitting mid-run used to leave the
             # others' QThreads to be destroyed while still running (a Qt
             # abort) and lose the paid request's record. cancel() + a short

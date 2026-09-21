@@ -492,7 +492,7 @@ def test_creator_compose_grid_has_no_empty_cells(app, window, kind, expected):
 
 def test_video_provider_model_controls_only_offer_working_routes(app, window):
     """Every visible provider/model pair must change to its real constraints."""
-    from services.media_catalog import OPENAI_VIDEO_MODELS, RETIRED_DALLE_MODELS
+    from services.media_catalog import RETIRED_DALLE_MODELS
 
     window.select_agent("video")
     offered = set()
@@ -505,7 +505,8 @@ def test_video_provider_model_controls_only_offer_working_routes(app, window):
             for i in range(window.video_visual_model_box.count()))
 
     assert offered.isdisjoint(RETIRED_DALLE_MODELS)
-    assert offered.isdisjoint(OPENAI_VIDEO_MODELS)
+    # Sora ids were deleted with the 2026-09-24 shutdown; nothing may offer them.
+    assert not any(m.startswith("sora") for m in offered)
     window.video_visual_provider_box.setCurrentText("OpenAI")
     image_index = next(
         i for i in range(window.video_visual_model_box.count())
@@ -514,6 +515,7 @@ def test_video_provider_model_controls_only_offer_working_routes(app, window):
     app.processEvents()
     assert window.video_format_box.isEnabled()
     assert "Sora is no longer offered" in window.video_visual_note.text()
+    assert "no successor" in window.video_visual_note.text()
 
     window.video_visual_provider_box.setCurrentText("Gemini")
     direct_index = next(
@@ -532,9 +534,11 @@ def test_video_refuses_a_legacy_sora_selection_before_authorization(window, monk
                         lambda *_args: warnings.append(_args[2]))
     monkeypatch.setattr(window, "authorize_request",
                         lambda *_args, **_kwargs: pytest.fail("paid call was reached"))
+    # The catalog carries no OpenAI direct_video row any more; this pins the
+    # defensive refusal for a stale selection object.
     window._video_render_direct(MediaModel(
         "OpenAI", "sora-2", "Sora 2", "direct_video"))
-    assert "no longer starts new Sora jobs" in warnings[0]
+    assert "no longer starts Sora jobs" in warnings[0]
 
 
 def test_no_control_label_carries_an_emoji(app, window):
@@ -628,3 +632,17 @@ def test_audiobook_selection_refreshes_the_cost_estimate(app, window):
     finally:
         del panel.estimate_cost_from_selection
         lst.takeItem(lst.count() - 1)
+
+
+def test_audiobook_conversion_entries_delegate_to_owned_panel(window, monkeypatch):
+    calls = []
+    panel = window.audiobook_panel
+    monkeypatch.setattr(panel, "start_conversion",
+                        lambda: calls.append("start"))
+    monkeypatch.setattr(panel, "stop_conversion",
+                        lambda: calls.append("stop"))
+
+    window.start_selected_audiobook_book()
+    window.stop_current_task()
+
+    assert calls == ["start", "stop"]
