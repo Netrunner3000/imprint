@@ -168,7 +168,7 @@ AGENT_PRETTY_NAMES = {spec.key: spec.label for spec in AGENT_SPECS}
 from ui.panels.base import AgentPanel
 from ui.workers import (
     VideoWorker,
-    ChatWorker, SubprocessWorker, ModelPullWorker, FiverrImageWorker, ShortsWorker,
+    ChatWorker, ModelPullWorker, FiverrImageWorker, ShortsWorker,
     HiggsfieldEstimateWorker, HiggsfieldWorker,
     VideoGenerationWorker,
 )
@@ -667,34 +667,9 @@ class GodAI(QWidget):
         )
         return choice == QMessageBox.Yes
 
-    def check_budget_before_request(self, estimated_cost: float, backend: str) -> bool:
-        if backend == "ollama":
-            return True
-
-        today_total = self.usage_tracker.get_today_total()
-
-        session_remaining = self.session_budget_eur - self.session_cost_total
-        daily_remaining = self.daily_budget_eur - today_total
-
-        if estimated_cost > session_remaining:
-            QMessageBox.warning(
-                self,
-                "Session Budget Exceeded",
-                f"This request is estimated at €{estimated_cost:.2f}, "
-                f"but your remaining session budget is only €{session_remaining:.2f}."
-            )
-            return False
-
-        if estimated_cost > daily_remaining:
-            QMessageBox.warning(
-                self,
-                "Daily Budget Exceeded",
-                f"This request is estimated at €{estimated_cost:.2f}, "
-                f"but your remaining daily budget is only €{daily_remaining:.2f}."
-            )
-            return False
-
-        return True
+    # check_budget_before_request() was deleted here: no callers, float
+    # arithmetic, and it duplicated (worse) what the Decimal validator does
+    # inside authorize_request().
 
     def save_budget_limits(self):
         try:
@@ -2973,10 +2948,14 @@ class GodAI(QWidget):
             campaign, platform, self.social_angle_box.currentText(),
             notes=self.social_notes_input.text().strip(), variants=variants)
 
-        if not self.authorize_request("social", provider, model,
-                                      messages[-1]["content"],
-                                      label=f"{platform.key} post"):
+        # Keep the token: "social" is shared with the clip-brief flow, and
+        # resolving by name pops whichever request happens to be oldest.
+        token = self.authorize_request("social", provider, model,
+                                       messages[-1]["content"],
+                                       label=f"{platform.key} post")
+        if not token:
             return
+        self._social_request_token = token
 
         self.social_write_btn.setEnabled(False)
         self.social_stop_btn.show()
@@ -2987,12 +2966,15 @@ class GodAI(QWidget):
                                         messages, "")
         self.social_worker.finished_signal.connect(self._social_on_written)
         self.social_worker.usage_signal.connect(
-            lambda u: self.note_request_usage("social", u))
+            lambda u, t=token: self.note_request_usage(t, u))
         self.social_worker.error_signal.connect(self._social_on_error)
         self.social_worker.start()
 
     def _social_on_written(self, response: str):
-        self.record_request("social", response)
+        token = getattr(self, "_social_request_token", None)
+        self._social_request_token = None
+        if token:
+            self.record_request(token, response)
         variants = split_variants(response)
         separator = "\n\n" + "—" * 30 + "\n\n"
         self.social_draft_box.setPlainText(separator.join(variants))
@@ -3002,7 +2984,10 @@ class GodAI(QWidget):
         self.social_tabs.setCurrentIndex(0)
 
     def _social_on_error(self, error: str):
-        self.abandon_request("social")
+        token = getattr(self, "_social_request_token", None)
+        self._social_request_token = None
+        if token:
+            self.abandon_request(token)
         self.social_status_label.setText(f"[Error] {error}")
         self._social_reset_buttons()
 
@@ -3017,7 +3002,10 @@ class GodAI(QWidget):
         # unresolved.
         if self.social_worker is not None:
             self.social_worker.cancel()
-        self.abandon_request("social")
+        token = getattr(self, "_social_request_token", None)
+        self._social_request_token = None
+        if token:
+            self.abandon_request(token, reason="stopped")
         self._social_reset_buttons()
 
     # ── Clips, via the Video pipeline ────────────────────────────────────────
@@ -3055,10 +3043,12 @@ class GodAI(QWidget):
         seconds = 30
         messages = build_clip_brief_messages(campaign, platform, seconds,
                                              self.social_notes_input.text().strip())
-        if not self.authorize_request("social", provider, model,
-                                      messages[-1]["content"],
-                                      label="clip brief"):
+        token = self.authorize_request("social", provider, model,
+                                       messages[-1]["content"],
+                                       label="clip brief")
+        if not token:
             return
+        self._social_brief_token = token
 
         self.social_write_btn.setEnabled(False)
         self.social_clip_btn.setEnabled(False)
@@ -3069,7 +3059,7 @@ class GodAI(QWidget):
                                         messages, "")
         self.social_worker.finished_signal.connect(self._social_on_clip_brief)
         self.social_worker.usage_signal.connect(
-            lambda u: self.note_request_usage("social", u))
+            lambda u, t=token: self.note_request_usage(t, u))
         self.social_worker.error_signal.connect(self._social_on_clip_error)
         self.social_worker.start()
 
@@ -3077,7 +3067,10 @@ class GodAI(QWidget):
         from agents.video import video_studio
         from services.per_unit_pricing import eur_per_usd
 
-        self.record_request("social", brief)
+        token = getattr(self, "_social_brief_token", None)
+        self._social_brief_token = None
+        if token:
+            self.record_request(token, brief)
         platform_key, seconds = getattr(self, "_social_pending_clip",
                                         ("tiktok", 30))
         topic = brief.strip().split("\n")[0][:300]
@@ -3098,11 +3091,16 @@ class GodAI(QWidget):
             self._social_clip_done()
             return
 
-        if not self.authorize_request(
-                "video", "openai", "vidforge-pipeline", topic,
-                label=f"{platform_key} clip", flat_cost_eur=cost_eur):
+        # A "video"-keyed request from Social: keeping the token is what
+        # stops a concurrent Video-tab failure from popping this render's
+        # pending context (and vice versa).
+        video_token = self.authorize_request(
+            "video", "openai", "vidforge-pipeline", topic,
+            label=f"{platform_key} clip", flat_cost_eur=cost_eur)
+        if not video_token:
             self._social_clip_done()
             return
+        self._social_clip_video_token = video_token
 
         self.social_status_label.setText("Rendering clip — see the Video tab")
         self.social_worker = None
@@ -3116,7 +3114,10 @@ class GodAI(QWidget):
 
     def _social_on_clip_done(self, slug: str, path: str):
         from services import social_store
-        self.record_request("video", f"social clip {slug}")
+        token = getattr(self, "_social_clip_video_token", None)
+        self._social_clip_video_token = None
+        if token:
+            self.record_request(token, f"social clip {slug}")
         campaign = self.social_current_campaign()
         platform_key, _seconds = getattr(self, "_social_pending_clip",
                                          ("tiktok", 30))
@@ -3132,8 +3133,14 @@ class GodAI(QWidget):
         self.refresh_video_library()
 
     def _social_on_clip_error(self, error: str):
-        self.abandon_request("social")
-        self.abandon_request("video")
+        # The error can arrive from either stage: brief (its token pending)
+        # or render (the video token pending). Abandon exactly what this
+        # flow authorized, never by agent name.
+        for attr in ("_social_brief_token", "_social_clip_video_token"):
+            token = getattr(self, attr, None)
+            setattr(self, attr, None)
+            if token:
+                self.abandon_request(token)
         self.social_status_label.setText(f"[Error] {error}")
         self._social_clip_done()
 
@@ -3958,9 +3965,12 @@ class GodAI(QWidget):
             self.video_status_label.setText(detail)
 
     def _video_on_done(self, slug: str, path: str):
-        self.record_request(self._video_request_token or "video",
-                            f"rendered {slug}")
-        self._video_request_token = None
+        # Never fall back to the agent name: with the Social clip flow also
+        # authorizing under "video", a name lookup can pop the other flow's
+        # pending context.
+        token, self._video_request_token = self._video_request_token, None
+        if token:
+            self.record_request(token, f"rendered {slug}")
         self._video_reset(f"Done — {Path(path).name}")
         self.refresh_video_library()
 
@@ -3970,14 +3980,13 @@ class GodAI(QWidget):
                 "sora", "higgsfield", "gemini-video", "qwen-video"}
             and self._video_external_context.get("provider_completed", False)
         )
-        if provider_completed:
+        token, self._video_request_token = self._video_request_token, None
+        if token and provider_completed:
             self.record_request(
-                self._video_request_token or "video",
-                "provider completed render; local save/index failed")
-        else:
+                token, "provider completed render; local save/index failed")
+        elif token:
             # A failed or cancelled render releases the whole-video reserve.
-            self.abandon_request(self._video_request_token or "video")
-        self._video_request_token = None
+            self.abandon_request(token)
         self.video_log.append(error)
         self._video_reset(f"[Error] {error}")
 
@@ -4589,9 +4598,14 @@ class GodAI(QWidget):
         if not model:
             QMessageBox.warning(self, "No Model", "Select a model first.")
             return
-        if not self.authorize_request("creator", provider, model,
-                                      messages[-1]["content"], label=kind):
+        # Keep the token: "creator" is shared with the Higgsfield teaser
+        # flow, and resolving by name can bill the teaser's flat cost
+        # against this text response (and leave the render unbilled).
+        token = self.authorize_request("creator", provider, model,
+                                       messages[-1]["content"], label=kind)
+        if not token:
             return
+        self._creator_request_token = token
 
         self.creator_generate_btn.setEnabled(False)
         self._creator_last_generation_cost_eur = 0.0
@@ -4607,7 +4621,10 @@ class GodAI(QWidget):
 
     def _creator_on_finished(self, response: str):
         self.creator_output.setPlainText(response)
-        self.record_request("creator", response)
+        token = getattr(self, "_creator_request_token", None)
+        self._creator_request_token = None
+        if token:
+            self.record_request(token, response)
         self._creator_last_generation_cost_eur = float(self.last_request_cost or 0)
         self.creator_generate_btn.setEnabled(True)
         self.creator_stop_btn.setEnabled(False)
@@ -4615,17 +4632,25 @@ class GodAI(QWidget):
         self.creator_status_label.setText("Draft ready — review before posting.")
 
     def _creator_on_error(self, error: str):
-        self.abandon_request("creator")
+        token = getattr(self, "_creator_request_token", None)
+        self._creator_request_token = None
+        if token:
+            self.abandon_request(token)
         self.creator_generate_btn.setEnabled(True)
         self.creator_stop_btn.setEnabled(False)
         self.creator_stop_btn.hide()
         self.creator_status_label.setText(f"[Error] {error}")
 
     def creator_stop(self):
+        # cancel(), never terminate(): killing a QThread that is inside a
+        # Python call or holds the GIL is a crash/deadlock, and the worker
+        # checks its flag at the next safe point anyway.
         if self.creator_worker is not None and self.creator_worker.isRunning():
-            self.creator_worker.terminate()
-            self.creator_worker.wait(1000)
-        self.abandon_request("creator", reason="stopped")
+            self.creator_worker.cancel()
+        token = getattr(self, "_creator_request_token", None)
+        self._creator_request_token = None
+        if token:
+            self.abandon_request(token, reason="stopped")
         self.creator_generate_btn.setEnabled(True)
         self.creator_stop_btn.setEnabled(False)
         self.creator_stop_btn.hide()
@@ -5349,11 +5374,20 @@ class GodAI(QWidget):
         self.fiverr_stop_btn.show()
         self._fiverr_clear_logo_grid()
 
-        if not self.authorize_request("fiverr", provider, model, messages[-1]["content"] if messages else ""):
+        # Keep the token: "fiverr" is shared by the prompt request and the
+        # image request that follows it, plus the delivery/gig text flows.
+        token = self.authorize_request(
+            "fiverr", provider, model,
+            messages[-1]["content"] if messages else "")
+        if not token:
+            # Refused — re-enable the buttons disabled above, or the panel
+            # stays stuck until restart.
+            self._fiverr_reset_buttons()
             return
+        self._fiverr_prompt_token = token
         self.fiverr_text_worker = self._new_chat_worker(provider, model, messages, "")
         self.fiverr_text_worker.finished_signal.connect(self._fiverr_on_prompt_ready)
-        self.fiverr_text_worker.usage_signal.connect(lambda u: self.note_request_usage("fiverr", u))
+        self.fiverr_text_worker.usage_signal.connect(lambda u, t=token: self.note_request_usage(t, u))
         self.fiverr_text_worker.error_signal.connect(self._fiverr_on_text_error)
         self.fiverr_text_worker.start()
         self._fiverr_pending_count = count
@@ -5361,7 +5395,10 @@ class GodAI(QWidget):
 
     def _fiverr_on_prompt_ready(self, image_prompt: str):
         from services.per_unit_pricing import image_cost_eur
-        self.record_request("fiverr", image_prompt)
+        token = getattr(self, "_fiverr_prompt_token", None)
+        self._fiverr_prompt_token = None
+        if token:
+            self.record_request(token, image_prompt)
         image_prompt = image_prompt.strip()
         count = self._fiverr_pending_count
         brief = self._fiverr_pending_brief
@@ -5386,14 +5423,15 @@ class GodAI(QWidget):
                 "Add a rate (0 means unknown) before generating.")
             self._fiverr_reset_buttons()
             return
-        if not self.authorize_request(
-                "fiverr", "openai", image_model,
-                f"{count} logo concepts: {image_prompt[:200]}",
-                label="logo images",
-                flat_cost_eur=image_cost):
+        image_token = self.authorize_request(
+            "fiverr", "openai", image_model,
+            f"{count} logo concepts: {image_prompt[:200]}",
+            label="logo images",
+            flat_cost_eur=image_cost)
+        if not image_token:
             self._fiverr_reset_buttons()
             return
-        self._fiverr_image_token = True
+        self._fiverr_image_token = image_token
 
         self.fiverr_image_worker = FiverrImageWorker(
             self.openai, image_prompt, count, save_dir,
@@ -5441,7 +5479,10 @@ class GodAI(QWidget):
         self.fiverr_status_label.setText(f"Done — {len(paths)} logo(s) generated.")
         # Closes out the image request authorised in _fiverr_on_prompt_ready,
         # billing the per-image cost it was authorised against.
-        self.record_request("fiverr", f"{len(paths)} logo images")
+        token = getattr(self, "_fiverr_image_token", None)
+        self._fiverr_image_token = None
+        if token:
+            self.record_request(token, f"{len(paths)} logo images")
         self._fiverr_reset_buttons()
         self.fiverr_save_images_btn.setEnabled(True)
         if hasattr(self, "_fiverr_order_row"):
@@ -5452,7 +5493,10 @@ class GodAI(QWidget):
         # A failed render still consumed whatever it managed before failing,
         # but the authorised amount was for the full set — release it rather
         # than bill for images that were never produced.
-        self.abandon_request("fiverr")
+        token = getattr(self, "_fiverr_image_token", None)
+        self._fiverr_image_token = None
+        if token:
+            self.abandon_request(token)
         self.fiverr_status_label.setText(f"Error: {error}")
         self.fiverr_preview_status.setText(f"[Error] {error}")
         self._fiverr_reset_buttons()
@@ -5461,7 +5505,13 @@ class GodAI(QWidget):
             self.fiverr_order_table.setItem(self._fiverr_order_row, 2, QTableWidgetItem("Error"))
 
     def _fiverr_on_text_error(self, error: str):
-        self.abandon_request("fiverr")
+        # Shared by all three fiverr text flows (prompt, delivery, gig) —
+        # they are single-flight via the disabled buttons, so one token
+        # attribute covers them.
+        token = getattr(self, "_fiverr_prompt_token", None)
+        self._fiverr_prompt_token = None
+        if token:
+            self.abandon_request(token)
         self.fiverr_status_label.setText(f"Error: {error}")
         self._fiverr_reset_buttons()
 
@@ -5482,12 +5532,17 @@ class GodAI(QWidget):
         self.fiverr_stop_btn.setEnabled(True)
         self.fiverr_stop_btn.show()
         self.fiverr_tabs.setCurrentIndex(1)
-        if not self.authorize_request("fiverr", provider, model, messages[-1]["content"] if messages else ""):
+        token = self.authorize_request(
+            "fiverr", provider, model,
+            messages[-1]["content"] if messages else "")
+        if not token:
+            self._fiverr_reset_buttons()
             return
+        self._fiverr_prompt_token = token
         self.fiverr_text_worker = self._new_chat_worker(provider, model, messages, "")
         self.fiverr_text_worker.token_signal.connect(self._fiverr_on_delivery_token)
         self.fiverr_text_worker.finished_signal.connect(self._fiverr_on_delivery_done)
-        self.fiverr_text_worker.usage_signal.connect(lambda u: self.note_request_usage("fiverr", u))
+        self.fiverr_text_worker.usage_signal.connect(lambda u, t=token: self.note_request_usage(t, u))
         self.fiverr_text_worker.error_signal.connect(self._fiverr_on_text_error)
         self.fiverr_text_worker.start()
 
@@ -5496,7 +5551,10 @@ class GodAI(QWidget):
         self.fiverr_delivery_box.insertPlainText(token)
 
     def _fiverr_on_delivery_done(self, _full: str):
-        self.record_request("fiverr", _full)
+        token = getattr(self, "_fiverr_prompt_token", None)
+        self._fiverr_prompt_token = None
+        if token:
+            self.record_request(token, _full)
         self.fiverr_status_label.setText("Delivery message ready.")
         self.fiverr_generate_btn.setEnabled(True)
         self.fiverr_delivery_btn.setEnabled(True)
@@ -5521,12 +5579,17 @@ class GodAI(QWidget):
         self.fiverr_stop_btn.setEnabled(True)
         self.fiverr_stop_btn.show()
         self.fiverr_tabs.setCurrentIndex(2)
-        if not self.authorize_request("fiverr", provider, model, messages[-1]["content"] if messages else ""):
+        token = self.authorize_request(
+            "fiverr", provider, model,
+            messages[-1]["content"] if messages else "")
+        if not token:
+            self._fiverr_reset_buttons()
             return
+        self._fiverr_prompt_token = token
         self.fiverr_text_worker = self._new_chat_worker(provider, model, messages, "")
         self.fiverr_text_worker.token_signal.connect(self._fiverr_on_gig_token)
         self.fiverr_text_worker.finished_signal.connect(self._fiverr_on_gig_done)
-        self.fiverr_text_worker.usage_signal.connect(lambda u: self.note_request_usage("fiverr", u))
+        self.fiverr_text_worker.usage_signal.connect(lambda u, t=token: self.note_request_usage(t, u))
         self.fiverr_text_worker.error_signal.connect(self._fiverr_on_text_error)
         self.fiverr_text_worker.start()
 
@@ -5535,7 +5598,10 @@ class GodAI(QWidget):
         self.fiverr_gig_box.insertPlainText(token)
 
     def _fiverr_on_gig_done(self, _full: str):
-        self.record_request("fiverr", _full)
+        token = getattr(self, "_fiverr_prompt_token", None)
+        self._fiverr_prompt_token = None
+        if token:
+            self.record_request(token, _full)
         self.fiverr_status_label.setText("Gig description ready.")
         self.fiverr_generate_btn.setEnabled(True)
         self.fiverr_delivery_btn.setEnabled(True)
@@ -5548,6 +5614,13 @@ class GodAI(QWidget):
             self.fiverr_image_worker.cancel()
         if self.fiverr_text_worker is not None and self.fiverr_text_worker.isRunning():
             self.fiverr_text_worker.cancel()
+        # Release whatever this panel has pending — a stopped run must not
+        # leave an authorized request dangling for the next flow to clobber.
+        for attr in ("_fiverr_prompt_token", "_fiverr_image_token"):
+            token = getattr(self, attr, None)
+            setattr(self, attr, None)
+            if token:
+                self.abandon_request(token, reason="stopped")
         self.fiverr_status_label.setText("Stopped.")
         self.fiverr_generate_btn.setEnabled(True)
         self.fiverr_delivery_btn.setEnabled(True)
@@ -5794,16 +5867,31 @@ class GodAI(QWidget):
             prompt, consistency_context=consistency_context,
             book_profile_context=book_profile_context, content_type=content_type,
         )
+        # Never replace a worker that is still running: dropping the old
+        # QThread object while its thread is alive aborts the whole app with
+        # "QThread: Destroyed while thread is still running". A cancelled
+        # worker can sit in a blocking backend call for a while.
+        if self.author_worker is not None and self.author_worker.isRunning():
+            self.author_status_label.setText(
+                "[Busy] The previous request is still finishing — one moment.")
+            return
         self.author_status_label.setText("[Working…]")
         self.author_write_btn.setEnabled(False)
         self.author_continue_btn.setEnabled(False)
         self.author_stop_btn.setEnabled(True)
-        if not self.authorize_request("author", provider, model, prompt):
+        token = self.authorize_request("author", provider, model, prompt)
+        if not token:
+            # Refused — re-enable the buttons disabled above.
+            self.author_write_btn.setEnabled(True)
+            self.author_continue_btn.setEnabled(True)
+            self.author_stop_btn.setEnabled(False)
+            self.author_status_label.setText("")
             return
+        self._author_write_token = token
         self.author_worker = self._new_chat_worker(provider, model, messages, prompt)
         self.author_worker.token_signal.connect(self._author_on_token)
         self.author_worker.finished_signal.connect(self._author_on_finished)
-        self.author_worker.usage_signal.connect(lambda u: self.note_request_usage("author", u))
+        self.author_worker.usage_signal.connect(lambda u, t=token: self.note_request_usage(t, u))
         self.author_worker.error_signal.connect(self._author_on_error)
         self.author_worker.start()
 
@@ -5871,7 +5959,10 @@ class GodAI(QWidget):
         self.author_scene_count_label.setText(str(scene_count))
 
     def _author_on_finished(self, full_response: str):
-        self.record_request("author", full_response)
+        token = getattr(self, "_author_write_token", None)
+        self._author_write_token = None
+        if token:
+            self.record_request(token, full_response)
         self._populate_author_tabs(full_response)
         word_count = len(self.author_draft_box.toPlainText().split())
         self.author_status_label.setText(f"[Done] {word_count:,} words")
@@ -5882,7 +5973,10 @@ class GodAI(QWidget):
         self._refresh_next_step_tip()
 
     def _author_on_error(self, error: str):
-        self.abandon_request("author")
+        token = getattr(self, "_author_write_token", None)
+        self._author_write_token = None
+        if token:
+            self.abandon_request(token)
         self.author_status_label.setText(f"[Error] {error}")
         self.author_write_btn.setEnabled(True)
         self.author_continue_btn.setEnabled(True)
@@ -5891,6 +5985,11 @@ class GodAI(QWidget):
     def author_stop(self):
         if self.author_worker is not None and self.author_worker.isRunning():
             self.author_worker.cancel()
+        # A stopped run must not leave its authorized request pending.
+        token = getattr(self, "_author_write_token", None)
+        self._author_write_token = None
+        if token:
+            self.abandon_request(token, reason="stopped")
         self.author_write_btn.setEnabled(True)
         self.author_continue_btn.setEnabled(True)
         self.author_stop_btn.setEnabled(False)
@@ -6092,12 +6191,21 @@ class GodAI(QWidget):
         self.author_pub_stop_btn.setEnabled(True)
         self.author_pub_save_btn.setEnabled(False)
 
-        if not self.authorize_request("author", provider, model, prompt):
+        if self.author_pub_worker is not None and self.author_pub_worker.isRunning():
+            self.author_status_label.setText(
+                "[Busy] The previous request is still finishing — one moment.")
             return
+        token = self.authorize_request("author", provider, model, prompt)
+        if not token:
+            self.author_pub_generate_btn.setEnabled(True)
+            self.author_pub_stop_btn.setEnabled(False)
+            self.author_status_label.setText("")
+            return
+        self._author_pub_token = token
         self.author_pub_worker = self._new_chat_worker(provider, model, messages, prompt)
         self.author_pub_worker.token_signal.connect(self._author_pub_on_token)
         self.author_pub_worker.finished_signal.connect(self._author_pub_on_finished)
-        self.author_pub_worker.usage_signal.connect(lambda u: self.note_request_usage("author", u))
+        self.author_pub_worker.usage_signal.connect(lambda u, t=token: self.note_request_usage(t, u))
         self.author_pub_worker.error_signal.connect(self._author_pub_on_error)
         self.author_pub_worker.start()
 
@@ -6108,7 +6216,10 @@ class GodAI(QWidget):
         self.author_pub_output.setTextCursor(cursor)
 
     def _author_pub_on_finished(self, full_response: str):
-        self.record_request("author", full_response)
+        token = getattr(self, "_author_pub_token", None)
+        self._author_pub_token = None
+        if token:
+            self.record_request(token, full_response)
         self.author_status_label.setText(
             f"[Done] {self.author_pub_type_box.currentText()} generated"
         )
@@ -6117,7 +6228,10 @@ class GodAI(QWidget):
         self.author_pub_save_btn.setEnabled(True)
 
     def _author_pub_on_error(self, error: str):
-        self.abandon_request("author")
+        token = getattr(self, "_author_pub_token", None)
+        self._author_pub_token = None
+        if token:
+            self.abandon_request(token)
         self.author_status_label.setText(f"[Error] {error}")
         self.author_pub_generate_btn.setEnabled(True)
         self.author_pub_stop_btn.setEnabled(False)
@@ -6125,6 +6239,10 @@ class GodAI(QWidget):
     def author_pub_stop(self):
         if self.author_pub_worker is not None and self.author_pub_worker.isRunning():
             self.author_pub_worker.cancel()
+        token = getattr(self, "_author_pub_token", None)
+        self._author_pub_token = None
+        if token:
+            self.abandon_request(token, reason="stopped")
         self.author_pub_generate_btn.setEnabled(True)
         self.author_pub_stop_btn.setEnabled(False)
         self.author_status_label.setText("[Stopped]")
@@ -6188,12 +6306,21 @@ class GodAI(QWidget):
         self.author_mkt_stop_btn.setEnabled(True)
         self.author_mkt_save_btn.setEnabled(False)
 
-        if not self.authorize_request("author", provider, model, prompt):
+        if self.author_mkt_worker is not None and self.author_mkt_worker.isRunning():
+            self.author_status_label.setText(
+                "[Busy] The previous request is still finishing — one moment.")
             return
+        token = self.authorize_request("author", provider, model, prompt)
+        if not token:
+            self.author_mkt_generate_btn.setEnabled(True)
+            self.author_mkt_stop_btn.setEnabled(False)
+            self.author_status_label.setText("")
+            return
+        self._author_mkt_token = token
         self.author_mkt_worker = self._new_chat_worker(provider, model, messages, prompt)
         self.author_mkt_worker.token_signal.connect(self._author_mkt_on_token)
         self.author_mkt_worker.finished_signal.connect(self._author_mkt_on_finished)
-        self.author_mkt_worker.usage_signal.connect(lambda u: self.note_request_usage("author", u))
+        self.author_mkt_worker.usage_signal.connect(lambda u, t=token: self.note_request_usage(t, u))
         self.author_mkt_worker.error_signal.connect(self._author_mkt_on_error)
         self.author_mkt_worker.start()
 
@@ -6204,7 +6331,10 @@ class GodAI(QWidget):
         self.author_mkt_output.setTextCursor(cursor)
 
     def _author_mkt_on_finished(self, full_response: str):
-        self.record_request("author", full_response)
+        token = getattr(self, "_author_mkt_token", None)
+        self._author_mkt_token = None
+        if token:
+            self.record_request(token, full_response)
         self.author_status_label.setText(
             f"[Done] {self.author_mkt_platform_box.currentText()} copy generated"
         )
@@ -6213,7 +6343,10 @@ class GodAI(QWidget):
         self.author_mkt_save_btn.setEnabled(True)
 
     def _author_mkt_on_error(self, error: str):
-        self.abandon_request("author")
+        token = getattr(self, "_author_mkt_token", None)
+        self._author_mkt_token = None
+        if token:
+            self.abandon_request(token)
         self.author_status_label.setText(f"[Error] {error}")
         self.author_mkt_generate_btn.setEnabled(True)
         self.author_mkt_stop_btn.setEnabled(False)
@@ -6221,6 +6354,10 @@ class GodAI(QWidget):
     def author_mkt_stop(self):
         if self.author_mkt_worker is not None and self.author_mkt_worker.isRunning():
             self.author_mkt_worker.cancel()
+        token = getattr(self, "_author_mkt_token", None)
+        self._author_mkt_token = None
+        if token:
+            self.abandon_request(token, reason="stopped")
         self.author_mkt_generate_btn.setEnabled(True)
         self.author_mkt_stop_btn.setEnabled(False)
         self.author_status_label.setText("[Stopped]")
@@ -6733,12 +6870,19 @@ class GodAI(QWidget):
         messages = agent.build_messages(query, context_json=self._manuscript_last_data)
         self.manuscript_status_label.setText("[Thinking…]")
         self.manuscript_ask_btn.setEnabled(False)
-        if not self.authorize_request("manuscript", provider, model, query):
+        # Keep the token: "manuscript" is shared with the quote-finder and
+        # calendar-caption flows. And on refusal, re-enable the button
+        # disabled above — it used to stay stuck until restart.
+        token = self.authorize_request("manuscript", provider, model, query)
+        if not token:
+            self.manuscript_ask_btn.setEnabled(True)
+            self.manuscript_status_label.setText("")
             return
+        self._manuscript_ask_token = token
         self.manuscript_worker = self._new_chat_worker(provider, model, messages, query)
         self.manuscript_worker.token_signal.connect(self._manuscript_on_token)
         self.manuscript_worker.finished_signal.connect(self._manuscript_on_finished)
-        self.manuscript_worker.usage_signal.connect(lambda u: self.note_request_usage("manuscript", u))
+        self.manuscript_worker.usage_signal.connect(lambda u, t=token: self.note_request_usage(t, u))
         self.manuscript_worker.error_signal.connect(self._manuscript_on_error)
         self.manuscript_worker.start()
 
@@ -6749,12 +6893,18 @@ class GodAI(QWidget):
         self.manuscript_metrics_box.setTextCursor(cursor)
 
     def _manuscript_on_finished(self, _full_response: str):
-        self.record_request("manuscript", _full_response)
+        token = getattr(self, "_manuscript_ask_token", None)
+        self._manuscript_ask_token = None
+        if token:
+            self.record_request(token, _full_response)
         self.manuscript_status_label.setText("[Done]")
         self.manuscript_ask_btn.setEnabled(True)
 
     def _manuscript_on_error(self, error: str):
-        self.abandon_request("manuscript")
+        token = getattr(self, "_manuscript_ask_token", None)
+        self._manuscript_ask_token = None
+        if token:
+            self.abandon_request(token)
         self.manuscript_status_label.setText(f"[Error] {error}")
         self.manuscript_ask_btn.setEnabled(True)
 
@@ -6987,16 +7137,23 @@ class GodAI(QWidget):
         messages = agent.build_quote_suggestions_messages(truncated, count=count)
         self.manuscript_status_label.setText("[Finding quotes…]")
         self.quote_finder_suggest_btn.setEnabled(False)
-        if not self.authorize_request("manuscript", provider, model, truncated):
+        token = self.authorize_request("manuscript", provider, model, truncated)
+        if not token:
+            self.quote_finder_suggest_btn.setEnabled(True)
+            self.manuscript_status_label.setText("")
             return
+        self._quote_finder_token = token
         self.quote_finder_worker = self._new_chat_worker(provider, model, messages, truncated)
         self.quote_finder_worker.finished_signal.connect(self._quote_finder_on_finished)
-        self.quote_finder_worker.usage_signal.connect(lambda u: self.note_request_usage("manuscript", u))
+        self.quote_finder_worker.usage_signal.connect(lambda u, t=token: self.note_request_usage(t, u))
         self.quote_finder_worker.error_signal.connect(self._quote_finder_on_error)
         self.quote_finder_worker.start()
 
     def _quote_finder_on_finished(self, full_response: str):
-        self.record_request("manuscript", full_response)
+        token = getattr(self, "_quote_finder_token", None)
+        self._quote_finder_token = None
+        if token:
+            self.record_request(token, full_response)
         self.quote_finder_suggest_btn.setEnabled(True)
         quotes = self._parse_quote_list(full_response)
         self.quote_finder_list.clear()
@@ -7013,7 +7170,10 @@ class GodAI(QWidget):
         self.manuscript_status_label.setText(f"[Done] Found {len(quotes)} quotes.")
 
     def _quote_finder_on_error(self, error: str):
-        self.abandon_request("manuscript")
+        token = getattr(self, "_quote_finder_token", None)
+        self._quote_finder_token = None
+        if token:
+            self.abandon_request(token)
         self.quote_finder_suggest_btn.setEnabled(True)
         self.manuscript_status_label.setText(f"[Error] {error}")
 
@@ -7165,16 +7325,23 @@ class GodAI(QWidget):
         messages = agent.build_calendar_caption_messages(items_json)
         self.manuscript_status_label.setText("[Writing captions…]")
         self.calendar_generate_btn.setEnabled(False)
-        if not self.authorize_request("manuscript", provider, model, items_json):
+        token = self.authorize_request("manuscript", provider, model, items_json)
+        if not token:
+            self.calendar_generate_btn.setEnabled(True)
+            self.manuscript_status_label.setText("")
             return
+        self._calendar_captions_token = token
         self.calendar_worker = self._new_chat_worker(provider, model, messages, items_json)
         self.calendar_worker.finished_signal.connect(self._calendar_on_captions_done)
-        self.calendar_worker.usage_signal.connect(lambda u: self.note_request_usage("manuscript", u))
+        self.calendar_worker.usage_signal.connect(lambda u, t=token: self.note_request_usage(t, u))
         self.calendar_worker.error_signal.connect(self._calendar_on_captions_error)
         self.calendar_worker.start()
 
     def _calendar_on_captions_done(self, full_response: str):
-        self.record_request("manuscript", full_response)
+        token = getattr(self, "_calendar_captions_token", None)
+        self._calendar_captions_token = None
+        if token:
+            self.record_request(token, full_response)
         self.calendar_generate_btn.setEnabled(True)
         captions = self._parse_quote_list(full_response)
         for i, slot in enumerate(self._calendar_slots):
@@ -7183,7 +7350,10 @@ class GodAI(QWidget):
         self.manuscript_status_label.setText(f"[Done] {len(self._calendar_slots)}-post calendar generated.")
 
     def _calendar_on_captions_error(self, error: str):
-        self.abandon_request("manuscript")
+        token = getattr(self, "_calendar_captions_token", None)
+        self._calendar_captions_token = None
+        if token:
+            self.abandon_request(token)
         self.calendar_generate_btn.setEnabled(True)
         self._populate_calendar_table()
         self.manuscript_status_label.setText(f"[Error] Captions failed ({error}) — schedule shown, captions blank.")
@@ -7655,31 +7825,15 @@ class GodAI(QWidget):
     def update_agent_ui(self, agent_name):
         self._current_agent = agent_name  # track for show_agent_docs()
         # ── Update the agent header bar (title + subtitle + status pill) ─
-        agent_titles = {
-            "chat": "Studio Assistant", "fiverr": "Brand & Logo Designer",
-            "author": "Book Author", "manuscript": "Publishing Manager",
-            "music": "Music Artist Generator", "webdesign": "Web Developer",
-            "audiobook": "Audiobook Producer", "creator": "Brand Creator",
-            "video": "Video & Ad Generator",
-            "social": "Social Media Campaign Manager", "onlyfans": "OF Agent", }
-        agent_subtitles = {
-            "chat":        "General-purpose conversation. Pick a tool, pick a model, talk.",
-            "fiverr":      "Create client-ready logo concepts, gig listings, and polished delivery messages.",
-            "author":      "Plan, draft, revise, and export long-form fiction and non-fiction.",
-            "manuscript":  "Prepare a finished book for distribution, marketing, and ongoing sales tracking.",
-            "music":       "Develop songs, albums, artist identities, releases, promotion, and sustainable income plans.",
-            "webdesign":   "Modern HTML, CSS, and JavaScript generation with responsive layout and design advice.",
-            "audiobook":   "Turn PDF, EPUB, TXT, and MOBI books into production-ready MP3 audiobooks.",
-            "creator":     "Create reusable concepts, captions, posting plans, and promotional assets for any venture or platform.",
-            "onlyfans":    "Run the OnlyFans venture: trends, opportunities, monetization, owned analytics, market context, and strategy.",
-            "video":       "Script, narrate, illustrate and cut a video — long-form for YouTube or a vertical clip for social.",
-            "social":      "Promote a book, release, product or gig: write per platform, schedule it, and post where the API allows.",
-            }
+        # From the catalog, not hardcoded copies: the dicts that lived here
+        # duplicated AgentSpec.label/.description and had already drifted
+        # from them in wording.
+        spec = next((s for s in AGENT_SPECS if s.key == agent_name), None)
         if hasattr(self, "agent_title_label"):
             self.agent_title_label.setText(
-                agent_titles.get(agent_name, agent_name.title()))
+                spec.label if spec else agent_name.title())
         if hasattr(self, "agent_subtitle_label"):
-            self.agent_subtitle_label.setText(agent_subtitles.get(agent_name, ""))
+            self.agent_subtitle_label.setText(spec.description if spec else "")
         if hasattr(self, "agent_status_pill"):
             self.agent_status_pill.setText("●  Ready")
             self.agent_status_pill.setStyleSheet("")
@@ -7929,11 +8083,13 @@ class GodAI(QWidget):
                 f"No text could be extracted from {Path(book_path).name}, so "
                 "the conversion cost cannot be estimated.")
             return
-        if not self.authorize_request(
-                "audiobook", "openai", "gpt-4o-mini-tts",
-                f"{Path(book_path).name} · {estimate['characters']} characters",
-                label="audiobook", flat_cost_eur=estimate["eur"]):
+        token = self.authorize_request(
+            "audiobook", "openai", "gpt-4o-mini-tts",
+            f"{Path(book_path).name} · {estimate['characters']} characters",
+            label="audiobook", flat_cost_eur=estimate["eur"])
+        if not token:
             return
+        self._audiobook_request_token = token
 
         config = {"input": book_path, "output": output_path, "voice": voice, "chunk_tokens": chunk_tokens}
 
@@ -8026,7 +8182,12 @@ class GodAI(QWidget):
         output_text = self.output_box.toPlainText()
         crashed = exit_status == QProcess.CrashExit
 
-        success = "ALL BOOKS COMPLETED" in output_text or "🎉" in output_text
+        # The exit code is the protocol: converter.main() exits 0 only when
+        # every book completed, 1 on any failure or pause — its docstring
+        # promised the GUI keys off it, while this handler actually sniffed
+        # the celebration banner ("🎉"/"ALL BOOKS COMPLETED") out of stdout.
+        # The string checks below survive only for user-facing messaging.
+        success = exit_code == 0 and not crashed
         quota_hit = any(k in output_text for k in (
             "insufficient_quota", "exceeded your current quota", "Billing hard limit"))
         paused = "Conversion paused" in output_text or "⏸️" in output_text
@@ -8035,10 +8196,12 @@ class GodAI(QWidget):
         # A conversion that was stopped, crashed or hit the quota billed some
         # of the book but not the amount authorised for the whole of it, so it
         # is released rather than charged in full.
-        if success:
-            self.record_request("audiobook", "conversion complete")
-        else:
-            self.abandon_request("audiobook")
+        token = getattr(self, "_audiobook_request_token", None)
+        self._audiobook_request_token = None
+        if token and success:
+            self.record_request(token, "conversion complete")
+        elif token:
+            self.abandon_request(token)
 
         if quota_hit:
             self.tool_progress.setValue(0)
@@ -8177,10 +8340,15 @@ class GodAI(QWidget):
             QMessageBox.warning(self, "Warning", "Please enter text first.")
             return
 
-        selected_agent = self.agent_box.currentText()
-        selected_tool = self.tool_box.currentText() if hasattr(self, "tool_box") else "General Chat"
+        # Actually route. This button used to echo the current selection back
+        # at the user — RouterAgent existed, was tested, and was never called
+        # by the app.
+        from agents.router import RouterAgent
+        routed = RouterAgent().classify(raw_text)
+        if routed != self.agent_box.currentText():
+            self.select_agent(routed)
         backend, model = self.resolve_backend_model()
-        self._set_route_result(selected_agent, backend, model)
+        self._set_route_result(routed, backend, model)
 
     def resolve_backend_model(self):
         provider = self.provider_box.currentText()
@@ -8262,16 +8430,18 @@ class GodAI(QWidget):
             "allow_elevenlabs": self.allow_elevenlabs_checkbox.isChecked(),
         }
 
+        reserved = self._reserved_in_flight_eur()
         validation = self.validator.validate(
             agent_name=selected_agent,
             tool_name=selected_tool,
             provider=final_backend,
             api_permissions=api_permissions,
-            session_cost=self.session_cost_total,
+            session_cost=self.session_cost_total + reserved,
             session_budget=self.session_budget_eur,
-            daily_cost=self.usage_tracker.get_today_total(),
+            daily_cost=self.usage_tracker.get_today_total() + reserved,
             daily_budget=self.daily_budget_eur,
             estimated_cost=estimated_cost,
+            agent_daily_cost=self.usage_tracker.get_agent_today_total(selected_agent),
             **self._project_budget_fields(),
         )
         if not validation.allowed:
@@ -8428,9 +8598,13 @@ class GodAI(QWidget):
         up in the run log and Saved Chats without failing the tool check.
 
         On success the context record_request() needs is stashed under a fresh
-        request token, which is returned. A caller may hand that token back to
-        record_request()/abandon_request(); passing the agent name still works
-        and resolves to that agent's oldest outstanding request.
+        request token, which is returned. Callers must keep the token and
+        resolve with it: agent-name resolution (oldest outstanding request)
+        survives only as a migration shim for single-flight panels, and it
+        mis-resolves the moment two flows share an agent key — "video" is
+        the Video tab and Social clips, "creator" is drafting and the
+        teaser. Every flow in this file keeps its token now; do not add a
+        new by-name call site.
         """
         # `flat_cost_eur` is for work billed per unit rather than per token —
         # an image, a video render, a minute of speech. Without it the guard
@@ -8440,16 +8614,21 @@ class GodAI(QWidget):
         else:
             estimated_cost, approx_tokens = self.estimate_chat_cost(provider, model, prompt)
 
+        # Count what is already authorized but not yet recorded: without it,
+        # two concurrent requests could each be validated against the full
+        # remaining budget and together sail past the caps.
+        reserved = self._reserved_in_flight_eur()
         validation = self.validator.validate(
             agent_name=agent,
             tool_name=tool,
             provider=provider,
             api_permissions=self.current_api_permissions(),
-            session_cost=self.session_cost_total,
+            session_cost=self.session_cost_total + reserved,
             session_budget=self.session_budget_eur,
-            daily_cost=self.usage_tracker.get_today_total(),
+            daily_cost=self.usage_tracker.get_today_total() + reserved,
             daily_budget=self.daily_budget_eur,
             estimated_cost=estimated_cost,
+            agent_daily_cost=self.usage_tracker.get_agent_today_total(agent),
             **self._project_budget_fields(),
         )
         if not validation.allowed:
@@ -8471,6 +8650,9 @@ class GodAI(QWidget):
             "prompt": prompt,
             "usage": None,
             "flat_cost_eur": flat_cost_eur,
+            # The validated estimate, so open requests reserve their cost
+            # against the caps until they are recorded or abandoned.
+            "estimated_cost": estimated_cost,
             "project": (self._active_project() or {}).get("id"),
             "project_instructions": (self._active_project() or {}).get("instructions", ""),
             "run_id": self.run_logger.start(
@@ -8484,6 +8666,11 @@ class GodAI(QWidget):
         }
         self._pending_by_agent.setdefault(agent, []).append(token)
         return token
+
+    def _reserved_in_flight_eur(self) -> float:
+        """Estimates of every authorized-but-unresolved request."""
+        return sum(float(ctx.get("estimated_cost") or 0.0)
+                   for ctx in self._pending_requests.values())
 
     def _resolve_request(self, handle, pop=False):
         """Find one in-flight request from a token or an agent name.
@@ -8740,10 +8927,11 @@ class GodAI(QWidget):
         self.pending_usage = usage
 
     def stop_chat_worker(self):
+        # cancel() only — terminate() on a QThread inside a Python call is a
+        # crash/deadlock class. The worker now routes a cancel to its error
+        # signal from every path, so nothing is billed or saved for it.
         if self.chat_worker is not None and self.chat_worker.isRunning():
             self.chat_worker.cancel()
-            self.chat_worker.terminate()
-            self.chat_worker.wait(2000)
             self.output_box.append("\n[Stopped] Chat request stopped by user.")
         self.stop_chat_timer()
         self.send_btn.setEnabled(True)
@@ -9340,6 +9528,9 @@ class GodAI(QWidget):
         layout.addWidget(close_btn, 0, Qt.AlignRight)
 
         dialog.exec()
+        # Freed when this frame's reference drops — parented, it would sit
+        # on the window's child list forever (one leak per open).
+        dialog.setParent(None)
 
     def show_agent_docs(self):
         """Open the searchable reference at the currently active agent."""
@@ -9381,10 +9572,25 @@ class GodAI(QWidget):
         try:
             if self.audiobook_process is not None and self.audiobook_process.state() != QProcess.NotRunning:
                 self.audiobook_process.kill()
-            if self.chat_worker is not None and self.chat_worker.isRunning():
-                self.chat_worker.cancel()
-                self.chat_worker.terminate()
-                self.chat_worker.wait(1000)
+            # Every worker, not just chat: quitting mid-run used to leave the
+            # others' QThreads to be destroyed while still running (a Qt
+            # abort) and lose the paid request's record. cancel() + a short
+            # wait; never terminate() — that is the crash class this file
+            # just removed.
+            for attr in (
+                    "chat_worker", "author_worker", "author_pub_worker",
+                    "author_mkt_worker", "manuscript_worker",
+                    "quote_finder_worker", "calendar_worker", "shorts_worker",
+                    "social_worker", "_social_clip_worker", "creator_worker",
+                    "creator_video_estimate_worker", "creator_video_worker",
+                    "fiverr_text_worker", "fiverr_image_worker",
+                    "video_worker", "video_estimate_worker",
+                    "muse_pull_worker"):
+                worker = getattr(self, attr, None)
+                if worker is not None and worker.isRunning():
+                    if hasattr(worker, "cancel"):
+                        worker.cancel()
+                    worker.wait(2000)
         except Exception as exc:
             self._note_failure("shutdown: stop background work", exc)
         event.accept()

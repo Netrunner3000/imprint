@@ -458,7 +458,10 @@ def _adopt_previous_db() -> None:
 def init_db() -> None:
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     _adopt_previous_db()
-    is_new = not DB_PATH.exists()
+    # _has_tables, not exists(): merely connecting to the path creates an
+    # empty file, so a pre-init placeholder made "is this a first run?" read
+    # False forever and permanently suppressed the JSON-history migration.
+    is_new = not _has_tables(DB_PATH)
     conn = get_connection()
     conn.executescript(SCHEMA)
     conn.commit()
@@ -592,12 +595,23 @@ def _purge_split_agents(conn: sqlite3.Connection) -> None:
     behind, which keeps it in the registry and in Settings as an agent with
     nothing behind it. Any database created before the split carries those rows.
 
-    Safe to run on every launch: it names only agents this app does not build,
-    so it cannot delete one a user has since added through the registry.
+    Runs once, recorded in settings: the earlier every-launch version claimed
+    it "cannot delete one a user has since added through the registry" while
+    doing exactly that — any agent later created under one of these reserved
+    names was silently deleted on the next launch.
     """
+    done = conn.execute(
+        "SELECT value FROM settings WHERE key = 'split_agents_purged'"
+    ).fetchone()
+    if done:
+        return
     gone = ("osint", "osint_heavy", "wifi", "bug_bounty", "nfl_bet", "manager")
     conn.executemany(
         "DELETE FROM agents WHERE name = ?", [(n,) for n in gone]
+    )
+    conn.execute(
+        "INSERT OR REPLACE INTO settings (key, value) "
+        "VALUES ('split_agents_purged', '1')"
     )
     conn.commit()
 
@@ -1042,23 +1056,29 @@ def _migrate_usage_log(conn: sqlite3.Connection) -> None:
     entries = _load_json(path, [])
 
     for e in entries:
-        conn.execute("""
-            INSERT INTO usage
-              (timestamp, agent, backend, model, input_tokens, output_tokens,
-               total_tokens, cost_eur, cost_type, cloud)
-            VALUES (?,?,?,?,?,?,?,?,?,?)
-        """, (
-            e.get("timestamp", ""),
-            e.get("agent", ""),
-            e.get("backend", ""),
-            e.get("model", ""),
-            int(e.get("input_tokens", 0)),
-            int(e.get("output_tokens", 0)),
-            int(e.get("total_tokens", 0)),
-            float(e.get("cost_eur", e.get("estimated_cost", 0.0))),
-            e.get("cost_type", "estimated"),
-            1 if e.get("cloud", False) else 0,
-        ))
+        # Per-row guard, like _migrate_runs: one malformed entry (a string
+        # where a number should be, say) used to abort the whole first-run
+        # migration and cost every row after it.
+        try:
+            conn.execute("""
+                INSERT INTO usage
+                  (timestamp, agent, backend, model, input_tokens, output_tokens,
+                   total_tokens, cost_eur, cost_type, cloud)
+                VALUES (?,?,?,?,?,?,?,?,?,?)
+            """, (
+                e.get("timestamp", ""),
+                e.get("agent", ""),
+                e.get("backend", ""),
+                e.get("model", ""),
+                int(e.get("input_tokens", 0)),
+                int(e.get("output_tokens", 0)),
+                int(e.get("total_tokens", 0)),
+                float(e.get("cost_eur", e.get("estimated_cost", 0.0))),
+                e.get("cost_type", "estimated"),
+                1 if e.get("cloud", False) else 0,
+            ))
+        except (TypeError, ValueError, AttributeError, sqlite3.Error) as exc:
+            print(f"[DB] Skipping malformed usage row: {exc}")
 
 
 def _migrate_runs(conn: sqlite3.Connection) -> None:

@@ -9,11 +9,44 @@ from .models import (
 
 _client: anthropic.Anthropic | None = None
 
+# Real token counts from every call this module makes, so the CLI can log
+# the run's spend into the same usage database the GUI's daily cap reads.
+_usage_tally = {"input_tokens": 0, "output_tokens": 0, "calls": 0}
+
+COURSE_MODEL = "claude-sonnet-4-6"
+
+
+def reset_usage_tally() -> None:
+    _usage_tally.update({"input_tokens": 0, "output_tokens": 0, "calls": 0})
+
+
+def usage_tally() -> dict:
+    return dict(_usage_tally)
+
+
+def _record_usage(response) -> None:
+    usage = getattr(response, "usage", None)
+    if usage is not None:
+        _usage_tally["input_tokens"] += int(getattr(usage, "input_tokens", 0) or 0)
+        _usage_tally["output_tokens"] += int(getattr(usage, "output_tokens", 0) or 0)
+    _usage_tally["calls"] += 1
+
 
 def _get_client() -> anthropic.Anthropic:
     global _client
     if _client is None:
-        _client = anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
+        key = os.environ.get("ANTHROPIC_API_KEY")
+        if not key:
+            # Every other wrapper degrades gracefully; a KeyError here did not.
+            raise RuntimeError("ANTHROPIC_API_KEY is not set.")
+        # The shared timeout/retry policy the five GUI clients follow —
+        # this was a sixth, unconfigured client outside it.
+        from services.api_limits import MAX_RETRIES, REQUEST_TIMEOUT_SECONDS
+        _client = anthropic.Anthropic(
+            api_key=key,
+            timeout=REQUEST_TIMEOUT_SECONDS,
+            max_retries=MAX_RETRIES,
+        )
     return _client
 
 
@@ -62,7 +95,7 @@ Do not include 'slides', 'script', or 'quiz' fields — those come later.
 
     client = _get_client()
     response = client.messages.create(
-        model="claude-sonnet-4-6",
+        model=COURSE_MODEL,
         max_tokens=4096,
         system=[
             {
@@ -73,8 +106,12 @@ Do not include 'slides', 'script', or 'quiz' fields — those come later.
         ],
         messages=[{"role": "user", "content": prompt}],
     )
+    # Tally before parsing: a malformed response still spent the tokens.
+    _record_usage(response)
 
-    raw = response.content[0].text.strip()
+    raw = "".join(
+        b.text for b in response.content
+        if getattr(b, "type", "") == "text").strip()
     data = json.loads(raw)
 
     modules = []
@@ -155,7 +192,7 @@ The script should flow naturally across all slides.
 
     client = _get_client()
     response = client.messages.create(
-        model="claude-sonnet-4-6",
+        model=COURSE_MODEL,
         max_tokens=8192,
         system=[
             {
@@ -166,8 +203,12 @@ The script should flow naturally across all slides.
         ],
         messages=[{"role": "user", "content": prompt}],
     )
+    # Tally before parsing: a malformed response still spent the tokens.
+    _record_usage(response)
 
-    raw = response.content[0].text.strip()
+    raw = "".join(
+        b.text for b in response.content
+        if getattr(b, "type", "") == "text").strip()
     data = json.loads(raw)
 
     slides = [

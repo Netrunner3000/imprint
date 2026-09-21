@@ -363,6 +363,9 @@ def show_learning_center(app, resource_dir: Path,
             f"<p>Expected markdown files in <code>{base}</code>.</p>")
 
     dialog.exec()
+    # Same reparenting as show_docs_center: a parented modal leaked
+    # one full dialog per open.
+    dialog.setParent(None)
     return dialog
 
 

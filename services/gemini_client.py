@@ -265,16 +265,29 @@ class GeminiClientWrapper:
             for m in messages
         )
 
-        try:
-            stream = self.client.models.generate_content_stream(
-                model=model,
-                contents=prompt,
-            )
+        def _gen(out):
+            try:
+                stream = self.client.models.generate_content_stream(
+                    model=model,
+                    contents=prompt,
+                )
 
-            for chunk in stream:
-                text = getattr(chunk, "text", "")
-                if text:
-                    yield text
+                for chunk in stream:
+                    # Each chunk carries cumulative usage_metadata; the last
+                    # one seen is the real bill. Without it the stream was
+                    # billed on the chars/4 estimate.
+                    meta = getattr(chunk, "usage_metadata", None)
+                    if meta is not None:
+                        out.usage = {
+                            "input_tokens": getattr(meta, "prompt_token_count", 0) or 0,
+                            "output_tokens": getattr(meta, "candidates_token_count", 0) or 0,
+                        }
+                    text = getattr(chunk, "text", "")
+                    if text:
+                        yield text
 
-        except Exception as e:
-            raise RuntimeError(f"Gemini streaming request failed: {e}")
+            except Exception as e:
+                raise RuntimeError(f"Gemini streaming request failed: {e}")
+
+        from services.stream_usage import UsageStream
+        return UsageStream(_gen)

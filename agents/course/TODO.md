@@ -9,7 +9,7 @@
 
 ## v1 — current
 
-- [ ] `P1` `security` Bill and guard course runs. `run_course.py` drives modules × lessons Anthropic calls plus optional ElevenLabs/HeyGen renders with no estimate, no confirmation and no usage row — course spend is invisible to the GUI's daily cap. Pre-compute an estimate, require y/N before running, pass `services/api_limits.py` timeouts to the Anthropic client (`services/course/content_generator.py:16` builds a bare `anthropic.Anthropic` today), and log each request through `UsageTracker` under `agent='course'`.
+- [x] `P1` `security` Bill and guard course runs. Fixed 2026-09-21: `run_course.py` prints an upper-bound estimate (1 outline call + modules × lessons lesson calls, priced through `UsageTracker.calculate_cost_eur`), shows today's studio spend, requires y/N (`--yes` for scripted runs), and warns that ElevenLabs/HeyGen provider billing is outside the estimate. `content_generator` builds its client with the shared api_limits timeout/retry policy, degrades gracefully on a missing key, tallies real token usage per call (also on failure partway), joins text blocks instead of indexing `content[0]`, and the CLI logs the run's actual spend through `UsageTracker` under `agent='course'` — course runs land in the same daily totals the GUI enforces.
 - [ ] `P1` Move `services/course/` under this package after dependency review.
 - [ ] `P2` Add a supported Imprint workspace instead of CLI-only operation.
 - [ ] `P2` Add resumable stage manifests and artifact validation.

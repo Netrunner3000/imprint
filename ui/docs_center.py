@@ -539,4 +539,9 @@ def show_docs_center(app, resource_dir: Path,
     """Open the bundled reference centre and return it for tests."""
     dialog = DocsCentreDialog(app, resource_dir, start_page, start_anchor)
     dialog.exec()
+    # Reparent off the window: a parented modal survives on the window's
+    # child list for the life of the app, so every open leaked a full
+    # dialog. Unparented, it is freed when the last reference drops (the
+    # caller in main ignores the return; tests hold theirs).
+    dialog.setParent(None)
     return dialog

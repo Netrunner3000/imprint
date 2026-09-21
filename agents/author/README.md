@@ -1,4 +1,4 @@
-# Draft agent
+# Book Author agent (`agents.author`)
 
 Owns long-form ideation, outlining, character and world development, drafting,
 continuation and revision for fiction and non-fiction.  Imprint imports

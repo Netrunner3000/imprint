@@ -750,4 +750,7 @@ def show_learning_center(app, resource_dir: Path,
     """Open the bundled Learning Centre and return it for tests/introspection."""
     dialog = LearningCentreDialog(app, resource_dir, start_page, start_anchor)
     dialog.exec()
+    # Same reparenting as show_docs_center: parented modals accumulated on
+    # the window — one full Learning Centre leaked per open.
+    dialog.setParent(None)
     return dialog

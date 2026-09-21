@@ -1,4 +1,4 @@
-# Publish agent
+# Publishing Manager agent (`agents.manuscript`)
 
 Owns finished-manuscript preparation: metadata, export, KDP/PublishDrive data,
 quote discovery, launch planning and sales interpretation.  Its public API is

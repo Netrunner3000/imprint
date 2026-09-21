@@ -1,4 +1,4 @@
-# OnlyFans agent
+# OF Agent (`agents.onlyfans`)
 
 Owns the OnlyFans venture boundary: authorised account context, consent-aware
 operations, demand and saturation analysis, pricing hypotheses, owned revenue

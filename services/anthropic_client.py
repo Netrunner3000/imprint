@@ -46,30 +46,9 @@ class AnthropicClientWrapper:
         except Exception:
             return self.KNOWN_MODELS
 
-    def test_connection(self) -> tuple[bool, str]:
-        """Send a minimal request and return (success, message).
-        Distinguishes: no key, bad key (401), network failure, model error, and OK."""
-        if not _HAS_SDK:
-            return False, "The 'anthropic' package is not installed. Run: pip install anthropic"
-        if not self.client:
-            return False, "ANTHROPIC_API_KEY is not set. Add it to your .env file."
-        try:
-            self.client.messages.create(
-                model="claude-haiku-4-5-20251001",
-                max_tokens=5,
-                messages=[{"role": "user", "content": "hi"}],
-            )
-            return True, "Connection successful — API key is valid."
-        except _sdk.AuthenticationError:
-            return False, "Authentication failed (401). Your ANTHROPIC_API_KEY is invalid or expired. Generate a new one at console.anthropic.com."
-        except _sdk.APIConnectionError:
-            return False, "Connection error — could not reach api.anthropic.com. Check your internet connection or firewall."
-        except _sdk.RateLimitError:
-            return False, "Rate limit hit (429) — but the key works. Slow down requests."
-        except _sdk.NotFoundError as e:
-            return False, f"Model not found (404): {e}"
-        except Exception as e:
-            return False, f"Unexpected error ({type(e).__name__}): {e}"
+    # test_connection() was removed here and in the Qwen wrapper: nothing
+    # called either (the API-keys status card reads key_available() only),
+    # and wiring one up would have made an unguarded paid call.
 
     def stream_chat(self, messages: list, model: str = "claude-sonnet-4-6"):
         if not self.client:
@@ -81,10 +60,29 @@ class AnthropicClientWrapper:
         kwargs = {"model": model, "max_tokens": 8096, "messages": chat_messages}
         if system:
             kwargs["system"] = system
+
+        def _gen(out):
+            yield from self._stream(kwargs, out)
+
+        from services.stream_usage import UsageStream
+        return UsageStream(_gen)
+
+    def _stream(self, kwargs, out):
         try:
             with self.client.messages.stream(**kwargs) as stream:
                 for text in stream.text_stream:
                     yield text
+                # The final message carries the real token counts; without
+                # this the whole stream was billed on the chars/4 estimate.
+                try:
+                    final = stream.get_final_message()
+                    if final is not None and final.usage is not None:
+                        out.usage = {
+                            "input_tokens": final.usage.input_tokens,
+                            "output_tokens": final.usage.output_tokens,
+                        }
+                except Exception:
+                    pass    # usage is best-effort; the text already streamed
         except _sdk.AuthenticationError:
             raise RuntimeError(
                 "AuthenticationError (401) — API key invalid or expired.\n"

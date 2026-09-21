@@ -36,28 +36,33 @@ def build_calendar(
     if not quotes or not platforms or weeks < 1:
         return []
 
-    total_days = weeks * 7
     slots: list[CalendarSlot] = []
     quote_idx = 0
 
     for platform in platforms:
         per_week, fmt = CADENCE.get(platform, (3, "graphic"))
-        total_posts = min(per_week * weeks, total_days)
-        interval = max(1, total_days // max(total_posts, 1))
-
-        for i in range(total_posts):
-            day_offset = min(i * interval, total_days - 1)
-            slot_format = fmt
-            if slot_format == "alternate":
-                slot_format = "graphic" if i % 2 == 0 else "short"
-            quote = quotes[quote_idx % len(quotes)]
-            quote_idx += 1
-            slots.append(CalendarSlot(
-                day=start_date + timedelta(days=day_offset),
-                platform=platform,
-                format=slot_format,
-                quote=quote,
-            ))
+        # Distribute per week, not across the whole window. The old
+        # global-interval spread (total_days // total_posts, floored) front-
+        # loaded multi-week calendars: 3/week over 4 weeks became a post
+        # every 2 days for 3 weeks and then silence — the cadence the labels
+        # promise is N posts in *each* week.
+        step = max(1, 7 // max(per_week, 1))
+        post_idx = 0
+        for week in range(weeks):
+            for i in range(min(per_week, 7)):
+                day_offset = week * 7 + min(i * step, 6)
+                slot_format = fmt
+                if slot_format == "alternate":
+                    slot_format = "graphic" if post_idx % 2 == 0 else "short"
+                quote = quotes[quote_idx % len(quotes)]
+                quote_idx += 1
+                post_idx += 1
+                slots.append(CalendarSlot(
+                    day=start_date + timedelta(days=day_offset),
+                    platform=platform,
+                    format=slot_format,
+                    quote=quote,
+                ))
 
     slots.sort(key=lambda s: (s.day, s.platform))
     return slots

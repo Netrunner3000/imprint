@@ -41,7 +41,13 @@ FFMPEG_CONCAT_FILENAME = "ffmpeg_concat.txt"
 
 USD_PER_1M_INPUT_TOKENS = 0.60
 USD_PER_1M_OUTPUT_AUDIO_TOKENS = 12.00
-EUR_PER_USD_FALLBACK = 0.855
+# Aligned with services/per_unit_pricing.DEFAULT_EUR_PER_USD — the two
+# fallbacks had drifted (0.855 here vs 0.92 there), so the same conversion
+# priced differently depending on which module estimated it. This module
+# stays import-side-effect-free (it runs as a bundled subprocess), so it
+# keeps a constant rather than importing the live rate; callers that know
+# the live rate pass it in.
+EUR_PER_USD_FALLBACK = 0.92
 
 # Lazy OpenAI client: importing this module must have NO side effects so it can
 # be bundled into the host app (and PyInstaller) without needing a key at import time.

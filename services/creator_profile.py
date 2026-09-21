@@ -119,8 +119,17 @@ def load_persona(account_id: int) -> dict:
 def save_persona(account_id: int, **fields) -> None:
     allowed = ("appearance", "backstory", "personality", "boundaries",
                "reference_images")
-    values = {k: (fields.get(k) or "") for k in allowed}
-    seed = fields.get("seed")
+    # A field the caller does not pass keeps its stored value. The panel saves
+    # only the fields it edits, and reference_images has no editor yet — the
+    # old dict comprehension replaced every omitted field with "", which wiped
+    # reference_images on every save. Passing a field explicitly (even as "")
+    # still overwrites it.
+    existing = load_persona(account_id)
+    values = {
+        k: (fields[k] if k in fields else existing.get(k)) or ""
+        for k in allowed
+    }
+    seed = fields["seed"] if "seed" in fields else existing.get("seed")
     with get_connection() as conn:
         conn.execute(f"""
             INSERT INTO creator_persona

@@ -547,3 +547,15 @@ class TestPerUnitPricing:
     def test_an_unpriced_model_is_unknown_rather_than_zero(self):
         from services import per_unit_pricing
         assert per_unit_pricing.image_cost_eur("some-unlisted-model", 1) is None
+
+
+def test_per_agent_cap_counts_the_day_not_the_request():
+    """€1.00/day means the day: a request that fits on its own must still be
+    refused once the agent's earlier spend today leaves too little — the old
+    per-request comparison let a capped agent spend €0.99 repeatedly."""
+    blocked = check(StubRegistry(agent_budget=1.00),
+                    estimated_cost=0.25, agent_daily_cost=0.80)
+    assert not blocked.allowed
+    assert "budget cap" in blocked.reason
+    assert check(StubRegistry(agent_budget=1.00),
+                 estimated_cost=0.25, agent_daily_cost=0.70).allowed

@@ -6,6 +6,7 @@ import requests
 from openai import OpenAI
 
 from services.api_limits import MAX_RETRIES, REQUEST_TIMEOUT_SECONDS
+from services.stream_usage import UsageStream, cached_input_tokens
 from services.media_catalog import WAN_VIDEO_MODELS
 
 # Alibaba's Qwen, served through Model Studio / DashScope. The API is
@@ -118,25 +119,38 @@ class QwenClientWrapper:
         if not self.client:
             raise RuntimeError("DASHSCOPE_API_KEY is not set.")
 
-        try:
-            stream = self.client.chat.completions.create(
-                model=model,
-                messages=messages,
-                stream=True,
-            )
+        def _gen(out):
+            try:
+                stream = self.client.chat.completions.create(
+                    model=model,
+                    messages=messages,
+                    stream=True,
+                    # The provider's real token counts arrive in a final
+                    # usage-only frame; without this every stream was billed
+                    # on the chars/4 estimate (and cached-input billing could
+                    # never fire).
+                    stream_options={"include_usage": True},
+                )
+                for chunk in stream:
+                    usage = getattr(chunk, "usage", None)
+                    if usage:
+                        out.usage = {
+                            "input_tokens": getattr(usage, "prompt_tokens", 0) or 0,
+                            "output_tokens": getattr(usage, "completion_tokens", 0) or 0,
+                            "cached_input_tokens": cached_input_tokens(usage),
+                        }
+                    # OpenAI-compatible endpoints legitimately emit chunks with an
+                    # empty choices array (content filters, usage-only frames);
+                    # indexing [0] blindly crashed the stream mid-response.
+                    if not chunk.choices:
+                        continue
+                    delta = chunk.choices[0].delta.content
+                    if delta:
+                        yield delta
+            except Exception as e:
+                raise RuntimeError(f"Qwen streaming request failed: {e}")
 
-            for chunk in stream:
-                # OpenAI-compatible endpoints legitimately emit chunks with an
-                # empty choices array (content filters, usage-only frames);
-                # indexing [0] blindly crashed the stream mid-response.
-                if not chunk.choices:
-                    continue
-                delta = chunk.choices[0].delta.content
-                if delta:
-                    yield delta
-
-        except Exception as e:
-            raise RuntimeError(f"Qwen streaming request failed: {e}")
+        return UsageStream(_gen)
 
     # ── Alibaba Model Studio / Wan video ────────────────────────
     def _video_headers(self, *, create: bool = False) -> dict[str, str]:
@@ -241,16 +255,6 @@ class QwenClientWrapper:
         response.raise_for_status()
         return response.content
 
-    def test_connection(self) -> tuple[bool, str]:
-        """Send a minimal request and return (success, message)."""
-        if not self.client:
-            return False, "DASHSCOPE_API_KEY is not set. Add it to your .env file."
-        try:
-            self.client.chat.completions.create(
-                model=self.DEFAULT_MODEL,
-                messages=[{"role": "user", "content": "ping"}],
-                max_tokens=5,
-            )
-            return True, f"Connected to Qwen ({self.base_url})."
-        except Exception as e:
-            return False, f"Qwen connection failed: {e}"
+    # test_connection() removed: no callers, and it would have made an
+    # unguarded paid call if ever wired up (see anthropic_client for the
+    # same removal).

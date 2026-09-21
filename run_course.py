@@ -47,6 +47,8 @@ def main():
                         choices=["mock", "elevenlabs"],
                         help="Voice synthesis provider")
     parser.add_argument("--output", default="output/courses", help="Output directory")
+    parser.add_argument("--yes", action="store_true",
+                        help="Skip the cost confirmation (for scripted runs)")
     args = parser.parse_args()
 
     request = CourseRequest(
@@ -72,7 +74,55 @@ def main():
     print(f"  Voice      : {args.voice}")
     print()
 
-    assets = agent.run(request)
+    # ── Cost estimate + confirmation ─────────────────────────────────────
+    # This CLI drives the most call-heavy paid workflow in the repo, and it
+    # used to spend with no estimate, no confirmation and no usage row — a
+    # course run was invisible to the GUI's daily cap. The estimate is an
+    # upper bound: 1 outline call (≤4096 out) plus modules × lessons lesson
+    # calls (≤8192 out), input ~1.5k tokens per call.
+    from services.database import init_db
+    from services.usage_tracker import UsageTracker
+    from services.course.content_generator import (
+        COURSE_MODEL, reset_usage_tally, usage_tally)
+
+    init_db()
+    tracker = UsageTracker()
+    calls = 1 + args.modules * args.lessons
+    est_in = calls * 1500
+    est_out = 4096 + args.modules * args.lessons * 8192
+    est_eur = tracker.calculate_cost_eur("anthropic", COURSE_MODEL, est_in, est_out)
+    today = tracker.get_today_total()
+
+    print(f"Estimated Anthropic cost (upper bound): ~€{est_eur:.2f} "
+          f"({calls} calls, ≤{est_out:,} output tokens)")
+    print(f"Spent today across the studio: €{today:.2f}")
+    if args.voice == "elevenlabs":
+        print("ElevenLabs narration is billed per character against your "
+              "account's quota — not included in the estimate above.")
+    if args.avatar in ("heygen", "synthesia"):
+        print(f"{args.avatar} renders are billed per video minute by the "
+              "provider — not included in the estimate above.")
+    if not args.yes:
+        answer = input("Proceed? [y/N] ").strip().lower()
+        if answer not in ("y", "yes"):
+            sys.exit("Cancelled — nothing was spent.")
+
+    reset_usage_tally()
+    try:
+        assets = agent.run(request)
+    finally:
+        # Log whatever was actually spent — also on failure partway through,
+        # so the GUI's "Cost Today" and daily cap see this run either way.
+        tally = usage_tally()
+        if tally["calls"]:
+            entry = tracker.log_request(
+                agent="course", backend="anthropic", model=COURSE_MODEL,
+                prompt_text=f"course: {args.topic}", response_text="",
+                usage={"input_tokens": tally["input_tokens"],
+                       "output_tokens": tally["output_tokens"]})
+            print(f"\nLogged €{entry['cost_eur']:.4f} "
+                  f"({tally['calls']} calls, {tally['input_tokens']:,} in / "
+                  f"{tally['output_tokens']:,} out) to the studio usage log.")
 
     print(f"\n{'='*60}")
     print(f"Course generated successfully!")

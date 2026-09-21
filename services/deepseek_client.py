@@ -2,6 +2,7 @@ import os
 from openai import OpenAI
 
 from services.api_limits import REQUEST_TIMEOUT_SECONDS, MAX_RETRIES
+from services.stream_usage import UsageStream, cached_input_tokens
 
 
 class DeepSeekClientWrapper:
@@ -71,22 +72,35 @@ class DeepSeekClientWrapper:
         if not self.client:
             raise RuntimeError("DEEPSEEK_API_KEY is not set.")
 
-        try:
-            stream = self.client.chat.completions.create(
-                model=model,
-                messages=messages,
-                stream=True,
-            )
+        def _gen(out):
+            try:
+                stream = self.client.chat.completions.create(
+                    model=model,
+                    messages=messages,
+                    stream=True,
+                    # The provider's real token counts arrive in a final
+                    # usage-only frame; without this every stream was billed
+                    # on the chars/4 estimate (and cached-input billing could
+                    # never fire).
+                    stream_options={"include_usage": True},
+                )
+                for chunk in stream:
+                    usage = getattr(chunk, "usage", None)
+                    if usage:
+                        out.usage = {
+                            "input_tokens": getattr(usage, "prompt_tokens", 0) or 0,
+                            "output_tokens": getattr(usage, "completion_tokens", 0) or 0,
+                            "cached_input_tokens": cached_input_tokens(usage),
+                        }
+                    # OpenAI-compatible endpoints legitimately emit chunks with an
+                    # empty choices array (content filters, usage-only frames);
+                    # indexing [0] blindly crashed the stream mid-response.
+                    if not chunk.choices:
+                        continue
+                    delta = chunk.choices[0].delta.content
+                    if delta:
+                        yield delta
+            except Exception as e:
+                raise RuntimeError(f"DeepSeek streaming request failed: {e}")
 
-            for chunk in stream:
-                # OpenAI-compatible endpoints legitimately emit chunks with an
-                # empty choices array (content filters, usage-only frames);
-                # indexing [0] blindly crashed the stream mid-response.
-                if not chunk.choices:
-                    continue
-                delta = chunk.choices[0].delta.content
-                if delta:
-                    yield delta
-
-        except Exception as e:
-            raise RuntimeError(f"DeepSeek streaming request failed: {e}")
+        return UsageStream(_gen)

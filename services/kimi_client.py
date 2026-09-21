@@ -2,6 +2,7 @@ import os
 from openai import OpenAI
 
 from services.api_limits import REQUEST_TIMEOUT_SECONDS, MAX_RETRIES
+from services.stream_usage import UsageStream, cached_input_tokens
 
 
 class KimiClientWrapper:
@@ -59,7 +60,7 @@ class KimiClientWrapper:
             "input_tokens": response.usage.prompt_tokens if response.usage else 0,
             "output_tokens": response.usage.completion_tokens if response.usage else 0,
             "total_tokens": response.usage.total_tokens if response.usage else 0,
-            "cached_input_tokens": _cached_tokens(response.usage),
+            "cached_input_tokens": cached_input_tokens(response.usage),
         }
 
         return text, usage
@@ -72,47 +73,39 @@ class KimiClientWrapper:
         if not self.client:
             raise RuntimeError("KIMI_API_KEY is not set.")
 
-        try:
-            stream = self.client.chat.completions.create(
-                model=model,
-                messages=messages,
-                stream=True,
-            )
+        def _gen(out):
+            try:
+                stream = self.client.chat.completions.create(
+                    model=model,
+                    messages=messages,
+                    stream=True,
+                    # The provider's real token counts arrive in a final
+                    # usage-only frame; without this every stream was billed
+                    # on the chars/4 estimate (and cached-input billing could
+                    # never fire).
+                    stream_options={"include_usage": True},
+                )
+                for chunk in stream:
+                    usage = getattr(chunk, "usage", None)
+                    if usage:
+                        out.usage = {
+                            "input_tokens": getattr(usage, "prompt_tokens", 0) or 0,
+                            "output_tokens": getattr(usage, "completion_tokens", 0) or 0,
+                            "cached_input_tokens": cached_input_tokens(usage),
+                        }
+                    # OpenAI-compatible endpoints legitimately emit chunks with an
+                    # empty choices array (content filters, usage-only frames);
+                    # indexing [0] blindly crashed the stream mid-response.
+                    if not chunk.choices:
+                        continue
+                    delta = chunk.choices[0].delta.content
+                    if delta:
+                        yield delta
+            except Exception as e:
+                raise RuntimeError(f"Kimi streaming request failed: {e}")
 
-            for chunk in stream:
-                # OpenAI-compatible endpoints legitimately emit chunks with an
-                # empty choices array (content filters, usage-only frames);
-                # indexing [0] blindly crashed the stream mid-response.
-                if not chunk.choices:
-                    continue
-                delta = chunk.choices[0].delta.content
-                if delta:
-                    yield delta
-
-        except Exception as e:
-            raise RuntimeError(f"Kimi streaming request failed: {e}")
+        return UsageStream(_gen)
 
 
-def _cached_tokens(usage) -> int:
-    """Input tokens the provider served from its prompt cache, or 0.
-
-    Two shapes are in the wild on OpenAI-compatible endpoints, so both are
-    read rather than assuming one: OpenAI nests it under
-    `prompt_tokens_details.cached_tokens`, while the DeepSeek-style APIs report
-    a flat `prompt_cache_hit_tokens`. Anything unrecognised counts as no cache
-    hit, which bills at the full input rate — the conservative direction.
-    """
-    if not usage:
-        return 0
-    details = getattr(usage, "prompt_tokens_details", None)
-    nested = getattr(details, "cached_tokens", None) if details else None
-    if nested is None and isinstance(details, dict):
-        nested = details.get("cached_tokens")
-    flat = getattr(usage, "prompt_cache_hit_tokens", None)
-    for value in (nested, flat):
-        try:
-            if value is not None:
-                return max(0, int(value))
-        except (TypeError, ValueError):
-            continue
-    return 0
+# _cached_tokens moved to services/stream_usage.py (cached_input_tokens) so
+# every OpenAI-compatible stream can report cache hits, not just Kimi.

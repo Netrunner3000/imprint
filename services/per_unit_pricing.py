@@ -20,19 +20,26 @@ from __future__ import annotations
 
 import json
 
-from services.runtime_paths import resource_base
+from services.runtime_paths import resource_base, user_data_base
 
+# Frozen builds seed an editable copy of config/ into Application Support
+# (ensure_seeded); reading only the bundled file meant a user's corrections
+# there were silently ignored. Prefer the editable copy; in development both
+# paths are the project root, so this is the same file.
+USER_CONFIG_PATH = user_data_base() / "config" / "pricing.json"
 CONFIG_PATH = resource_base() / "config" / "pricing.json"
 
 DEFAULT_EUR_PER_USD = 0.92
 
 
 def _table() -> dict:
-    try:
-        with CONFIG_PATH.open("r", encoding="utf-8") as fh:
-            return json.load(fh)
-    except Exception:
-        return {}
+    for path in (USER_CONFIG_PATH, CONFIG_PATH):
+        try:
+            with path.open("r", encoding="utf-8") as fh:
+                return json.load(fh)
+        except Exception:
+            continue
+    return {}
 
 
 def eur_per_usd() -> float:

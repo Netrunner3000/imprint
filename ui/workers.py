@@ -68,10 +68,15 @@ class ChatWorker(QThread):
                     self.token_signal.emit(token)
 
                 response = "".join(response_parts)
-                
-                usage = {
+
+                # The clients wrap their streams in UsageStream and fill
+                # .usage from the provider's final frame — real token counts,
+                # so cached-input billing works and cost_type is "exact".
+                # Only when a provider sent nothing does billing fall back to
+                # the chars/4 estimate.
+                usage = getattr(result, "usage", None) or {
                     "cost_type_override": "stream-estimated"
-        }
+                }
 
             # ===== TUPLE (response, usage) =====
             elif isinstance(result, tuple):
@@ -83,6 +88,15 @@ class ChatWorker(QThread):
                 response = result
                 self._emit_as_tokens(response)
 
+            # Same outcome for a cancel whichever path served the request:
+            # the streaming loop above already routes a cancel to
+            # error_signal, but the non-streaming paths used to fall through
+            # and emit finished_signal — billing and saving a chat the user
+            # had stopped.
+            if self._cancel_requested:
+                self.error_signal.emit("Request cancelled by user.")
+                return
+
             if usage:
                 self.usage_signal.emit(usage)
 
@@ -92,33 +106,8 @@ class ChatWorker(QThread):
             self.error_signal.emit(str(e))
 
 
-class SubprocessWorker(QThread):
-    finished_signal = Signal(str)
-    error_signal = Signal(str)
-
-    def __init__(self, cmd: list):
-        super().__init__()
-        self._cmd = cmd
-        self._cancelled = False
-
-    def cancel(self):
-        self._cancelled = True
-
-    def run(self):
-        try:
-            result = subprocess.run(self._cmd, capture_output=True, text=True, timeout=30)
-            if self._cancelled:
-                return
-            output = result.stdout.strip()
-            if result.stderr.strip():
-                output += f"\n\n[stderr]\n{result.stderr.strip()}"
-            self.finished_signal.emit(output or "[No output returned]")
-        except subprocess.TimeoutExpired:
-            self.error_signal.emit("Command timed out after 30 seconds.")
-        except FileNotFoundError as e:
-            self.error_signal.emit(f"Command not found: {e}")
-        except Exception as e:
-            self.error_signal.emit(str(e))
+# SubprocessWorker was deleted here: imported by main.py but instantiated
+# nowhere since the security verticals were stripped.
 
 
 class ModelPullWorker(QThread):

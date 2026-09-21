@@ -129,6 +129,9 @@ class FakeUsageTracker:
     def get_today_total(self):
         return self.today_total
 
+    def get_agent_today_total(self, agent):
+        return sum(e["cost_eur"] for e in self.logged if e["agent"] == agent)
+
     def log_request(self, agent, backend, model, prompt_text, response_text,
                     usage=None, flat_cost_eur=None, project=None):
         # Mirrors the real tracker: a per-unit price wins over the token cost.
@@ -428,3 +431,105 @@ class TestConcurrentAgents:
             "first-response", "second-response"]
         assert win._pending_requests == {}
         assert win._pending_by_agent == {}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 3. Budgets enforced through the guard itself (the behavioural half the
+#    validator-only tests could not see)
+# ─────────────────────────────────────────────────────────────────────────────
+
+class TestBudgetEnforcementThroughTheGuard:
+
+    def test_flat_cost_is_what_gets_validated(self, win):
+        # A per-unit request over the session budget must be refused even
+        # though its prompt would token-estimate to almost nothing. Deleting
+        # the `if flat_cost_eur is not None` branch in authorize_request used
+        # to survive the whole suite; this is the test that kills it.
+        win.session_budget_eur = 1.0
+        win.daily_budget_eur = 100.0
+        assert win.authorize_request(
+            "author", "openai", "gpt-image-2.5-flare", "two logos",
+            label="logo images", flat_cost_eur=5.0) is False
+        assert win._pending_requests == {}
+
+    def test_flat_cost_within_budget_is_authorised_and_billed(self, win):
+        win.session_budget_eur = 1.0
+        win.daily_budget_eur = 100.0
+        token = win.authorize_request(
+            "author", "openai", "gpt-image-2.5-flare", "two logos",
+            label="logo images", flat_cost_eur=0.12)
+        assert token
+        win.record_request(token, "2 images")
+        assert win.usage_tracker.logged[-1]["flat_cost_eur"] == 0.12
+        assert win.session_cost_total == pytest.approx(0.12)
+
+    def test_in_flight_reservations_count_against_the_caps(self, win):
+        # Two €0.60 authorizations against a €1.00 session budget: the second
+        # must be refused while the first is still unresolved — each used to
+        # be validated against the full remaining budget.
+        win.session_budget_eur = 1.0
+        win.daily_budget_eur = 100.0
+        first = win.authorize_request("author", "openai", "gpt-4o", "one",
+                                      flat_cost_eur=0.60)
+        assert first
+        assert win.authorize_request("author", "openai", "gpt-4o", "two",
+                                     flat_cost_eur=0.60) is False
+        # ...and allowed again once the first resolves.
+        win.abandon_request(first)
+        assert win.authorize_request("author", "openai", "gpt-4o", "two",
+                                     flat_cost_eur=0.60)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 4. Audiobook billing decision — the exit-code protocol
+# ─────────────────────────────────────────────────────────────────────────────
+
+class _FakeProcess:
+    def __init__(self, code, status):
+        self._code, self._status = code, status
+
+    def exitCode(self):
+        return self._code
+
+    def exitStatus(self):
+        return self._status
+
+    def state(self):
+        from PySide6.QtCore import QProcess
+        return QProcess.NotRunning
+
+
+class TestAudiobookBillingDecision:
+    """Billing keys off converter.main()'s exit protocol (0 only when every
+    book completed), not the celebration banner it prints to stdout."""
+
+    def _finish(self, win, monkeypatch, code, text=""):
+        from PySide6.QtCore import QProcess
+        from PySide6.QtWidgets import QMessageBox
+        monkeypatch.setattr(QMessageBox, "critical",
+                            staticmethod(lambda *a, **k: None))
+        win.audiobook_process = _FakeProcess(code, QProcess.NormalExit)
+        win.output_box.setPlainText(text)
+        win.handle_audiobook_finished()
+
+    def test_exit_zero_records_the_conversion(self, win, monkeypatch):
+        token = win.authorize_request(
+            "audiobook", "openai", "gpt-4o-mini-tts", "book",
+            label="audiobook", flat_cost_eur=0.5)
+        win._audiobook_request_token = token
+        self._finish(win, monkeypatch, 0)
+        assert win.usage_tracker.logged[-1]["agent"] == "audiobook"
+        assert win._pending_requests == {}
+
+    def test_nonzero_exit_releases_the_reserve_even_with_the_banner(self, win, monkeypatch):
+        # The old string-sniff billed this case: banner in stdout, but the
+        # converter exited 1 (a later book failed after an earlier one's
+        # banner-free partial run, say).
+        token = win.authorize_request(
+            "audiobook", "openai", "gpt-4o-mini-tts", "book",
+            label="audiobook", flat_cost_eur=0.5)
+        win._audiobook_request_token = token
+        self._finish(win, monkeypatch, 1,
+                     text="🎉 ALL BOOKS COMPLETED SUCCESSFULLY!")
+        assert win.usage_tracker.logged == []
+        assert win._pending_requests == {}

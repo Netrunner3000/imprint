@@ -3,10 +3,16 @@ from pathlib import Path  # makes folder paths easier
 from datetime import datetime  # used to generate timestamped filenames
 from uuid import uuid4
 
+from services.runtime_paths import user_data_base
+
 
 class HistoryStore:
-    def __init__(self, folder: str = "data/chats"):
-        self.folder = Path(folder)  # store the history folder path
+    def __init__(self, folder: str | Path | None = None):
+        # Anchored default: the old relative "data/chats" only resolved
+        # correctly because main.py os.chdir()s to the writable base at
+        # import time — any other entry point wrote chats wherever the
+        # process happened to start.
+        self.folder = Path(folder) if folder else user_data_base() / "data" / "chats"
         self.folder.mkdir(parents=True, exist_ok=True)  # create the folder if needed
 
     def save_chat(self, agent: str, backend: str, model: str, command: str, messages: list,

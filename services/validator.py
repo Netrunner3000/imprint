@@ -44,6 +44,7 @@ class Validator:
         project_name: str = "",
         project_cost: float = 0.0,
         project_budget: float | None = None,
+        agent_daily_cost: float = 0.0,
     ) -> ValidationResult:
         # 1. Agent enabled?
         if not self.registry.is_agent_enabled(agent_name):
@@ -86,14 +87,19 @@ class Validator:
         # 7-9 compare money, so they work in Decimal rather than float.
         estimated = _money(estimated_cost)
 
-        # 7. Per-agent budget (daily)
+        # 7. Per-agent budget (daily). Accumulates the agent's spend today:
+        # the earlier per-request comparison let a €1.00/day agent issue
+        # €0.99 requests without limit while the refusal message claimed a
+        # daily cap. Callers that cannot supply the day's spend pass 0 and
+        # get the old per-request behaviour.
         agent_budget = self.registry.get_agent_budget(agent_name)
         if agent_budget is not None and provider != "ollama":
-            if estimated > _money(agent_budget):
+            if estimated + _money(agent_daily_cost) > _money(agent_budget):
                 return ValidationResult(
                     False,
                     f"Agent '{agent_name}' has a budget cap of €{agent_budget:.2f}/day. "
-                    f"This request is estimated at €{estimated_cost:.4f}."
+                    f"€{agent_daily_cost:.4f} is already spent today and this "
+                    f"request is estimated at €{estimated_cost:.4f}."
                 )
 
         # 8. Optional daily cap for the currently selected project.

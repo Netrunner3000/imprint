@@ -122,11 +122,15 @@ def scan(folder: Path) -> list[Audiobook]:
     for path in sorted(folder.rglob("*")):
         if not path.is_file() or path.suffix.lower() not in AUDIO_SUFFIXES:
             continue
+        try:
+            size_bytes = path.stat().st_size
+        except OSError:
+            continue    # vanished between rglob and stat; skip, not crash
         row = saved.get(str(path), {})
         books.append(Audiobook(
             path=path,
             title=row.get("title") or path.stem.replace("_", " "),
-            size_bytes=path.stat().st_size,
+            size_bytes=size_bytes,
             position_ms=row.get("position_ms", 0),
             duration_ms=row.get("duration_ms", 0),
             finished=bool(row.get("finished", 0)),

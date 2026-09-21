@@ -161,6 +161,17 @@ class UsageTracker:
             ).fetchone()
         return round(float(row["total"]), 6)
 
+    def get_agent_today_total(self, agent: str) -> float:
+        """Today's spend for one agent — feeds the per-agent daily cap."""
+        today = datetime.now().date().isoformat()
+        with get_connection() as conn:
+            row = conn.execute(
+                "SELECT COALESCE(SUM(cost_eur), 0.0) AS total FROM usage "
+                "WHERE timestamp LIKE ? AND agent = ?",
+                (f"{today}%", agent)
+            ).fetchone()
+        return round(float(row["total"]), 6)
+
     def get_total_requests_today(self) -> int:
         today = datetime.now().date().isoformat()
         with get_connection() as conn:

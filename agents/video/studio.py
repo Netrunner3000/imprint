@@ -288,11 +288,23 @@ def pre_estimate(cfg) -> dict[str, float]:
     scenes = max(1, round(seconds / scene_seconds))
     chars = words * 6
 
-    tts = chars / 4 / 1_000_000 * 0.60
+    # Narration priced from the per-unit table ($/1k characters), not the
+    # text-input token rate alone: audio output tokens dominate TTS cost, and
+    # the old chars/4/1M × $0.60 formula understated narration ~100× — for an
+    # 8-minute video, the single largest line on the real bill.
+    from services.per_unit_pricing import rate_usd
+    tts_rate = rate_usd("openai_tts_per_1k_chars")
+    tts = chars / 1000.0 * (tts_rate if tts_rate is not None else 0.015)
     if cfg.get("visuals.source") == "ai":
         from services.media_catalog import openai_image_reserve_usd
         image_model = str(cfg.get("visuals.image_model", "gpt-image-2"))
-        images = (scenes + 1) * openai_image_reserve_usd(image_model)
+        try:
+            reserve = openai_image_reserve_usd(image_model)
+        except ValueError:
+            # A legacy/unknown model id must not crash the estimate the
+            # render button depends on; reserve conservatively instead.
+            reserve = 0.06
+        images = (scenes + 1) * reserve
     else:
         images = 0.0
     whisper = ((words / wpm) * 0.006
