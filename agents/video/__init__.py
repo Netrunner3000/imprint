@@ -9,4 +9,13 @@ AGENT_KEY = "video"
 
 from . import studio as video_studio
 
-__all__ = ["AGENT_KEY", "video_studio"]
+__all__ = ["AGENT_KEY", "video_studio", "VideoPanel"]
+
+
+def __getattr__(name):
+    # Lazy panel import keeps this package Qt-free at import time for
+    # consumers that only want the studio adapter (tests, CLI tools).
+    if name == "VideoPanel":
+        from .panel import VideoPanel
+        return VideoPanel
+    raise AttributeError(name)
