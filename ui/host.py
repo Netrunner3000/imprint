@@ -70,6 +70,21 @@ class AgentHost(Protocol):
         """Real token counts, when the worker reports them."""
         ...
 
+    def pending_request_snapshot(self, token) -> dict:
+        """A copy of an open request's context, for durable job records."""
+        ...
+
+    def restore_request(self, agent: str, provider: str, model: str,
+                        prompt: str, *, label: str | None = None,
+                        flat_cost_eur: float | None = None,
+                        project=None, run_id: str = "") -> Any:
+        """Resume-only: re-mint a previous process's pending context.
+
+        Never validates or confirms — the money was approved before the
+        restart. Returns a fresh token for record/abandon.
+        """
+        ...
+
     # ── Shared services ─────────────────────────────────────────────────
     def _note_failure(self, context: str, exc: Exception, widget=None) -> None:
         """Record a swallowed exception instead of discarding it."""

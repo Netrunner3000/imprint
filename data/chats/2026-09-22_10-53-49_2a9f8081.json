@@ -1,0 +1,19 @@
+{
+  "timestamp": "2026-09-22_10-53-49",
+  "agent": "video",
+  "backend": "qwen",
+  "model": "wan3.0-video",
+  "command": "direct video (resumed)",
+  "messages": [
+    {
+      "role": "user",
+      "content": "a sunset"
+    },
+    {
+      "role": "assistant",
+      "content": "rendered sunset (resumed)"
+    }
+  ],
+  "response": "rendered sunset (resumed)",
+  "tool": "direct video (resumed)"
+}

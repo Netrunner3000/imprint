@@ -14,3 +14,4 @@
 - [ ] `P1` Finish the calendar as a real week view with rescheduling and export.
 - [ ] `P2` Turn revenue attribution into shared charts and drafting signals.
 - [ ] `P2` Define a stable handoff contract for every venture using Creator.
+- [ ] `P2` Reuse the Video workspace's resume pattern (2026-09-22, `agents/video/jobs.py` + `VideoResumeWorker` + `restore_request()`) for `creator_video_jobs`: the table records every teaser transition but nothing reads it back, so a teaser render still dies with the process.

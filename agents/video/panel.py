@@ -219,6 +219,7 @@ class VideoPanel(QWidget):
         host.video_panel = self
         host.video_worker = None
         host.video_estimate_worker = None
+        host.video_resume_workers = []
         self._visual_provider_changed(
             self.video_visual_provider_box.currentText())
         self._format_changed(self.video_format_box.currentText())
@@ -452,7 +453,8 @@ class VideoPanel(QWidget):
         self._external_context = {
             "slug": "", "path": "", "topic": topic,
             "provider": selection.provider.lower(), "model": selection.model_id,
-            "seconds": seconds, "job_id": "", "provider_completed": False,
+            "seconds": seconds, "aspect": provider_aspect, "job_id": "",
+            "job_row_id": None, "provider_completed": False,
             "cancel_requested": False,
         }
 
@@ -479,10 +481,10 @@ class VideoPanel(QWidget):
                     f"Enable {selection.provider} in the API permissions row first.")
                 return
             cost_usd = direct_video_cost_usd(selection.model_id, seconds)
+            cost_eur = round(cost_usd * eur_per_usd(), 6)
             token = self.host.authorize_request(
                 "video", provider_key, selection.model_id, topic,
-                label="direct video", flat_cost_eur=round(
-                    cost_usd * eur_per_usd(), 6))
+                label="direct video", flat_cost_eur=cost_eur)
             if not token:
                 return
             self._request_token = token
@@ -495,6 +497,8 @@ class VideoPanel(QWidget):
             self._external_context.update({
                 "slug": slug, "path": str(output_path),
             })
+            self._persist_submission(token, provider_key,
+                                     selection.model_id, cost_eur)
             active_kind = f"{provider_key}-video"
             self._begin(active_kind, can_cancel=False)
             self.video_status_label.setText(
@@ -552,10 +556,10 @@ class VideoPanel(QWidget):
         if context.get("cancel_requested"):
             self._reset("Estimate cancelled.")
             return
+        cost_eur = round(estimate.usd * eur_per_usd(), 6)
         token = self.host.authorize_request(
             "video", "higgsfield", request.endpoint, context["topic"],
-            label="direct video", flat_cost_eur=round(
-                estimate.usd * eur_per_usd(), 6))
+            label="direct video", flat_cost_eur=cost_eur)
         if not token:
             self._reset("Render not approved.")
             return
@@ -570,6 +574,8 @@ class VideoPanel(QWidget):
             "slug": slug, "path": str(output_path),
             "model": request.endpoint,
         })
+        self._persist_submission(token, "higgsfield",
+                                 request.endpoint, cost_eur)
         self._begin("higgsfield", can_cancel=True)
         worker = HiggsfieldWorker(
             client, context["topic"], context["path"],
@@ -582,12 +588,62 @@ class VideoPanel(QWidget):
         worker.start()
 
     # ── external-provider completion ────────────────────────────────────
+    def _persist_submission(self, token, provider: str, model: str,
+                            cost_eur: float) -> None:
+        """Write the durable intent row; a failure never blocks the render."""
+        from agents.video import jobs
+
+        context = self._external_context
+        snapshot = self.host.pending_request_snapshot(token)
+        try:
+            context["job_row_id"] = jobs.record_submission(
+                provider=provider, model=model, topic=context["topic"],
+                slug=context["slug"], output_path=context["path"],
+                seconds=context["seconds"],
+                aspect_ratio=context.get("aspect", ""),
+                flat_cost_eur=cost_eur, project=snapshot.get("project"),
+                run_id=snapshot.get("run_id", ""))
+        except Exception as exc:
+            self.host._note_failure("video: persist job submission", exc)
+
+    def _persist_transition(self, row_id, job) -> None:
+        from agents.video import jobs
+
+        try:
+            jobs.update_job(
+                row_id, job_id=getattr(job, "job_id", "") or "",
+                status=getattr(job, "status", "") or "",
+                error=getattr(job, "error", "") or "",
+                status_url=getattr(job, "status_url", "") or "")
+        except Exception as exc:
+            self.host._note_failure("video: persist job state", exc)
+
+    def _close_job_row(self, *, billed: bool, error: str = "") -> None:
+        from agents.video import jobs
+
+        row_id, self._external_context["job_row_id"] = (
+            self._external_context.get("job_row_id"), None)
+        if not row_id:
+            return
+        try:
+            if billed:
+                jobs.mark_terminal(row_id, spend_state="billed",
+                                   fallback_status="completed", error=error)
+            else:
+                jobs.mark_terminal(row_id, spend_state="released",
+                                   fallback_status="failed", error=error)
+        except Exception as exc:
+            self.host._note_failure("video: close job record", exc)
+
     def _external_job(self, job) -> None:
         self._external_context["job_id"] = getattr(job, "job_id", "")
         if getattr(job, "status", "") == "completed":
             # The provider has already produced the billable asset. Preserve
             # that fact even if saving it to disk or indexing it later fails.
             self._external_context["provider_completed"] = True
+        row_id = self._external_context.get("job_row_id")
+        if row_id:
+            self._persist_transition(row_id, job)
 
     def _external_done(self, path: str) -> None:
         from agents.video import video_studio
@@ -618,6 +674,7 @@ class VideoPanel(QWidget):
         token, self._request_token = self._request_token, None
         if token:
             self.host.record_request(token, f"rendered {slug}")
+        self._close_job_row(billed=True)
         self._reset(f"Done — {Path(path).name}")
         self.refresh_library()
 
@@ -634,8 +691,135 @@ class VideoPanel(QWidget):
         elif token:
             # A failed or cancelled render releases the whole-video reserve.
             self.host.abandon_request(token)
+        self._close_job_row(billed=provider_completed, error=error)
         self.video_log.append(error)
         self._reset(f"[Error] {error}")
+
+    # ── startup reconciliation of jobs that outlived the process ────────
+    def resume_pending_jobs(self) -> None:
+        """Finish provider renders a previous process left in flight.
+
+        Called once per launch by the host.  Submissions the provider never
+        acknowledged are marked lost and surfaced; every acknowledged,
+        non-terminal job gets its budget reservation restored and a poll
+        worker that downloads and bills the result exactly like a live
+        render.
+        """
+        if not self._available:
+            return
+        from agents.video import jobs
+
+        try:
+            lost = jobs.sweep_lost()
+            rows = jobs.pending_rows()
+        except Exception as exc:
+            self.host._note_failure("video: read pending jobs", exc)
+            return
+        for row in lost:
+            self.video_log.append(
+                f"[Resume] A {row['provider']} render was still submitting "
+                "when the app last closed and has no job id. Nothing was "
+                "billed here — check the provider dashboard before "
+                "re-rendering.")
+        for row in rows:
+            self._spawn_resume(row)
+
+    def _spawn_resume(self, row: dict) -> None:
+        from agents.video.workers import VideoResumeWorker
+
+        provider = row["provider"]
+        if provider == "higgsfield":
+            client = HiggsfieldClient()
+            ready = client.configured
+        elif provider == "gemini":
+            client = self.host.gemini
+            ready = client.key_available()
+        elif provider == "qwen":
+            client = self.host.qwen
+            ready = client.key_available()
+        else:
+            client, ready = None, False
+        if not ready:
+            # The job may still be rendering at the provider; without a key
+            # there is no way to look. Keep the row pending for a launch
+            # where the key exists rather than guessing an outcome.
+            self.video_log.append(
+                f"[Resume] Cannot check {provider} job {row['job_id']} — "
+                "no API key configured. It stays queued for the next "
+                "launch.")
+            return
+        token = self.host.restore_request(
+            row["agent"] or "video", provider, row["model"], row["topic"],
+            label="direct video (resumed)",
+            flat_cost_eur=row["flat_cost_eur"], project=row["project"],
+            run_id=row["run_id"])
+        worker = VideoResumeWorker(
+            client, provider, job_id=row["job_id"], model=row["model"],
+            seconds=row["seconds"], aspect_ratio=row["aspect_ratio"],
+            status_url=row["status_url"], output_path=row["output_path"])
+        self.host.video_resume_workers.append(worker)
+        worker.status_signal.connect(self.video_log.append)
+        worker.job_signal.connect(
+            lambda job, r=row["id"]: self._persist_transition(r, job))
+        worker.done_signal.connect(
+            lambda path, r=row, t=token, w=worker:
+            self._resume_done(r, t, w, path))
+        worker.error_signal.connect(
+            lambda err, r=row, t=token, w=worker:
+            self._resume_error(r, t, w, err))
+        worker.start()
+        self.video_log.append(
+            f"[Resume] Watching {provider} render {row['job_id']} "
+            f"({row['slug']}) from the previous session…")
+
+    def _resume_done(self, row: dict, token, worker, path: str) -> None:
+        from agents.video import jobs, video_studio
+
+        error = ""
+        try:
+            video_studio.record_external(
+                slug=row["slug"], path=Path(path), topic=row["topic"],
+                provider=row["provider"], model=row["model"],
+                seconds=row["seconds"], job_id=row["job_id"])
+        except Exception as exc:
+            # The paid asset is on disk; only the library index failed.
+            error = f"saved, but could not join the library: {exc}"
+        self.host.record_request(token, f"rendered {row['slug']} (resumed)")
+        try:
+            jobs.mark_terminal(row["id"], spend_state="billed",
+                               fallback_status="completed", error=error)
+        except Exception as exc:
+            self.host._note_failure("video: close resumed job", exc)
+        self.video_log.append(
+            f"[Resume] {row['slug']} finished and was saved."
+            + (f" ({error})" if error else ""))
+        self.refresh_library()
+
+    def _resume_error(self, row: dict, token, worker, error: str) -> None:
+        from agents.video import jobs
+
+        try:
+            if worker.provider_completed:
+                # Money was spent and the asset exists at the provider;
+                # only the local download/save failed.
+                self.host.record_request(
+                    token, "provider completed resumed render; local save "
+                    "failed")
+                jobs.mark_terminal(row["id"], spend_state="billed",
+                                   fallback_status="completed", error=error)
+            elif worker.timed_out:
+                # Not a provider verdict — the render may still finish.
+                # Release only this session's reservation; the row stays
+                # pending and the next launch resumes again.
+                self.host.abandon_request(token, reason="timeout")
+                jobs.update_job(row["id"], status="running", error=error)
+            else:
+                self.host.abandon_request(token)
+                jobs.mark_terminal(row["id"], spend_state="released",
+                                   fallback_status="failed", error=error)
+        except Exception as exc:
+            self.host._note_failure("video: close resumed job", exc)
+        self.video_log.append(f"[Resume] {row['slug']}: {error}")
 
     def _reset(self, status: str) -> None:
         self.video_status_label.setText(status)

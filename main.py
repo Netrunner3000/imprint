@@ -297,6 +297,10 @@ class GodAI(QWidget):
         self.start_resource_timer()
         self._is_initializing = False
         self.select_agent("author")
+        # Reconcile provider renders that outlived the previous process —
+        # real money may be in flight. One event-loop turn later so the
+        # first paint is not blocked by job bookkeeping.
+        QTimer.singleShot(0, self.video_panel.resume_pending_jobs)
 
     def _polish_tab_widgets(self):
         """Disable text elision and enable scroll buttons on every QTabWidget
@@ -3024,6 +3028,39 @@ class GodAI(QWidget):
         return sum(float(ctx.get("estimated_cost") or 0.0)
                    for ctx in self._pending_requests.values())
 
+    def pending_request_snapshot(self, token) -> dict:
+        """A copy of an open request's context, for durable job records."""
+        context = self._pending_requests.get(token)
+        return dict(context) if context else {}
+
+    def restore_request(self, agent, provider, model, prompt, *, label=None,
+                        flat_cost_eur=None, project=None, run_id=""):
+        """Re-mint the pending context for a request from a previous process.
+
+        Used only when resuming a persisted provider job: the money was
+        validated, confirmed and possibly spent before the restart, so this
+        never re-validates and never re-asks — a refusal here could orphan a
+        paid result. It restores the in-flight reservation so the caps stay
+        truthful and the normal record_request / abandon_request close-out
+        works.
+        """
+        token = uuid.uuid4().hex
+        self._pending_requests[token] = {
+            "agent": agent,
+            "tool": label or "-",
+            "provider": provider,
+            "model": model,
+            "prompt": prompt,
+            "usage": None,
+            "flat_cost_eur": flat_cost_eur,
+            "estimated_cost": float(flat_cost_eur or 0.0),
+            "project": project,
+            "project_instructions": "",
+            "run_id": run_id or "",
+        }
+        self._pending_by_agent.setdefault(agent, []).append(token)
+        return token
+
     def _resolve_request(self, handle, pop=False):
         """Find one in-flight request from a token or an agent name.
 
@@ -3929,6 +3966,9 @@ class GodAI(QWidget):
                 if worker is not None and worker.isRunning():
                     if hasattr(worker, "cancel"):
                         worker.cancel()
+                    worker.wait(2000)
+            for worker in getattr(self, "video_resume_workers", ()):
+                if worker is not None and worker.isRunning():
                     worker.wait(2000)
         except Exception as exc:
             self._note_failure("shutdown: stop background work", exc)

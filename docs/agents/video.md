@@ -85,6 +85,8 @@ Pipeline cancellation is cooperative, through the reporter. Higgsfield uses its 
 | `services/gemini_client.py` | Gemini Omni interaction plus Veo create/poll/download. |
 | `services/qwen_client.py` | Wan asynchronous create/poll/download through DashScope. |
 | `ui/workers.py → VideoGenerationWorker` | Runs supported direct jobs off the UI thread and preserves completed output. |
+| `agents/video/jobs.py` | Durable `video_jobs` rows: written before the create POST, updated per provider transition, settled `billed`/`released` with the guard. |
+| `agents/video/workers.py → VideoResumeWorker` | Startup reconciliation: re-polls a job that outlived the process, downloads and bills the paid result. |
 | `vidforge/vidforge/pipeline.py` | `produce()` — the eight stages. |
 | `vidforge/vidforge/progress.py` | `Reporter`, `STAGES`, `overall_fraction`, `Cancelled`. |
 | `main.py` compatibility entries | Delegate older umbrella call sites to `VideoPanel`; no Video implementation remains there. |

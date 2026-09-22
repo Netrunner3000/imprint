@@ -246,6 +246,26 @@ class GeminiClientWrapper:
         job.error = f"Timed out after {timeout}s"
         return job
 
+    def resume_video(self, job_id: str, *, model: str, seconds: int,
+                     aspect_ratio: str = "9:16") -> GeminiVideoJob:
+        """Rebuild a Veo operation from its persisted name and re-poll it.
+
+        google-genai's operations.get reads only ``.name`` off the object it
+        is given, so a job that outlived the process resumes from the stored
+        id alone; after this first poll the job carries a live operation and
+        wait_video/download_video work unmodified. Omni renders
+        synchronously and has nothing to resume.
+        """
+        if model == "gemini-omni-1.1-flash":
+            raise ValueError(
+                "gemini-omni-1.1-flash renders synchronously; there is no "
+                "job to resume.")
+        operation = genai_types.GenerateVideosOperation(name=job_id)
+        operation = self._media().operations.get(operation)
+        return self._veo_job(
+            operation, model=model, seconds=int(seconds),
+            aspect_ratio=aspect_ratio)
+
     def download_video(self, job: GeminiVideoJob) -> bytes:
         if job.video_bytes is not None:
             return job.video_bytes

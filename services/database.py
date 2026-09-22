@@ -343,6 +343,36 @@ CREATE TABLE IF NOT EXISTS creator_video_jobs (
     FOREIGN KEY (content_id) REFERENCES creator_content(id)
 );
 
+-- Direct provider renders from the Video workspace.  A row is written just
+-- before the create POST and updated on every provider transition, so a
+-- render that outlives the process is resumed, downloaded and billed on the
+-- next launch instead of dying with the window.
+-- status: submitted -> queued/running -> completed | failed | cancelled |
+--         nsfw | lost ('lost' = the app died between the create POST and
+--         the provider's reply, so there is no job id to poll).
+-- spend_state: reserved (authorized, unbilled) -> billed | released.
+CREATE TABLE IF NOT EXISTS video_jobs (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    provider      TEXT NOT NULL,
+    job_id        TEXT NOT NULL DEFAULT '',
+    model         TEXT NOT NULL DEFAULT '',
+    slug          TEXT NOT NULL DEFAULT '',
+    topic         TEXT NOT NULL DEFAULT '',
+    output_path   TEXT NOT NULL DEFAULT '',
+    seconds       INTEGER NOT NULL DEFAULT 0,
+    aspect_ratio  TEXT NOT NULL DEFAULT '',
+    status        TEXT NOT NULL DEFAULT 'submitted',
+    error         TEXT NOT NULL DEFAULT '',
+    agent         TEXT NOT NULL DEFAULT 'video',
+    flat_cost_eur REAL NOT NULL DEFAULT 0.0,
+    spend_state   TEXT NOT NULL DEFAULT 'reserved',
+    project       TEXT,
+    run_id        TEXT NOT NULL DEFAULT '',
+    status_url    TEXT NOT NULL DEFAULT '',
+    created_at    TEXT NOT NULL,
+    updated_at    TEXT NOT NULL
+);
+
 -- Hook variants. Creators test openers; recording which one shipped is what
 -- turns the earnings table into a feedback loop instead of a report.
 CREATE TABLE IF NOT EXISTS creator_variants (
@@ -378,6 +408,7 @@ CREATE TABLE IF NOT EXISTS creator_performers (
 CREATE INDEX IF NOT EXISTS idx_creator_content_account ON creator_content(account_id);
 CREATE INDEX IF NOT EXISTS idx_creator_media_account   ON creator_media(account_id);
 CREATE INDEX IF NOT EXISTS idx_creator_video_jobs_account ON creator_video_jobs(account_id);
+CREATE INDEX IF NOT EXISTS idx_video_jobs_status       ON video_jobs(status);
 
 CREATE INDEX IF NOT EXISTS idx_usage_timestamp ON usage(timestamp);
 CREATE INDEX IF NOT EXISTS idx_runs_timestamp  ON runs(timestamp);
