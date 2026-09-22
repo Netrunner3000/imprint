@@ -20,6 +20,7 @@ if "--narrator-worker" in sys.argv:
     _narrator_main()
     sys.exit(0)
 
+from services import version as app_version
 from services.runtime_paths import resource_base, user_data_base, ensure_seeded, is_frozen
 ensure_seeded()
 
@@ -1280,6 +1281,19 @@ class GodAI(QWidget):
         brand = QLabel("IMPRINT")
         brand.setObjectName("Wordmark")
         row.addWidget(brand)
+
+        # The running version, beside the name. Derived from the repository
+        # rather than typed, so it cannot drift from the code it labels — see
+        # services/version.py. It answers two questions at a glance: which
+        # build is open, and whether that build is the current one. A stale
+        # bundle says so in amber instead of looking identical to a fresh one.
+        row.addSpacing(SM)
+        self.version_badge = QLabel(app_version.version_string())
+        self.version_badge.setObjectName("VersionBadge")
+        self.version_badge.setToolTip(app_version.tooltip())
+        if not app_version.staleness()["current"]:
+            self.version_badge.setProperty("state", "stale")
+        row.addWidget(self.version_badge)
 
         row.addSpacing(LG)
         divider = QFrame()

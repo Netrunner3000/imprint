@@ -49,6 +49,12 @@ if (_VIDFORGE / "vidforge").is_dir():
         datas += [(str(_VIDFORGE / "assets"), "assets")]
 
 # Read-only resources seeded into the writable user-data dir on first launch.
+# The version stamp and the arc file. Without these a frozen bundle cannot
+# report which build it is — services/version.py has no .git to fall back on.
+datas += [("VERSION", ".")]
+if Path("_build_info.json").is_file():
+    datas += [("_build_info.json", ".")]
+
 datas += [
     ("config", "config"),
     ("assets/dropdown-chevron.svg", "assets"),

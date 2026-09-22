@@ -13,10 +13,18 @@ which closes the last two gaps against the original plan. Every paid path in
 the GUI goes through the request guard, including the ones billed per unit
 rather than per token — the 2026-09-20 re-analysis found and closed the last
 in-app exception (ElevenLabs shorts); the Course Generator CLI remains the one
-paid workflow outside it (tracked in agents/course/TODO.md). 711 tests pass in
-an isolated database (2026-09-21; isolation now enforced by conftest rather
+paid workflow outside it (tracked in agents/course/TODO.md). 745 tests pass in
+an isolated database (2026-09-22; isolation enforced by conftest rather
 than per-fixture convention). The installed macOS app is a live launcher into
 this source tree; restarting it loads changes.
+
+**Versioning is `v<MAJOR>.<BUILD>`** as of 2026-09-22 — `MAJOR` from the
+`VERSION` file, `BUILD` from `git rev-list --count HEAD`, zero-padded to three.
+The header bar carries the badge and its tooltip says whether the running build
+is current. Nothing about it is typed by hand, so it cannot drift from the
+code; see README §18.1. The Lab Project Monitor derives a card's version from
+the same two inputs, so a project card and the app's own header cannot
+disagree.
 
 **Refactor Phase 4** is complete: every agent owns a repo-ready directory,
 public API, README, TODO and suggestions file; one catalog drives the umbrella
@@ -28,6 +36,8 @@ controls through `GodAI._find_control()`.
 ---
 
 ## v2 — current
+
+- [x] `P1` `feature` `@ai` **Derived version badge in the header (`v2.xxx`).** Done 2026-09-22: `services/version.py` computes `v<MAJOR>.<BUILD>` from the `VERSION` file plus `git rev-list --count HEAD`, zero-padded to three digits; the header bar shows it beside the wordmark and its tooltip carries the commit, the date and the staleness. A frozen bundle has no git, so `scripts/stamp_version.py` bakes `_build_info.json` in at package time and both install scripts call it; the frozen app prefers its own stamp and compares it against the checkout when one is reachable, which is how the badge can say *N commits behind*. With neither source it reads `v2.???` and says unknown rather than claiming to be current — `TestStalenessIsHonest` fails the build on that. The padding test is driven with small build numbers on purpose: asserting only against the live build (112, already three digits) still passes with the padding removed, which is a guard that tests nothing. 15 tests. README §18.1.
 
 **Product P1s promoted 2026-09-21** — the three non-refactor swings, tracked here
 so they sit beside the Phase 4 work rather than only on the agents' own cards:

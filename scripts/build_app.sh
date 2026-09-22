@@ -38,6 +38,10 @@ PY="${PROJECT_ROOT}/.venv/bin/python"
 
 cd "$PROJECT_ROOT"
 
+# Bake the build number in before packaging: a bundle has no .git to
+# ask at runtime, so without this it cannot report its own version.
+"${PY:-python3}" scripts/stamp_version.py || true
+
 echo "▸ Building ${APP_BUNDLE} with PyInstaller (this takes ~1 min)…"
 mkdir -p "$DIST_DIR"
 touch "${PROJECT_ROOT}/dist/.metadata_never_index" "$DIST_DIR/.metadata_never_index"

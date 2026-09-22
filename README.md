@@ -2,7 +2,9 @@
 
 
 ![Screenshot](docs/screenshot.png)
-**Version:** 1.0  
+**Version:** `v2.xxx` — shown in the header bar next to the wordmark, and
+explained in [§18.1 Versioning](#181-versioning). The number is not edited by
+hand; it is derived, so the badge you see is the build you are running.  
 **Stack:** Python 3.11+ · PySide6 · SQLite · Ollama · Anthropic · OpenAI · DeepSeek · Gemini
 
 Forked from `sentinel_ai` and stripped down to the creative/publishing agents —
@@ -60,6 +62,7 @@ hasn't been done.
    - [Tests](#161-tests)
 17. [First-Run & Migration](#17-first-run--migration)
 18. [Installing and Packaging](#18-installing-and-packaging)
+   - [Versioning](#181-versioning)
 19. [Configuration Reference](#19-configuration-reference)
 20. [Learning Centre](#20-learning-centre)
 21. [Earning Income with Imprint](#21-earning-income-with-imprint)
@@ -1496,6 +1499,13 @@ all" — the schedule is a plan you work through, one confirmed click at a time.
 A tool that posts on its own behalf while nobody is watching is how an account
 gets banned for something its owner never saw.
 
+Every direct attempt is written to a durable delivery ledger before the
+network call. A definite rejection shows **Retry available**. A timeout, app
+close, or other result that cannot prove whether the post landed shows
+**Verify platform** and is never retried automatically: check the account,
+then mark it posted or deliberately choose **Retry After Checking**. A
+completed delivery cannot be submitted a second time from Imprint.
+
 The system prompt forbids inventing reviews, testimonials, sales figures and
 engagement bait, as a rule rather than a hope.
 
@@ -2282,6 +2292,71 @@ ls /Applications/Imprint.app/Contents/MacOS/
 `Imprint` is the frozen build. `applet` is the live launcher — `install_app.sh`
 builds it with `osacompile`, which is why the executable and the icon file
 inside carry AppleScript's `applet` name.
+
+### 18.1 Versioning
+
+Imprint's version is **`v<MAJOR>.<BUILD>`** — `v2.112` at the time of writing.
+It appears in the header bar beside the wordmark, and hovering it shows the
+commit, the date and whether the build is current.
+
+| Part | Where it comes from | Who changes it |
+|---|---|---|
+| `MAJOR` | the `VERSION` file — one integer, nothing else | you, at an arc boundary |
+| `BUILD` | `git rev-list --count HEAD`, zero-padded to three digits | nobody; it is counted |
+
+**The build number is derived, never typed.** That is the whole point: a
+hand-maintained number tells you what someone last remembered to write down,
+and this one tells you which commit you are actually running. Every commit
+advances it by exactly one, so `v2.112` is reachable — `git rev-list --count`
+on any checkout either produces 112 or it is not that build.
+
+**Why not semver.** Semver's minor/patch split encodes a promise about API
+compatibility to *other software*. Nothing imports Imprint; it is an
+application with one user. Spending two of three numbers on a promise nobody
+can consume leaves the question that actually gets asked — "is the app I just
+opened the one I built?" — unanswered. `v2.112` answers it.
+
+**Zero-padding is deliberate.** `v2.7` reads as a draft, `v2.007` reads as a
+build. Padding stops at three digits and simply grows after that (`v2.1234`).
+
+#### The badge, and what "up to date" means
+
+`services/version.py` is the only place the version is computed, and the badge
+turns amber when it cannot honestly claim to be current.
+
+- **Running from source** (`python main.py`, or the `install_app.sh` launcher):
+  the number comes from git each launch, so it is current by construction.
+- **Frozen** (`build_app.sh`): git is not available inside a bundle, so the
+  build is stamped in at package time by `scripts/stamp_version.py`, which
+  writes `_build_info.json` into the app. On launch the frozen app prefers its
+  own stamp, then compares it against the checkout if one is reachable — that
+  is how the badge knows to say *3 commits behind*.
+- **Neither** — no git, no stamp: the badge reads `v2.???` and the tooltip says
+  the build is unknown.
+
+That last case is the one worth protecting. It would be easy to have
+`staleness()` return "up to date" when there is nothing to compare against,
+and it would be a lie in exactly the situation where the user is asking the
+question. It returns `known: False` instead, and
+`tests/test_version.py::TestStalenessIsHonest` fails the build if that
+changes.
+
+#### Releasing
+
+Both install scripts stamp the build themselves, so a normal install needs no
+extra step:
+
+```bash
+scripts/install_app.sh        # live launcher — stamps, then installs
+scripts/build_app.sh          # frozen bundle — stamps, then freezes
+```
+
+`_build_info.json` is generated and git-ignored. If git is unavailable the
+stamp script writes nothing and exits 0 with a note on stderr, rather than
+inventing a number — a wrong version is worse than an absent one.
+
+Bump `MAJOR` by editing `VERSION` when the app changes shape enough that the
+old number would mislead — the same judgement that made this arc `2`.
 
 ### The icon
 

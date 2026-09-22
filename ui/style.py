@@ -747,6 +747,24 @@ GLOBAL_STYLESHEET = f"""
             font-weight: 700;
             letter-spacing: 2.4px;
         }}
+        /* The version beside the wordmark. Quiet by default — it is
+           reference, not a control — and amber when the running build is
+           behind the checkout, which is the only time it wants attention. */
+        QLabel#VersionBadge {{
+            color: {TEXT_MUTE};
+            font-size: 11px;
+            font-weight: 600;
+            letter-spacing: 0.6px;
+            padding: 2px 7px;
+            border: 1px solid {BORDER};
+            border-radius: {RADIUS_SM};
+        }}
+        QLabel#VersionBadge[state="stale"] {{
+            color: {WARNING};
+            border: 1px solid {WARNING_LINE};
+            background-color: {WARNING_WASH};
+        }}
+
         QLabel#WordmarkDot {{ color: {ACCENT}; font-size: 11px; }}
 
         /* Navigation, not action: an underline marks the current mode. A pill

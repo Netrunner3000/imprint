@@ -22,6 +22,13 @@
 set -euo pipefail
 
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+# Bake the build number in. This launcher runs the checkout live, so the app
+# normally reads git directly — but stamping anyway means the bundle still
+# reports a version if the checkout is later moved or its .git is absent.
+"${PROJECT_ROOT}/.venv/bin/python" "${PROJECT_ROOT}/scripts/stamp_version.py" 2>/dev/null \
+  || python3 "${PROJECT_ROOT}/scripts/stamp_version.py" 2>/dev/null \
+  || true
 APP_NAME="Imprint"
 INSTALLED="/Applications/${APP_NAME}.app"
 PY="${PROJECT_ROOT}/.venv/bin/python"

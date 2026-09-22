@@ -34,3 +34,7 @@ build/
 
 # Nested companion project (its own git repo, moved in under the sentinel family)
 /vidforge/
+
+# Generated at install/build time by scripts/stamp_version.py — regenerated
+# every time, so committing it would just churn between sessions.
+_build_info.json
