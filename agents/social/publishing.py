@@ -26,6 +26,13 @@ from agents.social.platforms import get as get_platform
 class PublishError(RuntimeError):
     """Posting failed. The message is shown to the user verbatim."""
 
+    def __init__(self, message: str, *, safe_to_retry: bool = False):
+        super().__init__(message)
+        # True only when the publisher knows no content was accepted.  An
+        # ordinary timeout/exception is ambiguous and must be checked on the
+        # platform before another POST is allowed.
+        self.safe_to_retry = safe_to_retry
+
 
 @dataclass
 class PublishResult:
@@ -90,10 +97,12 @@ class RedditPublisher(Publisher):
         if response.status_code != 200:
             raise PublishError(
                 f"Reddit refused the login ({response.status_code}). Check the "
-                "client id/secret and that the app is of type 'script'.")
+                "client id/secret and that the app is of type 'script'.",
+                safe_to_retry=True)
         token = response.json().get("access_token")
         if not token:
-            raise PublishError("Reddit returned no access token.")
+            raise PublishError("Reddit returned no access token.",
+                               safe_to_retry=True)
         return token
 
     def publish(self, body: str, media_path: str = "", *, subreddit: str = "",
@@ -101,9 +110,10 @@ class RedditPublisher(Publisher):
         import requests
 
         if not subreddit:
-            raise PublishError("Reddit needs a subreddit to post to.")
+            raise PublishError("Reddit needs a subreddit to post to.",
+                               safe_to_retry=True)
         if not title:
-            raise PublishError("Reddit needs a title.")
+            raise PublishError("Reddit needs a title.", safe_to_retry=True)
 
         response = requests.post(
             "https://oauth.reddit.com/api/submit",
@@ -115,13 +125,17 @@ class RedditPublisher(Publisher):
             timeout=60,
         )
         if response.status_code != 200:
-            raise PublishError(f"Reddit rejected the post ({response.status_code}).")
+            raise PublishError(
+                f"Reddit rejected the post ({response.status_code}).",
+                safe_to_retry=400 <= response.status_code < 500)
 
         payload = response.json().get("json", {})
         errors = payload.get("errors") or []
         if errors:
             # Reddit reports rule violations here rather than as an HTTP error.
-            raise PublishError("; ".join(" ".join(str(p) for p in e) for e in errors))
+            raise PublishError(
+                "; ".join(" ".join(str(p) for p in e) for e in errors),
+                safe_to_retry=True)
         return PublishResult(permalink=payload.get("data", {}).get("url", ""))
 
 
@@ -179,11 +193,13 @@ class YouTubePublisher(Publisher):
     def publish(self, body: str, media_path: str = "", *, title: str = "",
                 privacy: str = "private", **_kwargs) -> PublishResult:
         if not media_path or not Path(media_path).exists():
-            raise PublishError("YouTube needs a rendered clip to upload.")
+            raise PublishError("YouTube needs a rendered clip to upload.",
+                               safe_to_retry=True)
         try:
             from vidforge import youtube  # type: ignore
         except Exception as exc:
-            raise PublishError(f"vidforge's uploader is unavailable: {exc}")
+            raise PublishError(f"vidforge's uploader is unavailable: {exc}",
+                               safe_to_retry=True)
         try:
             # vidforge's real signature is upload(cfg, video, meta_dict) and it
             # returns a dict — the old keyword call here TypeErrored on every
@@ -212,9 +228,11 @@ class PinterestPublisher(Publisher):
         import requests
 
         if not board_id:
-            raise PublishError("Pinterest needs a board id to pin to.")
+            raise PublishError("Pinterest needs a board id to pin to.",
+                               safe_to_retry=True)
         if not media_path or not Path(media_path).exists():
-            raise PublishError("Pinterest needs an image or video file.")
+            raise PublishError("Pinterest needs an image or video file.",
+                               safe_to_retry=True)
 
         encoded = base64.b64encode(Path(media_path).read_bytes()).decode("ascii")
         response = requests.post(
@@ -231,7 +249,8 @@ class PinterestPublisher(Publisher):
         if response.status_code not in (200, 201):
             raise PublishError(
                 f"Pinterest rejected the pin ({response.status_code}): "
-                f"{response.text[:200]}")
+                f"{response.text[:200]}",
+                safe_to_retry=400 <= response.status_code < 500)
         return PublishResult(
             permalink=f"https://pinterest.com/pin/{response.json().get('id', '')}")
 

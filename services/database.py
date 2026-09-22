@@ -259,6 +259,27 @@ CREATE TABLE IF NOT EXISTS social_posts (
     FOREIGN KEY (campaign_id) REFERENCES social_campaigns(id)
 );
 
+-- One durable delivery record per social post.  The row is written before an
+-- outbound publish call, so a crash can never turn an unknown network outcome
+-- into a blind retry.  idempotency_key is Imprint's local duplicate guard;
+-- providers do not all offer a compatible idempotency header.
+CREATE TABLE IF NOT EXISTS social_publish_jobs (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    post_id         INTEGER NOT NULL UNIQUE,
+    platform        TEXT NOT NULL DEFAULT '',
+    idempotency_key TEXT NOT NULL UNIQUE,
+    request_json    TEXT NOT NULL DEFAULT '{}',
+    status          TEXT NOT NULL DEFAULT 'queued',
+    attempt_count   INTEGER NOT NULL DEFAULT 0,
+    requested_at    TEXT NOT NULL,
+    started_at      TEXT NOT NULL DEFAULT '',
+    updated_at      TEXT NOT NULL,
+    finished_at     TEXT NOT NULL DEFAULT '',
+    permalink       TEXT NOT NULL DEFAULT '',
+    last_error      TEXT NOT NULL DEFAULT '',
+    FOREIGN KEY (post_id) REFERENCES social_posts(id) ON DELETE CASCADE
+);
+
 CREATE TABLE IF NOT EXISTS creator_earnings (
     id             INTEGER PRIMARY KEY AUTOINCREMENT,
     account_id     INTEGER NOT NULL,
@@ -409,6 +430,8 @@ CREATE INDEX IF NOT EXISTS idx_creator_content_account ON creator_content(accoun
 CREATE INDEX IF NOT EXISTS idx_creator_media_account   ON creator_media(account_id);
 CREATE INDEX IF NOT EXISTS idx_creator_video_jobs_account ON creator_video_jobs(account_id);
 CREATE INDEX IF NOT EXISTS idx_video_jobs_status       ON video_jobs(status);
+CREATE INDEX IF NOT EXISTS idx_social_publish_jobs_status
+    ON social_publish_jobs(status);
 
 CREATE INDEX IF NOT EXISTS idx_usage_timestamp ON usage(timestamp);
 CREATE INDEX IF NOT EXISTS idx_runs_timestamp  ON runs(timestamp);

@@ -30,7 +30,8 @@ CADENCE: dict[str, int] = {
 }
 DEFAULT_CADENCE = 3
 
-STATUSES = ("draft", "scheduled", "posted", "failed")
+STATUSES = ("draft", "scheduled", "queued", "publishing", "retryable",
+            "needs_review", "posted", "failed")
 
 
 def _now() -> str:
@@ -80,6 +81,10 @@ def get_campaign(campaign_id: int) -> dict | None:
 
 def delete_campaign(campaign_id: int) -> None:
     with get_connection() as conn:
+        conn.execute(
+            "DELETE FROM social_publish_jobs WHERE post_id IN "
+            "(SELECT id FROM social_posts WHERE campaign_id = ?)",
+            (campaign_id,))
         conn.execute("DELETE FROM social_posts WHERE campaign_id = ?",
                      (campaign_id,))
         conn.execute("DELETE FROM social_campaigns WHERE id = ?", (campaign_id,))
@@ -117,6 +122,8 @@ def update_post(post_id: int, **fields) -> None:
 
 def delete_post(post_id: int) -> None:
     with get_connection() as conn:
+        conn.execute("DELETE FROM social_publish_jobs WHERE post_id = ?",
+                     (post_id,))
         conn.execute("DELETE FROM social_posts WHERE id = ?", (post_id,))
         conn.commit()
 
@@ -145,8 +152,18 @@ def get_post(post_id: int) -> dict | None:
 
 
 def mark_posted(post_id: int, permalink: str = "") -> None:
-    update_post(post_id, status="posted", posted_at=_now(),
-                permalink=permalink, last_error="")
+    now = _now()
+    with get_connection() as conn:
+        conn.execute(
+            """UPDATE social_posts SET status = 'posted', posted_at = ?,
+                      permalink = ?, last_error = '' WHERE id = ?""",
+            (now, permalink, post_id))
+        # Manual posting is also a valid resolution for an uncertain API job.
+        conn.execute(
+            """UPDATE social_publish_jobs
+                  SET status = 'posted', permalink = ?, last_error = '',
+                      finished_at = ?, updated_at = ? WHERE post_id = ?""",
+            (permalink, now, now, post_id))
 
 
 def mark_failed(post_id: int, error: str) -> None:

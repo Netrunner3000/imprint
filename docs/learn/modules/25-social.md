@@ -36,6 +36,11 @@
 5. In Accounts, distinguish **drafting available** from **posting ready**.
 6. Use Post Now only on a supported, authorised integration. Otherwise Copy Text
    and publish manually, then Mark Posted with the real state.
+   - **Retry available** means the platform definitely rejected the earlier
+     attempt before accepting content; correct the cause and retry.
+   - **Verify platform** means the result is unknown, commonly after a timeout
+     or app close. Check the account first. If the post exists, choose **Mark
+     Posted**. Use **Retry After Checking** only when it is definitely absent.
 7. Select the posted item in Schedule and use **Record metrics**. Copy reach and
    link clicks from the platform's own report, naming the report and time window.
    The Analytics tab shows the post's saved angle and click-through rate.
@@ -43,9 +48,13 @@
 
 ## How to read the output
 
-Draft, scheduled, posted, failed, and manually posted are operational states.
-They do not prove impressions, qualified visits, purchases, or contribution.
-Keep the platform's owned report and destination analytics for those outcomes.
+Draft and scheduled have not crossed a publishing boundary. Queued has a
+durable delivery record but has not started. Posting means a network attempt is
+in progress. Retry available is a known rejection. Verify platform is an
+ambiguous result and deliberately blocks automatic retry. Posted records a
+completed API delivery or your manual verification. None of these proves
+impressions, qualified visits, purchases, or contribution. Keep the platform's
+owned report and destination analytics for those outcomes.
 
 ## Acceptance checklist
 
@@ -70,6 +79,8 @@ owned report row; a Schedule row alone does not complete verification.
 
 **Post Now disabled:** the account is not supported/ready; use the explicit
 manual path.  
+**Verify platform:** do not press retry first. Open the platform, search the
+account/board/channel, and resolve the row based on what actually exists.  
 **Generic variants:** add one audience problem, proof boundary, CTA, and channel
 constraint.  
 **Likes rise but sales do not:** diagnose the full funnel instead of producing

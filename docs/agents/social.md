@@ -1,6 +1,6 @@
 # SOCIAL MEDIA CAMPAIGN MANAGER — the public funnel
 
-`key: social` · class: `agents/social/agent.py → build_post_messages()` · panel: `build_social_panel()` · storage: `agents/social/store.py` · posting: `agents/social/publishing.py`
+`key: social` · class: `agents/social/agent.py → build_post_messages()` · panel: `agents/social/panel.py` · storage: `agents/social/store.py` · delivery ledger: `agents/social/queue.py` · posting: `agents/social/publishing.py`
 
 ## What it does
 Promotes anything the studio made — a book, a release, a product, a gig — across the public platforms. Writes per platform, schedules at each platform's own cadence, and posts directly where the API allows it.
@@ -51,6 +51,7 @@ The Accounts tab shows this live, including exactly which environment variables 
 
 ## What it will not do
 - **Nothing posts unattended.** No scheduler thread, no "publish all". The schedule is a plan you work through, one confirmed click at a time. A tool that posts on its own behalf while nobody is watching is how an account gets banned for something the owner never saw.
+- **No blind retry after an unknown result.** Imprint writes one durable delivery row before the network call and atomically claims it. A definite rejection becomes **Retry available**. A timeout, app close, or response that does not prove whether the platform accepted the post becomes **Verify platform**. Check the account, then either **Mark Posted** or use the deliberately labelled **Retry After Checking** action. Imprint never makes that risky decision on restart.
 - **No invented evidence.** Reviews, testimonials, sales figures, chart positions and follower counts are forbidden in the system prompt rather than left to chance. A promotion tool that fabricates a happy customer is a liability its owner finds out about last.
 - **No engagement bait**, no hashtag walls, no impersonation.
 
@@ -72,8 +73,9 @@ campaign. Drafts and scheduled items cannot carry observed metrics.
 ## Under the hood — files & functions
 | Location | Role |
 |---|---|
-| `agents/social_agent.py` | Prompts, angles, variant splitting, limit checks. |
+| `agents/social/agent.py` | Prompts, angles, variant splitting, limit checks. |
 | `agents/social/platforms.py` | Per-platform limits, guidance, formats, and what posting really takes. |
 | `agents/social/store.py` | Campaigns, posts, and the cadence arithmetic. Pure Python, no LLM. |
+| `agents/social/queue.py` | Durable delivery state, local idempotency, crash recovery and retry rules. No network and no Qt. |
 | `agents/social/publishing.py` | The publishers that can actually post, and why the others cannot. |
-| `main.py: build_social_panel()` | Campaign, Compose, and the Draft / Schedule / Accounts tabs. |
+| `agents/social/panel.py` | Campaign, Compose, and the Draft / Schedule / Analytics / Accounts tabs. |

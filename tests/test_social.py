@@ -208,6 +208,111 @@ def test_a_failed_post_records_why(store):
     assert "self-promotion" in post["last_error"]
 
 
+# ── Durable publishing queue ─────────────────────────────────────────────────
+def _queued_post(store):
+    campaign_id = store.create_campaign("launch", "The Salt Road")
+    return store.add_post(campaign_id, "reddit", "A useful post")
+
+
+def test_publish_job_is_written_before_the_network_attempt(store):
+    from agents.social import queue
+
+    post_id = _queued_post(store)
+    job = queue.queue_post(post_id, {"subreddit": "books", "title": "Read"})
+    assert job["status"] == "queued"
+    assert job["attempt_count"] == 0
+    assert len(job["idempotency_key"]) == 64
+    assert queue.request_args(job) == {"subreddit": "books", "title": "Read"}
+    assert store.get_post(post_id)["status"] == "queued"
+
+
+def test_a_publish_job_can_be_claimed_only_once(store):
+    from agents.social import queue
+
+    post_id = _queued_post(store)
+    job = queue.queue_post(post_id, {"subreddit": "books", "title": "Read"})
+    claimed = queue.claim(job["id"])
+    assert claimed["status"] == "publishing"
+    assert claimed["attempt_count"] == 1
+    with pytest.raises(queue.PublishInProgress):
+        queue.claim(job["id"])
+    assert store.get_post(post_id)["status"] == "publishing"
+
+
+def test_a_known_rejection_is_retryable_with_the_same_delivery_record(store):
+    from agents.social import queue
+
+    post_id = _queued_post(store)
+    first = queue.queue_post(post_id, {"subreddit": "books", "title": "Read"})
+    queue.claim(first["id"])
+    queue.mark_retryable(first["id"], "Reddit rejected the title")
+    assert store.get_post(post_id)["status"] == "retryable"
+
+    second = queue.queue_post(
+        post_id, {"subreddit": "books", "title": "A better title"})
+    assert second["id"] == first["id"]
+    assert second["status"] == "queued"
+    claimed = queue.claim(second["id"])
+    assert claimed["attempt_count"] == 2
+
+
+def test_an_uncertain_result_cannot_be_retried_without_explicit_override(store):
+    from agents.social import queue
+
+    post_id = _queued_post(store)
+    job = queue.queue_post(post_id, {"subreddit": "books", "title": "Read"})
+    queue.claim(job["id"])
+    queue.mark_uncertain(job["id"], "connection closed after upload")
+    with pytest.raises(queue.OutcomeUnknown, match="Check the platform"):
+        queue.queue_post(post_id, {"subreddit": "books", "title": "Read"})
+
+    retried = queue.queue_post(
+        post_id, {"subreddit": "books", "title": "Read"},
+        allow_uncertain_retry=True)
+    assert retried["id"] == job["id"]
+    assert retried["status"] == "queued"
+
+
+def test_restart_recovery_never_blindly_retries_an_inflight_post(store):
+    from agents.social import queue
+
+    post_id = _queued_post(store)
+    job = queue.queue_post(post_id, {"subreddit": "books", "title": "Read"})
+    queue.claim(job["id"])
+    recovered = queue.recover_interrupted()
+    assert [row["id"] for row in recovered] == [job["id"]]
+    assert queue.job_for_post(post_id)["status"] == "needs_review"
+    post = store.get_post(post_id)
+    assert post["status"] == "needs_review"
+    assert "Check the platform" in post["last_error"]
+    assert queue.recover_interrupted() == []
+
+
+def test_a_completed_delivery_blocks_every_later_publish_attempt(store):
+    from agents.social import queue
+
+    post_id = _queued_post(store)
+    job = queue.queue_post(post_id, {"subreddit": "books", "title": "Read"})
+    queue.claim(job["id"])
+    queue.mark_posted(job["id"], "https://reddit.test/post/1")
+    post = store.get_post(post_id)
+    assert (post["status"], post["permalink"]) == (
+        "posted", "https://reddit.test/post/1")
+    with pytest.raises(queue.AlreadyPublished):
+        queue.queue_post(post_id, {"subreddit": "books", "title": "Read"})
+
+
+def test_manual_resolution_closes_an_uncertain_delivery_job(store):
+    from agents.social import queue
+
+    post_id = _queued_post(store)
+    job = queue.queue_post(post_id, {"subreddit": "books", "title": "Read"})
+    queue.claim(job["id"])
+    queue.mark_uncertain(job["id"], "timeout")
+    store.mark_posted(post_id, "https://reddit.test/found")
+    assert queue.job_for_post(post_id)["status"] == "posted"
+
+
 def test_post_metrics_require_posted_state_and_provenance(store):
     campaign_id = store.create_campaign("c", "subject")
     post_id = store.add_post(campaign_id, "x", "body", angle="value")

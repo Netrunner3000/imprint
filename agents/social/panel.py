@@ -223,6 +223,8 @@ class SocialPanel(QWidget):
             header.setSectionResizeMode(column, QHeaderView.ResizeToContents)
         self.social_schedule_table.setEditTriggers(QTableWidget.NoEditTriggers)
         self.social_schedule_table.setSelectionBehavior(QTableWidget.SelectRows)
+        self.social_schedule_table.itemSelectionChanged.connect(
+            self._update_publish_action)
         self.social_schedule_table.verticalHeader().setVisible(False)
         schedule.addWidget(self.social_schedule_table, 1)
 
@@ -303,7 +305,12 @@ class SocialPanel(QWidget):
         host.social_panel = self
         host.social_worker = None
         self.social_panel_base.load_models()
+        from agents.social import queue
+        interrupted = queue.recover_interrupted()
         self.refresh_campaigns()
+        if interrupted:
+            self.social_status_label.setText(
+                f"{len(interrupted)} interrupted post(s) need verification")
         self.refresh_accounts()
         self._platform_changed(self.social_platform_box.currentText())
         self.hide()
@@ -685,7 +692,7 @@ class SocialPanel(QWidget):
         self.social_status_label.setText(f"{scheduled} post(s) scheduled")
 
     def refresh_schedule(self):
-        from agents.social import platforms, store
+        from agents.social import platforms, queue, store
         campaign = self.current_campaign()
         posts = store.list_posts(campaign["id"]) if campaign else []
         self.social_schedule_table.setRowCount(0)
@@ -699,15 +706,54 @@ class SocialPanel(QWidget):
                 platform.name if platform else post["platform"],
                 post.get("format", "text"),
                 body[:120] + ("…" if len(body) > 120 else ""),
-                post.get("status", "draft"),
+                queue.status_label(post.get("status", "draft")),
                 post.get("permalink") or "",
             ]
             for column, value in enumerate(values):
                 item = QTableWidgetItem(str(value))
                 if column == 0:
                     item.setData(Qt.UserRole, post["id"])
+                if post.get("last_error"):
+                    item.setToolTip(post["last_error"])
                 self.social_schedule_table.setItem(row, column, item)
         self.refresh_analytics(posts)
+        self._update_publish_action()
+
+    def _update_publish_action(self):
+        """Make the one-post delivery state legible before the user acts."""
+        post = self._selected_post()
+        status = post.get("status") if post else ""
+        if not post:
+            self.social_post_btn.setEnabled(False)
+            self.social_post_btn.setText("Post Now")
+            return
+        if status in {"posted", "publishing", "queued"}:
+            self.social_post_btn.setEnabled(status == "queued")
+        else:
+            self.social_post_btn.setEnabled(True)
+        if status in {"retryable", "failed"}:
+            self.social_post_btn.setText("Retry Post")
+            self.social_post_btn.setToolTip(
+                "The previous attempt was rejected before posting. Review the "
+                "error, then retry this one item.")
+        elif status == "needs_review":
+            self.social_post_btn.setText("Retry After Checking")
+            self.social_post_btn.setToolTip(
+                "The previous outcome is unknown. Check the platform first; "
+                "retrying without checking can create a duplicate.")
+        elif status == "queued":
+            self.social_post_btn.setText("Post Queued Item")
+            self.social_post_btn.setToolTip(
+                "This item was safely queued but has not crossed the network.")
+        elif status == "publishing":
+            self.social_post_btn.setText("Posting…")
+        elif status == "posted":
+            self.social_post_btn.setText("Already Posted")
+        else:
+            self.social_post_btn.setText("Post Now")
+            self.social_post_btn.setToolTip(
+                "Publishes this one post through the platform's API. Only "
+                "enabled where that is configured.")
 
     def refresh_analytics(self, posts: list[dict] | None = None):
         from agents.social import store
@@ -791,6 +837,15 @@ class SocialPanel(QWidget):
         post = self._selected_post()
         if not post:
             return
+        if post.get("status") == "needs_review":
+            answer = QMessageBox.question(
+                self, "Confirm it exists on the platform",
+                "The earlier API result was uncertain. Mark this item posted "
+                "only after you have checked the platform and found the post.\n\n"
+                "Mark it posted?",
+                QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
+            if answer != QMessageBox.Yes:
+                return
         store.mark_posted(post["id"])
         self.refresh_schedule()
 
@@ -804,11 +859,32 @@ class SocialPanel(QWidget):
 
     def post_selected(self):
         """Publish one post. Never more than one, never unattended."""
-        from agents.social import platforms, publishing, store
+        from agents.social import platforms, publishing, queue
 
         post = self._selected_post()
         if not post:
             return
+        if post.get("status") == "posted":
+            QMessageBox.information(
+                self, "Already posted",
+                "Imprint already has a completed delivery record for this item.")
+            return
+        allow_uncertain_retry = False
+        if post.get("status") == "publishing":
+            QMessageBox.information(
+                self, "Publish in progress",
+                "This item already has a publish attempt in progress.")
+            return
+        if post.get("status") == "needs_review":
+            answer = QMessageBox.warning(
+                self, "Check before retrying",
+                "Imprint did not receive a definite result from the previous "
+                "attempt. Check the platform first.\n\nRetry only if the post "
+                "is definitely not there; otherwise choose Mark Posted.",
+                QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
+            if answer != QMessageBox.Yes:
+                return
+            allow_uncertain_retry = True
         platform = platforms.get(post["platform"])
         publisher = publishing.publisher_for(post["platform"])
         if publisher is None or not publisher.configured:
@@ -847,17 +923,39 @@ class SocialPanel(QWidget):
         if confirm != QMessageBox.Yes:
             return
 
-        self.social_status_label.setText("Posting…")
         try:
-            result = publisher.publish(post["body"], post.get("media_path", ""),
-                                       **extra)
-        except Exception as exc:
-            store.mark_failed(post["id"], str(exc))
+            job = queue.queue_post(
+                post["id"], extra,
+                allow_uncertain_retry=allow_uncertain_retry)
+            job = queue.claim(job["id"])
+        except queue.QueueError as exc:
+            QMessageBox.information(self, "Cannot post", str(exc))
             self.refresh_schedule()
-            QMessageBox.warning(self, "Post failed", str(exc))
-            self.social_status_label.setText("[Error] post failed")
             return
-        store.mark_posted(post["id"], result.permalink)
+
+        self.social_status_label.setText("Posting…")
+        delivery_args = queue.request_args(job)
+        try:
+            result = publisher.publish(
+                post["body"], post.get("media_path", ""),
+                idempotency_key=job["idempotency_key"], **delivery_args)
+        except Exception as exc:
+            if isinstance(exc, publishing.PublishError) and exc.safe_to_retry:
+                queue.mark_retryable(job["id"], str(exc))
+                title = "Post rejected — safe to retry"
+                message = str(exc)
+            else:
+                queue.mark_uncertain(job["id"], str(exc))
+                title = "Result unknown — check the platform"
+                message = (f"{exc}\n\nImprint will not retry automatically. "
+                           "Check the platform first to avoid a duplicate.")
+            self.refresh_schedule()
+            QMessageBox.warning(self, title, message)
+            self.social_status_label.setText(
+                "Retry available" if isinstance(exc, publishing.PublishError)
+                and exc.safe_to_retry else "Verification required")
+            return
+        queue.mark_posted(job["id"], result.permalink)
         self.refresh_schedule()
         self.social_status_label.setText(f"Posted — {result.permalink or 'done'}")
 

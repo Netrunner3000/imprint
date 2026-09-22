@@ -2,10 +2,12 @@
 
 Owns the public distribution funnel for work made elsewhere in Imprint:
 campaign context, platform-native drafts, variants, cadence schedules, clip
-briefs and supported publishing actions.  Its public functions are exported by
-`agents.social`.
+briefs and supported publishing actions. Its durable delivery ledger prevents
+duplicate clicks and refuses to guess after an ambiguous API outcome. Its
+public functions are exported by `agents.social`.
 
-Platform clients and credentials remain shared services.  User guidance:
+Platform clients, queue state and storage live in this package; credentials
+remain in the app environment and are never persisted. User guidance:
 `docs/agents/social.md`.  Run focused coverage with `pytest tests/test_social.py`.
 
 ## Files
@@ -45,3 +47,9 @@ Platform clients and credentials remain shared services.  User guidance:
   recommendation engine: task tags `social`/`marketing`/`creative`, weighted
   toward cost (.21) and speed (.19), with per-provider affinity scores from
   openai (.98) down to ollama (.68).
+- `store.py` — campaign/post persistence, observed metrics and cadence.
+- `queue.py` — one durable delivery job per post, atomic claim, local
+  idempotency, safe/uncertain retry states and restart reconciliation.
+- `publishing.py` — direct Reddit, Pinterest and YouTube adapters plus the
+  readiness explanations for drafting-only platforms.
+- `panel.py` — the complete Social workspace and guarded request lifecycles.
