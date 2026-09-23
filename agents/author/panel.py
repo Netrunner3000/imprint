@@ -1089,6 +1089,17 @@ class AuthorPanel(QWidget):
         self.author_status_label.setText("[Stopped]")
 
     # ── document actions ────────────────────────────────────────────────
+    def _link_project_output(self, path: Path, kind: str) -> bool:
+        if not self._project_id:
+            return True
+        from services.project_artifacts import record
+        try:
+            record(self._project_id, "author", kind, path, path.name)
+            return True
+        except Exception as exc:
+            self.host._note_failure("author: link project output", exc)
+            return False
+
     def save_draft(self):
         text = self.author_draft_box.toPlainText()
         if not text.strip():
@@ -1101,7 +1112,10 @@ class AuthorPanel(QWidget):
         )
         if path:
             Path(path).write_text(text, encoding="utf-8")
-            self.author_status_label.setText(f"[Saved] {path}")
+            linked = self._link_project_output(Path(path), "draft")
+            self.author_status_label.setText(
+                f"[Saved] {path}" +
+                (" · project link failed" if not linked else ""))
 
     def export_book(self):
         text = self.author_draft_box.toPlainText()
@@ -1129,8 +1143,10 @@ class AuthorPanel(QWidget):
         from agents.author.book_exporter import export_book
         try:
             export_book(text, title, author_name, fmt, Path(path))
+            linked = self._link_project_output(Path(path), f"export_{fmt}")
             self.author_status_label.setText(
-                f"[Done] Exported {fmt.upper()} to {Path(path).name}")
+                f"[Done] Exported {fmt.upper()} to {Path(path).name}" +
+                (" · project link failed" if not linked else ""))
             self.host._author_export_done = True
             self.host._refresh_next_step_tip()
         except Exception as e:

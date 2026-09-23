@@ -154,8 +154,9 @@ The chat context record is also becoming the identity of the work being made.
 It keeps a stable ID across renames and now has `kind`, `work_title`, `byline`,
 and `brief`. This is the source for a book's title and author in Write. Working
 documents use `project_workspaces(project_id, workspace, state_json)`, while
-exported files will need a separate artifact link because a path is not an
-editable document.
+exported files use `project_artifacts(project_id, agent, kind, path)` links
+because a path is not an editable document. Deleting a Project removes its
+database links, never the external files.
 
 ### Landed 2026-09-22
 
@@ -170,11 +171,17 @@ editable document.
       its previous session behavior.
 - [x] A running Write request blocks a project switch, because its eventual
       response would otherwise land in the next project's editor.
+- [x] Saving a Write draft and exporting EPUB/DOCX/PDF records durable file
+      links under the named Project. Publishing Manager's explicit **Use
+      Project Draft** action loads the latest Write editor text (or linked
+      saved draft) into Quote Finder and sets attribution from the byline.
+      It does not silently replace Quote Finder text or approve the draft.
 
 ### Remaining for the cross-workspace P1
 
-- [ ] Join exported manuscripts to the project ID and let Publishing Manager
-      read the selected project's title, author, and approved manuscript.
+- [ ] Add an explicit manuscript approval/version choice for Publishing
+      Manager. The current Project handoff intentionally uses a working draft;
+      it must not imply that the latest text is approved for publication.
 - [ ] Join Audiobook inputs, conversions, and listening output to the same
       project, without changing a user's global input/output folders merely
       because they selected a project.

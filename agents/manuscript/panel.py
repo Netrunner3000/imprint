@@ -50,6 +50,7 @@ class ManuscriptPanel(QWidget):
         "manuscript_todo_input", "manuscript_add_todo_btn",
         "manuscript_done_todo_btn", "manuscript_status_label",
         "quote_finder_text", "quote_finder_load_btn", "quote_finder_count_box",
+        "quote_finder_project_btn",
         "quote_finder_theme_box", "quote_finder_voice_source_box",
         "quote_finder_voice_box", "quote_finder_attribution",
         "quote_finder_suggest_btn", "quote_finder_list",
@@ -238,6 +239,11 @@ class ManuscriptPanel(QWidget):
         self.quote_finder_load_btn = QPushButton("Load File…")
         self.quote_finder_load_btn.clicked.connect(self.quote_finder_load_file)
         load_row.addWidget(self.quote_finder_load_btn)
+        self.quote_finder_project_btn = QPushButton("Use Project Draft")
+        self.quote_finder_project_btn.setToolTip(
+            "Load the selected project's current Write draft into Quote Finder.")
+        self.quote_finder_project_btn.clicked.connect(self.use_project_draft)
+        load_row.addWidget(self.quote_finder_project_btn)
         load_row.addWidget(QLabel("Supports .txt, .pdf, .epub, .mobi"))
         load_row.addStretch()
         layout.addLayout(load_row)
@@ -827,6 +833,43 @@ class ManuscriptPanel(QWidget):
                 f"[Loaded] {Path(path).name} ({len(text):,} chars)")
         except Exception as e:
             self.manuscript_status_label.setText(f"[Error] {e}")
+
+    def use_project_draft(self):
+        """Explicitly bring Write's current project manuscript into Publish."""
+        from services.project_workspaces import load
+        from services.project_artifacts import list_for_project
+
+        project = self.host._active_project()
+        if not project:
+            QMessageBox.information(
+                self, "Choose a project", "Select a named Project first.")
+            return
+        author_panel = getattr(self.host, "author_panel", None)
+        if author_panel is not None and author_panel._project_id == project["id"]:
+            # A rapid Write → Publish click can arrive before the 700ms
+            # autosave fires; read the actual editor, not yesterday's row.
+            author_panel._project_save_timer.stop()
+            author_panel._persist_project_state()
+        text = (load(project["id"], "author").get("draft") or "").strip()
+        source = "Write draft"
+        if not text:
+            for artifact in list_for_project(project["id"], kinds=("draft",)):
+                path = Path(artifact["path"])
+                if path.is_file():
+                    text = path.read_text(encoding="utf-8").strip()
+                    source = path.name
+                    break
+        if not text:
+            QMessageBox.information(
+                self, "No project draft",
+                "This project has no saved Write draft yet. Write in the "
+                "Draft tab, or use Load File here.")
+            return
+        self.quote_finder_text.setPlainText(text)
+        if project.get("byline"):
+            self.quote_finder_attribution.setText(project["byline"])
+        self.manuscript_status_label.setText(
+            f"[Loaded] {source} from {project['name']} ({len(text):,} chars)")
 
     def quote_finder_suggest(self):
         text = self.quote_finder_text.toPlainText().strip()

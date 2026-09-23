@@ -6,8 +6,9 @@ continuation and revision for fiction and non-fiction.  Imprint imports
 
 This package owns the editor and its project-scoped working state. The umbrella
 owns project selection, provider execution and the request guard. Book export
-lives in this package's `book_exporter.py`; exported-file links are not yet
-joined to a project.
+lives in this package's `book_exporter.py`; Save Draft and EPUB/DOCX/PDF export
+record project artifact links when a named Project is selected. The files
+remain at the location chosen by the user, including after Project deletion.
 
 ## Files
 

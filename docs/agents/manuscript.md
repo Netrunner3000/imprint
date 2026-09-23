@@ -8,7 +8,7 @@
 Five tabs covering the post-draft, pre/post-launch side of publishing a book:
 
 1. **Overview** — PublishDrive sales/royalty summary, a question box grounded in that data, and the publishing todo checklist.
-2. **Quote Finder** — load the manuscript (`.txt`/`.pdf`/`.epub`/`.mobi`) or paste an excerpt; the agent extracts a batch of verbatim, screenshot-worthy lines. Each candidate has inline buttons to turn it directly into a graphic or a narrated short.
+2. **Quote Finder** — load the selected Project's current Write draft with **Use Project Draft**, load a file (`.txt`/`.pdf`/`.epub`/`.mobi`), or paste an excerpt; the agent extracts a batch of verbatim, screenshot-worthy lines. Each candidate has inline buttons to turn it directly into a graphic or a narrated short. Project loading is explicit and does not imply editorial approval.
 3. **Quote Graphics** — turn one quote into a styled PNG (3 themes, square or vertical) for Instagram/Pinterest/TikTok — pure Pillow, no API cost.
 4. **Shorts** — narrate a quote (free on-device TTS by default, ElevenLabs optional) and combine it with a quote graphic into a vertical MP4 via ffmpeg.
 5. **Calendar** — turn the Quote Finder candidates into a dated posting schedule across TikTok/Instagram/Pinterest, with a platform-native caption per post and a one-click Graphic / Short button per row, then export the whole plan as a CSV punch list for manual posting.
@@ -21,6 +21,7 @@ Five tabs covering the post-draft, pre/post-launch side of publishing a book:
 | Ask box + Provider/Model | Chat Q&A grounded in the last-fetched sales JSON. |
 | Publishing Todos list + Add/Done | Lightweight checklist, seeded with a standard launch checklist on first use. |
 | Quote Finder: text box / Load File / quote count / theme / voice / attribution | Source text and generation settings for batch quote extraction. |
+| Use Project Draft | Copies the selected named Project's current Write draft into Quote Finder and uses its byline for attribution. If no draft is present, prompts for one rather than borrowing text from another Project. |
 | Quote Graphics: quote / attribution / theme / size | Single-graphic generation settings. |
 | Shorts: quote / attribution / theme / voice source / voice | Single-short generation settings. |
 | Calendar: weeks / start date / platform checkboxes / theme / voice / attribution | Scheduling + asset-generation settings for the whole batch. |

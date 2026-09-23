@@ -85,6 +85,20 @@ CREATE TABLE IF NOT EXISTS project_workspaces (
     FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
 );
 
+-- Links to exported files. Removing a Project cascades these links only;
+-- files outside the database stay on disk and are never deleted here.
+CREATE TABLE IF NOT EXISTS project_artifacts (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_id  TEXT NOT NULL,
+    agent       TEXT NOT NULL,
+    kind        TEXT NOT NULL,
+    label       TEXT NOT NULL DEFAULT '',
+    path        TEXT NOT NULL,
+    recorded_at TEXT NOT NULL,
+    UNIQUE (project_id, path),
+    FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+);
+
 CREATE TABLE IF NOT EXISTS runs (
     id             INTEGER PRIMARY KEY AUTOINCREMENT,
     run_id         TEXT NOT NULL UNIQUE,
@@ -448,6 +462,8 @@ CREATE INDEX IF NOT EXISTS idx_creator_video_jobs_account ON creator_video_jobs(
 CREATE INDEX IF NOT EXISTS idx_video_jobs_status       ON video_jobs(status);
 CREATE INDEX IF NOT EXISTS idx_social_publish_jobs_status
     ON social_publish_jobs(status);
+CREATE INDEX IF NOT EXISTS idx_project_artifacts_project
+    ON project_artifacts(project_id, recorded_at);
 
 CREATE INDEX IF NOT EXISTS idx_usage_timestamp ON usage(timestamp);
 CREATE INDEX IF NOT EXISTS idx_runs_timestamp  ON runs(timestamp);

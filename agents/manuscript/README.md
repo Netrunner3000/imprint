@@ -8,6 +8,10 @@ The umbrella owns provider execution and the request guard.  Publishing data
 adapters remain shared until they are proven exclusive to this package.  User
 guidance: `docs/agents/manuscript.md`.
 
+Quote Finder's **Use Project Draft** action loads the selected Project's
+current Write draft (or linked saved draft) on demand, using its byline for
+attribution. It does not mark that working text as approved for publication.
+
 Run focused coverage with `pytest tests/test_book_pipeline.py`.
 
 ## Files

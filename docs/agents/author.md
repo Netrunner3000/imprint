@@ -38,6 +38,12 @@ Write mode tabs: **Draft**, **Outline**, **Characters**, **World**, **Chapters**
 
 Export (`AuthorPanel.export_book()`) hands the raw Draft text to `agents/author/book_exporter.py`, which splits it into chapters by detecting `Chapter N` / `Part N` / `Prologue` / `Epilogue` heading lines (falls back to one unlabeled chapter if none are found — export always works, headings just improve structure) and renders a title page + chapters via EbookLib (EPUB), python-docx (DOCX), or reportlab (PDF, built directly — no DOCX→PDF conversion step, so no LibreOffice dependency).
 
+With a named Project selected, **Save Draft** and each successful export also
+record a durable Project link to the chosen file. Deleting the Project removes
+that link but never deletes the external file. Publishing Manager can copy the
+current working draft into Quote Finder via **Use Project Draft**; check and
+approve the text yourself before treating it as publication-ready.
+
 ## Under the hood — files & functions
 | Location | Role |
 |---|---|

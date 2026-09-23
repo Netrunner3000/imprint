@@ -163,7 +163,12 @@ creative brief. In Write, choosing a project restores its own book profile,
 draft, outline, characters, and world notes; edits are saved after a short
 pause, on project switch, and on app close. The title and byline in Write and
 the Project manager refer to the same record. Other workspaces still need
-their production assets joined to this ID; see `docs/projects_roadmap.md`.
+their production assets joined to this ID. Saving a Write draft or exporting
+an EPUB, DOCX or PDF also records a project link to that file. Publishing
+Manager's **Use Project Draft** loads the selected project's current Write
+text into Quote Finder on request and uses its byline as attribution. This is
+a handoff, not an approval step; the source draft remains editable. See
+`docs/projects_roadmap.md` for the remaining cross-workspace work.
 
 **Agent filter** — narrows the list to one agent. Populated from the chats that
 exist, so it only ever offers agents you have actually used.
@@ -1236,6 +1241,9 @@ Picks up where the Manuscript (writing studio) agent stops: real sales data, lau
 - A publishing todo checklist, auto-seeded on first use with a standard launch list (KDP upload, Draft2Digital, IngramSpark, cover files, description, categories, pricing, ARC requests, BookBub, influencer outreach).
 
 **Quote Finder tab:**
+- **Use Project Draft** loads the selected named Project's latest Write editor
+  text, or its linked saved draft if the editor is empty; it never overwrites
+  the Quote Finder input until clicked.
 - Load the manuscript directly (`.txt` / `.pdf` / `.epub` / `.mobi` via `services/narrator/converter.py: load_text()`) or paste an excerpt.
 - **Suggest Quotes** sends the text to the LLM with a prompt that requires every returned quote to be an exact, verbatim substring of the source — no paraphrasing. Returned as a JSON array, parsed with a markdown-fence-aware parser and a line-based fallback.
 - Each candidate quote appears as a row with two inline one-click buttons: **Graphic** generates a graphic immediately, **Short** generates a narrated short — no retyping, no switching tabs.
@@ -1273,6 +1281,7 @@ Picks up where the Manuscript (writing studio) agent stops: real sales data, lau
 |---------|-------------|
 | **Manuscript text** | Paste an excerpt directly. |
 | **Load File…** | `.txt` / `.pdf` / `.epub` / `.mobi` — extracts full text via the Narrator converter. |
+| **Use Project Draft** | Loads the selected named Project's current Write draft and byline into Quote Finder. No project or draft produces a clear prompt instead of borrowing another project's text. |
 | **Quotes** | How many candidates to request (5 / 10 / 15 / 20). |
 | **Theme / Voice / Attribution** | Applied to every graphic/short generated from this tab's candidates. |
 | **Suggest Quotes** | Runs the extraction prompt; populates the candidate list. |

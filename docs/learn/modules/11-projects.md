@@ -34,15 +34,22 @@ you intended to measure.
 5. In Book Author, the selected project restores its own book profile, draft,
    outline, character and world notes. Edits save after a short pause, on
    project switch, and on app close. **Save Profile** also confirms the shared
-   title and byline. **Save Draft** writes a separate text or Markdown file.
-6. In agents with **Save**, **Export**, **Save as File**, or **Save Full Plan**,
+   title and byline. **Save Draft** writes a separate text or Markdown file;
+   Save Draft and EPUB/DOCX/PDF exports record links to those files under the
+   named Project.
+6. In Publishing Manager → **Quote Finder**, click **Use Project Draft** to
+   copy that Project's current Write draft into the quote source and set the
+   byline as attribution. Review the text first: the latest working draft is
+   not an approved publication version. You can still use **Load File** for a
+   separately approved manuscript.
+7. In agents with **Save**, **Export**, **Save as File**, or **Save Full Plan**,
    treat that button as the boundary between generated workspace content and a
    deliverable outside the editor.
-7. Use **Show in Finder** or **Open Output Folder** when provided. Do not assume
+8. Use **Show in Finder** or **Open Output Folder** when provided. Do not assume
    every agent shares one output directory.
-8. Switch projects and return. Verify the expected chats and defaults before
+9. Switch projects and return. Verify the expected chats and defaults before
    removing or overwriting anything.
-9. Before **Remove Chat**, export or copy the approved result and confirm its file.
+10. Before **Remove Chat**, export or copy the approved result and confirm its file.
 
 Project instructions are sent to the model and count toward estimated tokens.
 They are not a substitute for the agent's own saved profile or an approved
@@ -55,12 +62,13 @@ session/daily limits or external provider invoices.
 |---|---|
 | Write editor under a named project | Saved to that project's working state after a short pause, on switch, and on app close |
 | Visible generated text in other agents | Unsaved until that agent's save behavior is verified |
-| Explicit Save/Save Draft | Stored in the agent/project data path |
+| Write Save Draft and EPUB/DOCX/PDF export under a named Project | File stored where you choose; Project stores a link to it |
+| Other explicit Save actions | Stored in that agent's documented location; Project linking is not yet universal |
 | Export/Save as File | Written to the chosen or documented external location |
 | Provider-hosted media URL | Temporary until Imprint downloads it successfully |
 | Clear | Removes visible working content; it is not undo |
 | Archive project | Hides it from the selector; chats remain and can be restored |
-| Delete project | Unfiles its chats without deleting their files; project identity and project-specific working drafts are removed |
+| Delete project | Unfiles its chats; removes project identity, working drafts and artifact links, but never deletes external files |
 | Remove chat | Deletes the selected chat file after confirmation |
 
 ## Verification

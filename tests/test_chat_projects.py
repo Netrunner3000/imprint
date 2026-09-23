@@ -100,6 +100,26 @@ def test_project_workspace_round_trip_and_cascade(tmp_path, monkeypatch):
     assert project_workspaces.load("book-2", "author")["draft"] == "Other work"
 
 
+def test_project_artifact_links_leave_export_files_alone(tmp_path, monkeypatch):
+    from services import project_artifacts
+
+    monkeypatch.setattr(database, "DB_PATH", tmp_path / "imprint.db")
+    database.init_db()
+    registry = Registry()
+    registry.upsert_project("book-1", "First book")
+    output = tmp_path / "first-draft.txt"
+    output.write_text("Chapter one", encoding="utf-8")
+    first_id = project_artifacts.record(
+        "book-1", "author", "draft", output, "First draft")
+    assert project_artifacts.record(
+        "book-1", "author", "draft", output, "Updated draft") == first_id
+    assert project_artifacts.list_for_project("book-1")[0]["label"] == \
+        "Updated draft"
+    registry.delete_project("book-1")
+    assert project_artifacts.list_for_project("book-1") == []
+    assert output.read_text(encoding="utf-8") == "Chapter one"
+
+
 def test_switching_projects_restores_each_manuscript(app, tmp_path, monkeypatch):
     import main
     from services import project_workspaces
@@ -140,6 +160,31 @@ def test_switching_projects_restores_each_manuscript(app, tmp_path, monkeypatch)
         window._switch_project()
         assert author.author_title_input.text() == "Final title"
         assert author.author_draft_box.toPlainText() == "Chapter A"
+        from PySide6.QtWidgets import QFileDialog
+        draft_path = tmp_path / "first-draft.txt"
+        monkeypatch.setattr(
+            QFileDialog, "getSaveFileName",
+            staticmethod(lambda *args: (str(draft_path), "Text Files (*.txt)")))
+        author.save_draft()
+        from services.project_artifacts import list_for_project
+        assert list_for_project("book-a", kinds=("draft",))[0]["path"] == \
+            str(draft_path)
+        export_path = tmp_path / "first-book.epub"
+        monkeypatch.setattr(
+            QFileDialog, "getSaveFileName",
+            staticmethod(lambda *args: (str(export_path), "EPUB Files (*.epub)")))
+        author.export_book()
+        assert export_path.is_file()
+        assert list_for_project("book-a", kinds=("export_epub",))[0]["path"] == \
+            str(export_path)
+        # The Publishing Manager reads the same project's newest editor text,
+        # including a change made before the autosave timer has elapsed.
+        author.author_draft_box.setPlainText("The latest chapter")
+        window.manuscript_panel.use_project_draft()
+        assert window.manuscript_panel.quote_finder_text.toPlainText() == \
+            "The latest chapter"
+        assert window.manuscript_panel.quote_finder_attribution.text() == \
+            "A. Writer"
         from PySide6.QtWidgets import QMessageBox
         monkeypatch.setattr(QMessageBox, "information",
                             staticmethod(lambda *args: None))
@@ -148,15 +193,16 @@ def test_switching_projects_restores_each_manuscript(app, tmp_path, monkeypatch)
         })()
         picker.setCurrentIndex(picker.findData("book-b"))
         assert picker.currentData() == "book-a"
-        assert author.author_draft_box.toPlainText() == "Chapter A"
+        assert author.author_draft_box.toPlainText() == "The latest chapter"
         window.author_worker = None
     finally:
+        window.author_worker = None
         window.author_panel._project_save_timer.stop()
         window.resource_timer.stop()
         app.removeEventFilter(window)
         window.close()
         window.deleteLater()
-    assert project_workspaces.load("book-a", "author")["draft"] == "Chapter A"
+    assert project_workspaces.load("book-a", "author")["draft"] == "The latest chapter"
 
 
 def test_project_chat_field_is_optional_and_legacy_chats_load(tmp_path):
