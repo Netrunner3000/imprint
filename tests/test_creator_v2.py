@@ -518,6 +518,138 @@ def test_worker_passes_the_seed_through(app, tmp_path):
     assert seen.get("seed") == 4821
 
 
+def test_deleting_project_unfiles_creator_work_but_keeps_account_and_consent(db):
+    from services.registry import Registry
+
+    database, account_id = db
+    registry = Registry()
+    registry.upsert_project("creator-work", "Creator campaign")
+    with database.get_connection() as conn:
+        conn.execute(
+            "UPDATE creator_accounts SET account_type='managed', "
+            "consent_holder='Authorised client' WHERE id=?", (account_id,))
+        conn.execute(
+            "INSERT INTO creator_content "
+            "(account_id, project_id, created_at, body) VALUES (?,?,?,?)",
+            (account_id, "creator-work", datetime.now().isoformat(), "A draft"))
+        conn.execute(
+            "INSERT INTO creator_video_jobs "
+            "(request_id, account_id, project_id, created_at, updated_at) "
+            "VALUES (?,?,?,?,?)",
+            ("creator-job", account_id, "creator-work", "now", "now"))
+    registry.delete_project("creator-work")
+    with database.get_connection() as conn:
+        content = conn.execute(
+            "SELECT project_id, body FROM creator_content").fetchone()
+        job = conn.execute(
+            "SELECT project_id FROM creator_video_jobs WHERE request_id=?",
+            ("creator-job",)).fetchone()
+        account = conn.execute(
+            "SELECT consent_holder FROM creator_accounts WHERE id=?",
+            (account_id,)).fetchone()
+    assert (content["project_id"], content["body"]) == (None, "A draft")
+    assert job["project_id"] is None
+    assert account["consent_holder"] == "Authorised client"
+
+
+def test_existing_creator_tables_gain_optional_project_columns(tmp_path, monkeypatch):
+    import sqlite3
+    from services import database
+
+    path = tmp_path / "legacy.db"
+    legacy_schema = database.SCHEMA.replace(
+        "    project_id   TEXT REFERENCES projects(id) ON DELETE SET NULL,\n",
+        "", 1).replace(
+        "    project_id       TEXT REFERENCES projects(id) ON DELETE SET NULL,\n",
+        "", 1)
+    with sqlite3.connect(path) as conn:
+        conn.executescript(legacy_schema)
+        conn.execute(
+            "INSERT INTO creator_accounts (handle, created_at) "
+            "VALUES ('@legacy', 'yesterday')")
+        conn.execute(
+            "INSERT INTO creator_content (account_id, created_at, body) "
+            "VALUES (1, 'yesterday', 'Keep this draft')")
+    monkeypatch.setattr(database, "DB_PATH", path)
+    database.init_db()
+    with database.get_connection() as conn:
+        content_columns = {row["name"] for row in conn.execute(
+            "PRAGMA table_info(creator_content)")}
+        job_columns = {row["name"] for row in conn.execute(
+            "PRAGMA table_info(creator_video_jobs)")}
+        draft = conn.execute(
+            "SELECT project_id, body FROM creator_content").fetchone()
+    assert "project_id" in content_columns & job_columns
+    assert (draft["project_id"], draft["body"]) == (None, "Keep this draft")
+
+
+def test_creator_schedule_and_teaser_keep_origin_project_and_account(
+        window, db, tmp_path, monkeypatch):
+    from types import SimpleNamespace
+    from PySide6.QtWidgets import QInputDialog
+    from services.registry import Registry
+    from services.project_artifacts import list_for_project
+
+    database, account_id = db
+    registry = Registry()
+    registry.upsert_project("creator-first", "First campaign")
+    registry.upsert_project("creator-second", "Second campaign")
+    panel = window.creator_panel
+    panel.refresh_accounts()
+    panel.creator_output.setPlainText("A campaign draft")
+    panel._draft_origin = ("creator-first", account_id)
+    monkeypatch.setattr(
+        window, "_active_project",
+        lambda: registry.get_project("creator-second"))
+    monkeypatch.setattr(
+        QInputDialog, "getText", staticmethod(lambda *a, **k: ("Friday", True)))
+    panel.schedule()
+    with database.get_connection() as conn:
+        content = conn.execute(
+            "SELECT id, account_id, project_id FROM creator_content "
+            "ORDER BY id DESC LIMIT 1").fetchone()
+    assert (content["account_id"], content["project_id"]) == (
+        account_id, "creator-first")
+
+    with database.get_connection() as conn:
+        cursor = conn.execute(
+            "INSERT INTO creator_accounts (handle, account_type, created_at) "
+            "VALUES ('@other', 'own', ?)", (datetime.now().isoformat(),))
+        other_account_id = cursor.lastrowid
+    panel.refresh_accounts()
+    panel.creator_account_box.setCurrentIndex(
+        panel.creator_account_box.findData(other_account_id))
+    panel.schedule()  # Must refuse to put the first account's draft in @other.
+    with database.get_connection() as conn:
+        assert conn.execute("SELECT COUNT(*) FROM creator_content").fetchone()[0] == 1
+
+    panel.creator_account_box.setCurrentIndex(0)
+    panel._video_context = {
+        "account_id": account_id, "content_id": content["id"],
+        "project_id": "creator-first", "prompt": "A safe teaser",
+        "request_token": None, "job_id": "", "estimated_usd": 1.0,
+    }
+    panel._video_job_update(SimpleNamespace(
+        job_id="job-project", status="completed", endpoint="/video",
+        error="", correlation_id=""))
+    clip = tmp_path / "teaser.mp4"
+    clip.write_bytes(b"clip")
+    panel._video_done(account_id, str(clip))
+    with database.get_connection() as conn:
+        job = conn.execute(
+            "SELECT project_id, local_path FROM creator_video_jobs "
+            "WHERE request_id='job-project'").fetchone()
+        media = conn.execute(
+            "SELECT account_id FROM creator_media WHERE path=?",
+            (str(clip),)).fetchone()
+    assert (job["project_id"], job["local_path"]) == (
+        "creator-first", str(clip))
+    assert media["account_id"] == account_id
+    assert list_for_project("creator-first", kinds=("creator_video",))[0]["path"] == \
+        str(clip)
+    assert list_for_project("creator-second") == []
+
+
 # ── The ampersand trap ───────────────────────────────────────────────────────
 def test_no_button_text_has_a_bare_ampersand():
     """Qt reads a lone '&' in button text as a mnemonic and swallows it, so

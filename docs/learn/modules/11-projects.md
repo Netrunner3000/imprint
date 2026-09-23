@@ -51,14 +51,20 @@ you intended to measure.
    clip to the Project selected when its paid request was approved. A job
    recovered after restart keeps that original Project. The Video Library is
    still shared with standalone vidforge; it does not filter by Project yet.
-9. In agents with **Save**, **Export**, **Save as File**, or **Save Full Plan**,
+9. In Creator, choose both a named Project and the right content profile before
+   drafting. Scheduling keeps the Project and profile captured at approval;
+   switching to another profile before scheduling is refused. Uploaded media
+   and successful teaser clips can be linked to the Project. Consent, account
+   ownership and earnings stay with the profile, and Creator's Calendar/Media
+   tabs remain account-wide.
+10. In agents with **Save**, **Export**, **Save as File**, or **Save Full Plan**,
    treat that button as the boundary between generated workspace content and a
    deliverable outside the editor.
-10. Use **Show in Finder** or **Open Output Folder** when provided. Do not assume
+11. Use **Show in Finder** or **Open Output Folder** when provided. Do not assume
    every agent shares one output directory.
-11. Switch projects and return. Verify the expected chats and defaults before
+12. Switch projects and return. Verify the expected chats and defaults before
    removing or overwriting anything.
-12. Before **Remove Chat**, export or copy the approved result and confirm its file.
+13. Before **Remove Chat**, export or copy the approved result and confirm its file.
 
 Project instructions are sent to the model and count toward estimated tokens.
 They are not a substitute for the agent's own saved profile or an approved

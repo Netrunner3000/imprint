@@ -10,6 +10,13 @@ umbrella and owns its own venture rules.  User guidance:
 `docs/agents/creator.md`.  Run focused coverage with
 `pytest tests/test_creator_agent.py tests/test_creator_v2.py`.
 
+Projects are optional work associations, not platform accounts. A scheduled
+draft keeps the Project and account captured when generation was approved;
+switching accounts before scheduling is refused. Teaser jobs and imported or
+generated media can also be linked to a Project. Deleting that Project unfiles
+content and jobs but does not delete the account, consent, earnings or media.
+Calendar and Media remain account-wide until Project filtering is added.
+
 ## Files
 
 - **`__init__.py`** — the package's public surface: re-exports `CreatorAgent`,

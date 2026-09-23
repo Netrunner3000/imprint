@@ -186,6 +186,13 @@ database links, never the external files.
       job resumed after restart uses its persisted Project ID, not whichever
       Project happens to be selected when the download finishes. The shared
       vidforge Library remains unfiltered.
+- [x] Creator calendar content and teaser jobs carry an optional Project ID.
+      Drafts use the Project and account captured at authorization, and
+      scheduling refuses to file a draft under a different account. Imported
+      media and finished teaser clips gain Project artifact links. Project
+      deletion unfiles content and jobs without deleting accounts, consent,
+      earnings or files; Creator's account-wide Calendar and Media tabs are
+      not yet Project-filtered.
 
 ### Remaining for the cross-workspace P1
 
@@ -198,8 +205,9 @@ database links, never the external files.
       links are durable now, but the Library still displays every vidforge
       output, including those made in its standalone app with no Imprint
       Project context.
-- [ ] Join Creator campaigns/content to a project while keeping account
-      ownership and consent records independent of projects.
+- [ ] Add Project grouping or filtering to Creator's account-wide Calendar
+      and Media tabs. The durable associations exist, but those views still
+      show all content for the selected account.
 - [ ] Surface related assets in one project view and make archive/delete
       semantics explicit: external files must never be deleted by cascading a
       database record.

@@ -78,6 +78,7 @@ class CreatorPanel(QWidget):
         super().__init__()
         self.host = host
         self._draft_token = None
+        self._draft_origin = None  # (project_id, account_id) captured at approval
         self._last_generation_cost_eur = 0.0
         self._calendar_ids: list = []
         self._video_context: dict = {}
@@ -649,6 +650,8 @@ class CreatorPanel(QWidget):
         if not token:
             return
         self._draft_token = token
+        snapshot = self.host.pending_request_snapshot(token)
+        self._draft_origin = (snapshot.get("project"), account["id"])
 
         self.creator_generate_btn.setEnabled(False)
         self._last_generation_cost_eur = 0.0
@@ -676,6 +679,7 @@ class CreatorPanel(QWidget):
 
     def _on_error(self, error: str):
         token, self._draft_token = self._draft_token, None
+        self._draft_origin = None
         if token:
             self.host.abandon_request(token)
         self.creator_generate_btn.setEnabled(True)
@@ -691,6 +695,7 @@ class CreatorPanel(QWidget):
         if worker is not None and worker.isRunning():
             worker.cancel()
         token, self._draft_token = self._draft_token, None
+        self._draft_origin = None
         if token:
             self.host.abandon_request(token, reason="stopped")
         self.creator_generate_btn.setEnabled(True)
@@ -706,6 +711,20 @@ class CreatorPanel(QWidget):
             QMessageBox.warning(self, "Nothing to Schedule",
                                 "Draft something first.")
             return
+        if self._draft_origin and self._draft_origin[1] != account["id"]:
+            QMessageBox.warning(
+                self, "Different profile",
+                "This draft was generated for another content profile. "
+                "Select that profile before adding it to the calendar.")
+            return
+        if self._draft_origin is not None:
+            project_id = self._draft_origin[0]
+        else:
+            project = self.host._active_project()
+            project_id = project["id"] if project else None
+        # A Project may have been deleted while a long draft was running.
+        if project_id and not self.host.registry.get_project(project_id):
+            project_id = None
         when, ok = QInputDialog.getText(
             self, "Add to Calendar",
             "When should this go out? (free text — you post it yourself)")
@@ -719,11 +738,12 @@ class CreatorPanel(QWidget):
             with get_connection() as conn:
                 conn.execute("""
                     INSERT INTO creator_content
-                      (account_id, created_at, scheduled_for, kind, title,
+                      (account_id, project_id, created_at, scheduled_for, kind, title,
                        body, price_usd, status, campaign, channel,
                        generation_cost_eur)
-                    VALUES (?,?,?,?,?,?,?,'draft',?,?,?)
+                    VALUES (?,?,?,?,?,?,?,?,'draft',?,?,?)
                 """, (account["id"],
+                      project_id,
                       datetime.now().isoformat(timespec="seconds"),
                       when.strip(),
                       self.creator_kind_box.currentText(),
@@ -748,9 +768,11 @@ class CreatorPanel(QWidget):
         try:
             with get_connection() as conn:
                 rows = conn.execute(
-                    "SELECT id, scheduled_for, kind, title, price_usd, status, "
-                    "revenue_usd FROM creator_content WHERE account_id = ? "
-                    "ORDER BY id DESC", (account["id"],)).fetchall()
+                    "SELECT c.id, c.scheduled_for, c.kind, c.title, "
+                    "c.price_usd, c.status, c.revenue_usd, p.name AS project_name "
+                    "FROM creator_content c LEFT JOIN projects p "
+                    "ON p.id = c.project_id WHERE c.account_id = ? "
+                    "ORDER BY c.id DESC", (account["id"],)).fetchall()
         except Exception as exc:
             self.host._note_failure("creator: load calendar", exc)
             return
@@ -765,6 +787,8 @@ class CreatorPanel(QWidget):
                     f"{row['status']}"
                     + (f"  (${row['revenue_usd']:,.2f})" if row["revenue_usd"] else "")]):
                 self.creator_calendar_table.setItem(r, col, QTableWidgetItem(str(value)))
+            self.creator_calendar_table.item(r, 2).setToolTip(
+                f"Project: {row['project_name'] or 'Unfiled'}")
 
     # ── promo video ─────────────────────────────────────────────────────
     def generate_video(self):
@@ -819,6 +843,7 @@ class CreatorPanel(QWidget):
         self._video_context = {
             "account_id": account["id"],
             "content_id": content_id,
+            "project_id": None,
             "prompt": prompt,
             "output_path": str(output_path),
             "request_token": None,
@@ -871,6 +896,8 @@ class CreatorPanel(QWidget):
             self._video_reset("Render not approved.")
             return
         context["request_token"] = token
+        context["project_id"] = self.host.pending_request_snapshot(token).get(
+            "project")
 
         render_worker = HiggsfieldWorker(
             client, context["prompt"], context["output_path"],
@@ -919,13 +946,16 @@ class CreatorPanel(QWidget):
             with get_connection() as conn:
                 conn.execute("""
                     INSERT INTO creator_video_jobs
-                      (request_id, account_id, content_id, created_at, updated_at,
+                      (request_id, account_id, content_id, project_id,
+                       created_at, updated_at,
                        endpoint, prompt, prompt_version, estimated_credits,
                        estimated_usd, actual_usd, cost_basis, status,
                        policy_result, error, correlation_id)
-                    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
                     ON CONFLICT(request_id) DO UPDATE SET
                       updated_at=excluded.updated_at,
+                      project_id=COALESCE(creator_video_jobs.project_id,
+                                          excluded.project_id),
                       actual_usd=COALESCE(excluded.actual_usd,
                                           creator_video_jobs.actual_usd),
                       cost_basis=CASE WHEN excluded.cost_basis != ''
@@ -939,6 +969,7 @@ class CreatorPanel(QWidget):
                                           ELSE creator_video_jobs.correlation_id END
                 """, (
                     job.job_id, context["account_id"], context.get("content_id"),
+                    context.get("project_id"),
                     now, now, job.endpoint or context.get("endpoint", ""),
                     context["prompt"], "creator-video-v1",
                     context.get("estimated_credits", 0.0),
@@ -956,11 +987,12 @@ class CreatorPanel(QWidget):
         # Only ever by the token this flow authorized — never by the shared
         # "creator" name, which the drafting flow also uses.
         token = context.get("request_token")
-        if token:
-            self.host.record_request(token, f"teaser: {Path(path).name}")
         self._store_media(account_id, path, source="higgsfield",
                           job_id=context.get("job_id", ""),
                           caption="Higgsfield teaser")
+        self._link_project_media(context.get("project_id"), path, "creator_video")
+        if token:
+            self.host.record_request(token, f"teaser: {Path(path).name}")
         attached = False
         if context.get("content_id"):
             try:
@@ -1130,8 +1162,15 @@ class CreatorPanel(QWidget):
             "Media (*.png *.jpg *.jpeg *.webp *.mp4 *.mov *.m4a *.mp3)")
         if not paths:
             return
+        project = self.host._active_project()
+        project_id = project["id"] if project else None
         for path in paths:
-            self._store_media(account["id"], path, source="upload")
+            if self._store_media(account["id"], path, source="upload"):
+                kind = ("creator_video" if Path(path).suffix.lower() in
+                        (".mp4", ".mov") else
+                        "creator_audio" if Path(path).suffix.lower() in
+                        (".mp3", ".m4a") else "creator_image")
+                self._link_project_media(project_id, path, kind)
         self.refresh_media()
         self.creator_tabs.setCurrentWidget(self.creator_media_table)
 
@@ -1154,8 +1193,22 @@ class CreatorPanel(QWidget):
                 """, (account_id, path, kind, caption, source, job_id,
                       datetime.now().isoformat(timespec="seconds")))
                 conn.commit()
+            return True
         except Exception as exc:
             self.host._note_failure("creator: store media", exc)
+            return False
+
+    def _link_project_media(self, project_id, path: str, kind: str) -> None:
+        """Project association is a link, not ownership of account media."""
+        if not project_id:
+            return
+        from services.project_artifacts import record
+
+        try:
+            media = Path(path)
+            record(project_id, "creator", kind, media, media.name)
+        except Exception as exc:
+            self.host._note_failure("creator: link project media", exc)
 
     def refresh_media(self):
         account = self.current_account()

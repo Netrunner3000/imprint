@@ -57,6 +57,16 @@ hand, and **Earnings** joins imported statements to manually recorded asset
 outcomes without adding overlapping receipts. Voice, Media, Agency and Records
 remain separate tabs.
 
+With a named Project selected, a generated draft carries that Project and its
+content profile into Calendar when you schedule it. If you switch to another
+profile before scheduling, Imprint refuses the cross-account save rather than
+silently filing someone else's copy there. Teaser jobs and finished or imported
+media can also be linked to the Project active at approval or import. The
+profile, consent and earnings records remain account-owned: deleting a Project
+unfiles its content and teaser jobs but does not delete those records or media
+files. Calendar and Media currently show everything for the selected account,
+not just the active Project; hover a Calendar title to see its Project.
+
 ## Higgsfield promo video
 `Generate Teaser` sends a safe-for-work prompt to the Higgsfield API for a
 promo clip aimed at the off-platform funnels where subscription traffic

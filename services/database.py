@@ -221,6 +221,9 @@ CREATE TABLE IF NOT EXISTS creator_platform_policies (
 CREATE TABLE IF NOT EXISTS creator_content (
     id           INTEGER PRIMARY KEY AUTOINCREMENT,
     account_id   INTEGER NOT NULL,
+    -- Optional work identity. Deleting a Project unfiles content; account,
+    -- consent and performance history remain owned by the account.
+    project_id   TEXT REFERENCES projects(id) ON DELETE SET NULL,
     created_at   TEXT NOT NULL,
     scheduled_for TEXT NOT NULL DEFAULT '',
     kind         TEXT NOT NULL DEFAULT 'post',
@@ -376,6 +379,7 @@ CREATE TABLE IF NOT EXISTS creator_video_jobs (
     request_id       TEXT PRIMARY KEY,
     account_id       INTEGER NOT NULL,
     content_id       INTEGER,
+    project_id       TEXT REFERENCES projects(id) ON DELETE SET NULL,
     created_at       TEXT NOT NULL,
     updated_at       TEXT NOT NULL,
     endpoint         TEXT NOT NULL DEFAULT '',
@@ -581,6 +585,7 @@ def _add_missing_columns(conn: sqlite3.Connection) -> None:
         "usage": [("project", "TEXT NOT NULL DEFAULT ''")],
         "pricing": [("cached_input_per_1m_usd", "REAL NOT NULL DEFAULT 0.0")],
         "creator_content": [
+            ("project_id", "TEXT REFERENCES projects(id) ON DELETE SET NULL"),
             ("segment", "TEXT NOT NULL DEFAULT ''"),
             ("posted_at", "TEXT NOT NULL DEFAULT ''"),
             ("revenue_usd", "REAL NOT NULL DEFAULT 0.0"),
@@ -603,12 +608,21 @@ def _add_missing_columns(conn: sqlite3.Connection) -> None:
             ("metric_source", "TEXT NOT NULL DEFAULT ''"),
             ("metric_window", "TEXT NOT NULL DEFAULT ''"),
         ],
+        "creator_video_jobs": [
+            ("project_id", "TEXT REFERENCES projects(id) ON DELETE SET NULL"),
+        ],
     }
     for table, columns in wanted.items():
         have = {r["name"] for r in conn.execute(f"PRAGMA table_info({table})")}
         for name, decl in columns:
             if name not in have:
                 conn.execute(f"ALTER TABLE {table} ADD COLUMN {name} {decl}")
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_creator_content_project "
+        "ON creator_content(project_id)")
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_creator_video_jobs_project "
+        "ON creator_video_jobs(project_id)")
     conn.commit()
 
 

@@ -176,6 +176,10 @@ output library.
 Video links a finished local clip to the Project captured when its render was
 approved, including provider jobs recovered after restart. Its vidforge
 Library remains shared across Projects and standalone vidforge.
+Creator links scheduled content, teaser jobs and media to a Project while its
+profiles, consent and earnings remain account-owned. Calendar and Media are
+still account-wide views; deleting a Project unfiles Creator work rather than
+deleting the profile or its records.
 
 **Agent filter** — narrows the list to one agent. Populated from the chats that
 exist, so it only ever offers agents you have actually used.
