@@ -162,14 +162,14 @@ The same record now also holds a work type, work title, byline or brand, and
 creative brief. In Write, choosing a project restores its own book profile,
 draft, outline, characters, and world notes; edits are saved after a short
 pause, on project switch, and on app close. The title and byline in Write and
-the Project manager refer to the same record. Other workspaces still need
-their production assets joined to this ID. Saving a Write draft or exporting
-an EPUB, DOCX or PDF also records a project link to that file. Publishing
-Manager's **Use Project Draft** loads the selected project's current Write
-text into Quote Finder on request and uses its byline as attribution. This is
-a handoff, not an approval step; the source draft remains editable. In
-Publishing Manager, **Approve Write Draft…** captures an immutable numbered
-version after confirmation. Select that version and click **Use Approved
+the Project manager refer to the same record. Audiobook, Video and Creator
+now link supported outputs and content to this Project ID. Saving a Write
+draft or exporting an EPUB, DOCX or PDF also records a project link to that
+file. Publishing Manager's **Use Project Draft** loads the selected project's
+current Write text into Quote Finder on request and uses its byline as
+attribution. This is a handoff, not an approval step; the source draft remains
+editable. In Publishing Manager, **Approve Write Draft…** captures an immutable
+numbered version after confirmation. Select it and click **Use Approved
 Version** to load the exact approved text and byline; later Write edits do not
 change it. **Export Approved…** creates a new EPUB, DOCX or PDF from that
 selected version and records the file's SHA-256 fingerprint. A regular export
