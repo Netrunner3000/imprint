@@ -31,6 +31,10 @@ you intended to measure.
    Click a saved chat to see its transcript, then type a new follow-up. Earlier
    turns are sent with the follow-up, so longer conversations cost more. The
    current project's instructions replace any old saved system context.
+   Click **Project Overview** in the left rail to see that Project's working
+   draft count, linked outputs and scheduled Creator content in one place.
+   A missing-file label means the link remains but the external file moved or
+   was removed; Refresh checks its current location again.
 5. In Book Author, the selected project restores its own book profile, draft,
    outline, character and world notes. Edits save after a short pause, on
    project switch, and on app close. **Save Profile** also confirms the shared
@@ -84,6 +88,7 @@ session/daily limits or external provider invoices.
 | Clear | Removes visible working content; it is not undo |
 | Archive project | Hides it from the selector; chats remain and can be restored |
 | Delete project | Unfiles its chats; removes project identity, working drafts and artifact links, but never deletes external files |
+| Project Overview | Reads the selected Project's working-state count, linked files and Creator content; it does not move or delete anything |
 | Remove chat | Deletes the selected chat file after confirmation |
 
 ## Verification

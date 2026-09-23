@@ -1381,6 +1381,13 @@ class GodAI(QWidget):
         self.active_project_label.setWordWrap(True)
         left_layout.addWidget(self.active_project_label)
 
+        self.project_overview_btn = quiet("Project Overview")
+        self.project_overview_btn.setToolTip(
+            "See this Project's working draft, linked files and Creator content.")
+        self.project_overview_btn.setEnabled(False)
+        self.project_overview_btn.clicked.connect(self.show_project_overview)
+        left_layout.addWidget(self.project_overview_btn)
+
         # Narrow the list to one agent. Populated from the chats that exist, so
         # it only ever offers agents you have actually used.
         self.history_agent_filter = QComboBox()
@@ -3557,6 +3564,8 @@ class GodAI(QWidget):
             )
         if hasattr(self, "project_defaults_btn"):
             self.project_defaults_btn.setEnabled(bool(project))
+        if hasattr(self, "project_overview_btn"):
+            self.project_overview_btn.setEnabled(bool(project))
         self.load_history_list()
         if hasattr(self, "update_usage_labels"):
             self.update_usage_labels()
@@ -3616,6 +3625,14 @@ class GodAI(QWidget):
             self.history_project_filter.findData(project_id)
         )
         self.new_chat()
+
+    def show_project_overview(self):
+        project = self._active_project()
+        if not project:
+            return
+        from ui.project_overview import ProjectOverviewDialog
+
+        ProjectOverviewDialog(self, project["id"]).exec()
 
     def _chat_context_menu(self, point):
         item = self.history_list.itemAt(point)

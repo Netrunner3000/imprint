@@ -180,6 +180,10 @@ Creator links scheduled content, teaser jobs and media to a Project while its
 profiles, consent and earnings remain account-owned. Calendar and Media are
 still account-wide views; deleting a Project unfiles Creator work rather than
 deleting the profile or its records.
+**Project Overview** in the left rail brings these links together: Write's
+working-draft count, files grouped by agent, and scheduled Creator content.
+It flags missing files instead of hiding them. Opening a file or its folder
+is explicit; Project deletion removes links, not external files.
 
 **Agent filter** — narrows the list to one agent. Populated from the chats that
 exist, so it only ever offers agents you have actually used.

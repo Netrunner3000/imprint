@@ -193,6 +193,10 @@ database links, never the external files.
       deletion unfiles content and jobs without deleting accounts, consent,
       earnings or files; Creator's account-wide Calendar and Media tabs are
       not yet Project-filtered.
+- [x] **Project Overview** in the left rail joins Write's working-draft count,
+      linked files grouped by agent, and Creator's scheduled content. Broken
+      file links stay visible with a missing state; opening or revealing a
+      file is explicit, and the view never deletes or moves outputs.
 
 ### Remaining for the cross-workspace P1
 
@@ -208,9 +212,10 @@ database links, never the external files.
 - [ ] Add Project grouping or filtering to Creator's account-wide Calendar
       and Media tabs. The durable associations exist, but those views still
       show all content for the selected account.
-- [ ] Surface related assets in one project view and make archive/delete
-      semantics explicit: external files must never be deleted by cascading a
-      database record.
+- [ ] Add a reviewed-manuscript version/approval state and per-agent Project
+      filtering to the existing shared Audio, Video and Creator libraries.
+      Project Overview now surfaces assets centrally, but those agent-local
+      libraries still show their broader account/output collections.
 
 Project knowledge-file retrieval is a different feature and remains outside
 this production identity work.

@@ -267,6 +267,70 @@ def test_audiobook_uses_project_export_and_links_result_to_start_project(
         window.deleteLater()
 
 
+def test_project_overview_joins_outputs_and_surfaces_missing_files(
+        app, tmp_path, monkeypatch):
+    import main
+    from services import project_workspaces
+    from services.project_artifacts import record
+    from services.project_overview import snapshot
+    from ui.project_overview import ProjectOverviewDialog
+
+    monkeypatch.setattr(database, "DB_PATH", tmp_path / "imprint.db")
+    database.init_db()
+    window = main.GodAI()
+    try:
+        window.registry.upsert_project(
+            "book-a", "Book project", kind="book",
+            work_title="The Salt Road", byline="A. Writer")
+        window._refresh_history_project_filter()
+        window.history_project_filter.setCurrentIndex(
+            window.history_project_filter.findData("book-a"))
+        project_workspaces.save("book-a", "author",
+                                {"draft": "A short working chapter"})
+        draft_file = tmp_path / "draft.txt"
+        draft_file.write_text("A chapter", encoding="utf-8")
+        clip_file = tmp_path / "clip.mp4"
+        clip_file.write_bytes(b"clip")
+        record("book-a", "author", "draft", draft_file)
+        record("book-a", "video", "video_direct", clip_file)
+        clip_file.unlink()  # Project must show broken links, not hide them.
+        with database.get_connection() as conn:
+            account_id = conn.execute(
+                "INSERT INTO creator_accounts (handle, created_at) "
+                "VALUES ('@book', 'now')").lastrowid
+            conn.execute(
+                "INSERT INTO creator_content "
+                "(account_id, project_id, created_at, title) "
+                "VALUES (?,?,?,?)",
+                (account_id, "book-a", "now", "Launch campaign"))
+
+        data = snapshot("book-a")
+        assert (data["draft_words"], data["missing_files"]) == (4, 1)
+        assert len(data["artifacts"]) == 2
+        assert data["creator_content"][0]["title"] == "Launch campaign"
+
+        dialog = ProjectOverviewDialog(window, "book-a")
+        assert dialog.title.text() == "The Salt Road"
+        assert dialog.content.rowCount() == 1
+        assert dialog.files.topLevelItemCount() == 2
+        assert "1 linked file(s)" in dialog.files_help.text()
+        dialog.close()
+
+        opened = []
+        monkeypatch.setattr(
+            ProjectOverviewDialog, "exec",
+            lambda self: opened.append(self.project_id))
+        assert window.project_overview_btn.isEnabled()
+        window.show_project_overview()
+        assert opened == ["book-a"]
+    finally:
+        window.author_panel._project_save_timer.stop()
+        window.resource_timer.stop()
+        app.removeEventFilter(window)
+        window.close()
+        window.deleteLater()
+
+
 def test_project_chat_field_is_optional_and_legacy_chats_load(tmp_path):
     store = HistoryStore(str(tmp_path / "chats"))
     store.save_chat("chat", "ollama", "local", "General Chat",
