@@ -181,6 +181,11 @@ database links, never the external files.
       successful conversion links its verified MP3 to the Project captured
       when Start was pressed, even if the user switches Projects meanwhile.
       An already existing MP3 is never submitted or billed again.
+- [x] Video's pipeline and direct-provider completion link the finished
+      local clip to the Project captured by request authorization. A provider
+      job resumed after restart uses its persisted Project ID, not whichever
+      Project happens to be selected when the download finishes. The shared
+      vidforge Library remains unfiltered.
 
 ### Remaining for the cross-workspace P1
 
@@ -189,9 +194,10 @@ database links, never the external files.
       it must not imply that the latest text is approved for publication.
 - [ ] Add Project filtering or grouping in the Listen library. Conversion
       output is now linked, but Listen still scans the shared output folder.
-- [ ] Have Video's assembled pipeline and direct provider renders write a
-      durable project artifact link. Direct provider jobs already keep a
-      project ID for budget recovery, but the library does not yet use it.
+- [ ] Add Project grouping or filtering to the shared Video Library. Clip
+      links are durable now, but the Library still displays every vidforge
+      output, including those made in its standalone app with no Imprint
+      Project context.
 - [ ] Join Creator campaigns/content to a project while keeping account
       ownership and consent records independent of projects.
 - [ ] Surface related assets in one project view and make archive/delete

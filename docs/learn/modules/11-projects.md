@@ -47,14 +47,18 @@ you intended to measure.
    change your normal input/output folders. Successful conversion links the
    finished MP3 back to the Project that was selected when you pressed Start;
    Listen currently shows the shared output library.
-8. In agents with **Save**, **Export**, **Save as File**, or **Save Full Plan**,
+8. In Video, a successful pipeline or direct-provider render links the saved
+   clip to the Project selected when its paid request was approved. A job
+   recovered after restart keeps that original Project. The Video Library is
+   still shared with standalone vidforge; it does not filter by Project yet.
+9. In agents with **Save**, **Export**, **Save as File**, or **Save Full Plan**,
    treat that button as the boundary between generated workspace content and a
    deliverable outside the editor.
-9. Use **Show in Finder** or **Open Output Folder** when provided. Do not assume
+10. Use **Show in Finder** or **Open Output Folder** when provided. Do not assume
    every agent shares one output directory.
-10. Switch projects and return. Verify the expected chats and defaults before
+11. Switch projects and return. Verify the expected chats and defaults before
    removing or overwriting anything.
-11. Before **Remove Chat**, export or copy the approved result and confirm its file.
+12. Before **Remove Chat**, export or copy the approved result and confirm its file.
 
 Project instructions are sent to the model and count toward estimated tokens.
 They are not a substitute for the agent's own saved profile or an approved

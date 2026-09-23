@@ -7,6 +7,11 @@ Vidforge remains a separately versioned companion repository.  This package is
 the ownership boundary for Imprint orchestration; `studio.py` is its adapter to
 Vidforge.  User guidance: `docs/agents/video.md`.
 
+Successful pipeline and direct renders also link their local clip to the
+Project captured at request authorization; resumed provider jobs use the
+Project ID persisted with the job. The shared vidforge Library itself remains
+unfiltered, and standalone vidforge renders have no Imprint Project context.
+
 Run focused coverage with `pytest tests/test_media_generation.py tests/test_vidforge_contract.py tests/test_panel_layout.py -k video`.
 
 ## Files

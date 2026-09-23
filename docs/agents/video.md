@@ -14,6 +14,13 @@ The cost of that choice is that a clone of `imprint` alone has no `vidforge`. Ev
 
 Frozen, the two apps share `~/Library/Application Support/vidforge/` — one config, one output library, one history, whichever front door you came in by.
 
+When you render inside Imprint with a named Project selected, a successful
+local clip is linked to the Project active when the request was approved. A
+direct provider job that finishes after an app restart retains its original
+Project association. The Library still shows the shared vidforge history, so
+it is not yet a Project-filtered asset view; clips made in standalone vidforge
+have no Imprint Project link.
+
 ## Inputs (panel controls)
 | Control | Purpose |
 |---|---|

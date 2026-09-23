@@ -48,6 +48,7 @@ class VideoPanel(QWidget):
 
         self.host = host
         self._request_token = None
+        self._render_project_id = None
         self._external_context: dict = {}
         self._active_kind = ""
         self._available = video_studio.available()
@@ -393,6 +394,8 @@ class VideoPanel(QWidget):
         if not token:
             return
         self._request_token = token
+        self._render_project_id = self.host.pending_request_snapshot(token).get(
+            "project")
 
         self._begin("pipeline", can_cancel=True)
 
@@ -488,6 +491,8 @@ class VideoPanel(QWidget):
             if not token:
                 return
             self._request_token = token
+            self._render_project_id = self.host.pending_request_snapshot(token).get(
+                "project")
             try:
                 slug, output_path = video_studio.external_output_path(
                     topic, selection.model_id)
@@ -564,6 +569,8 @@ class VideoPanel(QWidget):
             self._reset("Render not approved.")
             return
         self._request_token = token
+        self._render_project_id = self.host.pending_request_snapshot(token).get(
+            "project")
         try:
             slug, output_path = video_studio.external_output_path(
                 context["topic"], context["model"])
@@ -672,11 +679,29 @@ class VideoPanel(QWidget):
         # authorizing under "video", a name lookup can pop the other flow's
         # pending context.
         token, self._request_token = self._request_token, None
+        project_id, self._render_project_id = self._render_project_id, None
+        self._link_project_output(
+            project_id, path,
+            "video_pipeline" if self._active_kind == "pipeline" else "video_direct")
         if token:
             self.host.record_request(token, f"rendered {slug}")
         self._close_job_row(billed=True)
         self._reset(f"Done — {Path(path).name}")
         self.refresh_library()
+
+    def _link_project_output(self, project_id, path: str, kind: str) -> None:
+        """Index a verified local clip; a link failure cannot undo a render."""
+        if not project_id:
+            return
+        from services.project_artifacts import record
+
+        try:
+            clip = Path(path)
+            record(project_id, "video", kind, clip, clip.name)
+        except Exception as exc:
+            self.host._note_failure("video: link project output", exc)
+            self.video_log.append(
+                "[Warning] Video saved, but its Project link could not be stored.")
 
     def _on_error(self, error: str):
         provider_completed = (
@@ -685,6 +710,7 @@ class VideoPanel(QWidget):
             and self._external_context.get("provider_completed", False)
         )
         token, self._request_token = self._request_token, None
+        self._render_project_id = None
         if token and provider_completed:
             self.host.record_request(
                 token, "provider completed render; local save/index failed")
@@ -784,6 +810,7 @@ class VideoPanel(QWidget):
         except Exception as exc:
             # The paid asset is on disk; only the library index failed.
             error = f"saved, but could not join the library: {exc}"
+        self._link_project_output(row.get("project"), path, "video_direct")
         self.host.record_request(token, f"rendered {row['slug']} (resumed)")
         try:
             jobs.mark_terminal(row["id"], spend_state="billed",

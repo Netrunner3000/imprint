@@ -243,8 +243,10 @@ def test_startup_reconciliation_bills_and_lands_a_finished_job(
         pytest.skip("vidforge is not importable in this checkout")
 
     output_path = tmp_path / "sunset" / "sunset.mp4"
+    window.registry.upsert_project("video-sunset", "Sunset campaign")
     row_id = _submit(slug="sunset", topic="a sunset",
-                     output_path=str(output_path), flat_cost_eur=0.62)
+                     output_path=str(output_path), flat_cost_eur=0.62,
+                     project="video-sunset")
     jobs.update_job(row_id, job_id="task-77", status="running")
 
     done_job = types.SimpleNamespace(
@@ -256,6 +258,8 @@ def test_startup_reconciliation_bills_and_lands_a_finished_job(
             download_video=lambda job: b"sunset-bytes"))
     recorded = []
     from agents.video import video_studio, workers
+    from services.history_store import HistoryStore
+    monkeypatch.setattr(window, "history", HistoryStore(tmp_path / "chats"))
     monkeypatch.setattr(video_studio, "record_external",
                         lambda **kw: recorded.append(kw))
     monkeypatch.setattr(window.video_panel, "refresh_library", lambda: None)
@@ -270,6 +274,9 @@ def test_startup_reconciliation_bills_and_lands_a_finished_job(
     assert output_path.read_bytes() == b"sunset-bytes"
     assert recorded and recorded[0]["slug"] == "sunset"
     assert recorded[0]["job_id"] == "task-77"
+    from services.project_artifacts import list_for_project
+    assert list_for_project("video-sunset", kinds=("video_direct",))[0]["path"] == \
+        str(output_path)
     # Billed exactly once through the guard: the usage table gained the
     # flat cost and no synthetic reservation is left open.
     after_spend = window.usage_tracker.get_agent_today_total("video")
@@ -281,6 +288,32 @@ def test_startup_reconciliation_bills_and_lands_a_finished_job(
         row = conn.execute("SELECT status, spend_state FROM video_jobs "
                            "WHERE id = ?", (row_id,)).fetchone()
     assert (row["status"], row["spend_state"]) == ("completed", "billed")
+
+
+def test_pipeline_output_stays_with_project_captured_at_authorization(
+        window, tmp_path, monkeypatch):
+    if not window.video_panel._available:
+        pytest.skip("vidforge is not importable in this checkout")
+    from services.project_artifacts import list_for_project
+
+    window.registry.upsert_project("video-first", "First campaign")
+    window.registry.upsert_project("video-second", "Second campaign")
+    panel = window.video_panel
+    clip = tmp_path / "first-campaign.mp4"
+    clip.write_bytes(b"video")
+    panel._render_project_id = "video-first"
+    panel._active_kind = "pipeline"
+    panel._request_token = None
+    monkeypatch.setattr(panel, "refresh_library", lambda: None)
+    # The selected Project can change while a local pipeline worker runs.
+    monkeypatch.setattr(window, "_active_project",
+                        lambda: window.registry.get_project("video-second"))
+    panel._on_done("first-campaign", str(clip))
+
+    assert list_for_project("video-first", kinds=("video_pipeline",))[0]["path"] == \
+        str(clip)
+    assert list_for_project("video-second") == []
+    assert panel._render_project_id is None
 
 
 def test_startup_reconciliation_surfaces_lost_submissions(

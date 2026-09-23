@@ -173,6 +173,9 @@ Audiobook Producer's **Use Project Book** selects a linked Write TXT/EPUB/PDF
 without moving it into the global input folder; a successful conversion links
 the MP3 to the Project that was active at Start. Listen still shows the shared
 output library.
+Video links a finished local clip to the Project captured when its render was
+approved, including provider jobs recovered after restart. Its vidforge
+Library remains shared across Projects and standalone vidforge.
 
 **Agent filter** — narrows the list to one agent. Populated from the chats that
 exist, so it only ever offers agents you have actually used.
