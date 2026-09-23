@@ -42,14 +42,19 @@ you intended to measure.
    byline as attribution. Review the text first: the latest working draft is
    not an approved publication version. You can still use **Load File** for a
    separately approved manuscript.
-7. In agents with **Save**, **Export**, **Save as File**, or **Save Full Plan**,
+7. In Audiobook Producer → **Convert**, click **Use Project Book** to add a
+   supported saved draft or EPUB/PDF from the selected Project. This does not
+   change your normal input/output folders. Successful conversion links the
+   finished MP3 back to the Project that was selected when you pressed Start;
+   Listen currently shows the shared output library.
+8. In agents with **Save**, **Export**, **Save as File**, or **Save Full Plan**,
    treat that button as the boundary between generated workspace content and a
    deliverable outside the editor.
-8. Use **Show in Finder** or **Open Output Folder** when provided. Do not assume
+9. Use **Show in Finder** or **Open Output Folder** when provided. Do not assume
    every agent shares one output directory.
-9. Switch projects and return. Verify the expected chats and defaults before
+10. Switch projects and return. Verify the expected chats and defaults before
    removing or overwriting anything.
-10. Before **Remove Chat**, export or copy the approved result and confirm its file.
+11. Before **Remove Chat**, export or copy the approved result and confirm its file.
 
 Project instructions are sent to the model and count toward estimated tokens.
 They are not a substitute for the agent's own saved profile or an approved

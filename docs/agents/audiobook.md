@@ -11,13 +11,16 @@ Converts `.pdf` / `.epub` / `.txt` / `.mobi` ebooks into MP3 audiobooks: extract
 | Control | Purpose |
 |---|---|
 | Book list + Refresh | Books found in the configured input folder. |
+| Use Project Book | Adds the selected named Project's latest supported Write export or saved TXT draft to the book list without changing the input folder. |
 | Input / Output folders | Source ebooks, MP3 destination (Change to pick). |
 | Voice | OpenAI TTS voice (from the audiobook tool config). |
 | Chunk Tokens | Text per TTS call (default 1400) — trades API calls vs chunk size. |
 | Start / Stop | Begin / kill the conversion. |
 
 ## Outputs
-MP3(s) in the output folder + a live **Output Log** (chunk progress, resume state, quota/error detection). Progress bar reflects completed chunks.
+MP3(s) in the output folder + a live **Output Log** (chunk progress, resume state, quota/error detection). Progress bar reflects completed chunks. A completed MP3 is linked to the Project selected when conversion began; Listen still shows the shared output folder, not a Project-filtered library.
+
+If the expected MP3 already exists, **Convert audiobook** does not send a new paid request. Open the file from Listen instead.
 
 ## How it works
 The converter runs as a separate process via `QProcess`:

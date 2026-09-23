@@ -205,6 +205,68 @@ def test_switching_projects_restores_each_manuscript(app, tmp_path, monkeypatch)
     assert project_workspaces.load("book-a", "author")["draft"] == "The latest chapter"
 
 
+def test_audiobook_uses_project_export_and_links_result_to_start_project(
+        app, tmp_path, monkeypatch):
+    import main
+    from PySide6.QtCore import Qt
+    from PySide6.QtWidgets import QMessageBox
+    from agents.audiobook.panel import OpenAIClientWrapper
+    from services.project_artifacts import list_for_project, record
+
+    monkeypatch.setattr(database, "DB_PATH", tmp_path / "imprint.db")
+    database.init_db()
+    window = main.GodAI()
+    try:
+        window.registry.upsert_project("book-a", "First book")
+        window.registry.upsert_project("book-b", "Second book")
+        window._refresh_history_project_filter()
+        picker = window.history_project_filter
+        picker.setCurrentIndex(picker.findData("book-a"))
+        source = tmp_path / "source.txt"
+        source.write_text("A short book.", encoding="utf-8")
+        record("book-a", "author", "draft", source)
+        panel = window.audiobook_panel
+        monkeypatch.setattr(panel, "_estimate",
+                            lambda *_: {"characters": 13, "eur": 0.01,
+                                        "seconds": 6})
+        original_input_folder = panel.audiobook_input_path.text()
+        panel.use_project_book()
+        assert panel.audiobook_book_list.currentItem().data(Qt.UserRole) == \
+            str(source)
+        assert panel.audiobook_input_path.text() == original_input_folder
+
+        output_folder = tmp_path / "audio"
+        panel.audiobook_output_path.setText(str(output_folder))
+        monkeypatch.setattr(OpenAIClientWrapper, "key_available",
+                            staticmethod(lambda: True))
+        authorizations = []
+        monkeypatch.setattr(
+            window, "authorize_request",
+            lambda *a, **k: authorizations.append(1) or "token")
+        monkeypatch.setattr(panel, "run_conversion", lambda *_: None)
+        panel.start_conversion()
+        assert panel._conversion_project_id == "book-a"
+        output = panel._conversion_output
+        output.parent.mkdir(parents=True)
+        output.write_bytes(b"audio")
+        picker.setCurrentIndex(picker.findData("book-b"))
+        panel._link_completed_conversion()
+        assert {item["kind"] for item in list_for_project("book-a")} == \
+            {"draft", "audiobook"}
+        assert list_for_project("book-b") == []
+
+        monkeypatch.setattr(QMessageBox, "information",
+                            staticmethod(lambda *a, **k: None))
+        panel.start_conversion()
+        assert len(authorizations) == 1, "existing output must not be billed"
+    finally:
+        window.author_panel._project_save_timer.stop()
+        window.resource_timer.stop()
+        app.removeEventFilter(window)
+        window.close()
+        window.deleteLater()
+
+
 def test_project_chat_field_is_optional_and_legacy_chats_load(tmp_path):
     store = HistoryStore(str(tmp_path / "chats"))
     store.save_chat("chat", "ollama", "local", "General Chat",

@@ -20,7 +20,7 @@ from services.openai_client import OpenAIClientWrapper
 from services.runtime_paths import is_frozen
 from agents.audiobook.audio_player import AudiobookPlayer
 from ui.forms import CONTROL_HEIGHT, LG, MD, SM, combo, field, line_edit, primary, rule, section
-from ui.widgets import scrollable
+from ui.widgets import FlowLayout, scrollable
 
 SUPPORTED_EBOOKS = {".pdf", ".epub", ".txt", ".mobi"}
 
@@ -36,6 +36,7 @@ class AudiobookPanel(QWidget):
         "audiobook_tabs", "audiobook_book_help", "audiobook_book_list",
         "audiobook_empty_state", "audiobook_source_stack",
         "audiobook_input_path", "audiobook_open_input_btn",
+        "audiobook_project_book_btn",
         "audiobook_output_path", "audiobook_change_output_btn",
         "audiobook_voice_box", "audiobook_chunk_input",
         "audiobook_start_btn", "audiobook_refresh_btn", "stop_btn",
@@ -51,6 +52,9 @@ class AudiobookPanel(QWidget):
         self._audiobook_library = []
         self._text_cache = {}
         self._request_token = None
+        self._conversion_project_id = None
+        self._conversion_source = None
+        self._conversion_output = None
         self.process = None
         self.setObjectName("AudiobookPanel")
         outer = QVBoxLayout(self)
@@ -138,8 +142,7 @@ class AudiobookPanel(QWidget):
             options.setColumnStretch(column, 1)
         page.addLayout(options)
 
-        actions = QHBoxLayout()
-        actions.setSpacing(SM)
+        actions = FlowLayout(spacing=SM)
         self.audiobook_start_btn = primary("Convert audiobook")
         self.audiobook_start_btn.setMinimumWidth(160)
         self.audiobook_start_btn.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
@@ -148,12 +151,17 @@ class AudiobookPanel(QWidget):
         self.audiobook_refresh_btn = QPushButton("Refresh List")
         self.audiobook_refresh_btn.clicked.connect(self.refresh_books)
         actions.addWidget(self.audiobook_refresh_btn)
+        self.audiobook_project_book_btn = QPushButton("Use Project Book")
+        self.audiobook_project_book_btn.setToolTip(
+            "Add the selected Project's latest supported Write export to this "
+            "list without changing your input folder.")
+        self.audiobook_project_book_btn.clicked.connect(self.use_project_book)
+        actions.addWidget(self.audiobook_project_book_btn)
         self.stop_btn = QPushButton("Stop")
         self.stop_btn.setObjectName("DangerAction")
         self.stop_btn.clicked.connect(self.stop_conversion)
         self.stop_btn.hide()
         actions.addWidget(self.stop_btn)
-        actions.addStretch()
         self.audiobook_cost_label = QLabel("Estimated cost: not calculated")
         self.audiobook_cost_label.setObjectName("EstimateLine")
         actions.addWidget(self.audiobook_cost_label)
@@ -265,6 +273,46 @@ class AudiobookPanel(QWidget):
             f"[Ready] Found {len(books)} book(s).")
         self.estimate_cost_from_selection()
 
+    def use_project_book(self):
+        """Offer a Write export as a source without changing global folders."""
+        from services.project_artifacts import list_for_project
+
+        project = self.host._active_project()
+        if not project:
+            QMessageBox.information(
+                self, "Choose a project", "Select a named Project first.")
+            return
+        for artifact in list_for_project(
+                project["id"], kinds=("export_epub", "export_pdf", "draft")):
+            path = Path(artifact["path"])
+            if not path.is_file() or path.suffix.lower() not in SUPPORTED_EBOOKS:
+                continue
+            for row in range(self.audiobook_book_list.count()):
+                item = self.audiobook_book_list.item(row)
+                if item.data(Qt.UserRole) == str(path):
+                    self.audiobook_book_list.setCurrentItem(item)
+                    break
+            else:
+                item = QListWidgetItem(f"{path.name} · {project['name']}")
+                item.setData(Qt.UserRole, str(path))
+                self.audiobook_book_list.addItem(item)
+                self.audiobook_book_list.setCurrentItem(item)
+            self._update_source_state()
+            self.audiobook_status_label.setText(
+                f"[Ready] Project source: {path.name}")
+            return
+        QMessageBox.information(
+            self, "No supported project book",
+            "Save a .txt draft or export an EPUB/PDF in Write first, then "
+            "click Use Project Book again.")
+
+    @staticmethod
+    def _converted_output(book_path: Path, output_folder: Path) -> Path:
+        from services.narrator.converter import clean_name
+
+        name = clean_name(book_path.name)
+        return output_folder / name / f"{name}.mp3"
+
     def open_input_folder(self):
         folder = self.audiobook_input_path.text().strip()
         if folder:
@@ -294,14 +342,15 @@ class AudiobookPanel(QWidget):
 
         try:
             text = self._text(path)
-        except Exception:
+            if not text.strip():
+                return None
+            text_tokens = count_text_tokens(text)
+            seconds = estimate_audio_seconds_from_text(text)
+            audio_tokens = estimate_audio_tokens_from_seconds(seconds)
+            usd = estimate_costs_usd(text_tokens, audio_tokens)["total_usd"]
+        except Exception as exc:
+            self.host._note_failure("audiobook: estimate conversion", exc)
             return None
-        if not text.strip():
-            return None
-        text_tokens = count_text_tokens(text)
-        seconds = estimate_audio_seconds_from_text(text)
-        audio_tokens = estimate_audio_tokens_from_seconds(seconds)
-        usd = estimate_costs_usd(text_tokens, audio_tokens)["total_usd"]
         return {
             "characters": len(text), "seconds": seconds,
             "eur": round(usd * eur_per_usd(), 4),
@@ -329,6 +378,14 @@ class AudiobookPanel(QWidget):
         book_path = item.data(Qt.UserRole)
         output_path = self.audiobook_output_path.text().strip()
         voice = self.audiobook_voice_box.currentText().strip()
+        expected_output = self._converted_output(
+            Path(book_path), Path(output_path).expanduser())
+        if expected_output.is_file():
+            QMessageBox.information(
+                self, "Audiobook already exists",
+                f"{expected_output.name} is already in the output folder. "
+                "Use Listen to open it; no new conversion was submitted.")
+            return
         if not OpenAIClientWrapper.key_available():
             self.audiobook_status_label.setText(
                 "[Error] OPENAI_API_KEY not set.")
@@ -359,6 +416,10 @@ class AudiobookPanel(QWidget):
             return
         self._request_token = token
         self.host._audiobook_request_token = token
+        project = self.host._active_project()
+        self._conversion_project_id = project["id"] if project else None
+        self._conversion_source = Path(book_path)
+        self._conversion_output = expected_output
         config = {
             "input": book_path, "output": output_path, "voice": voice,
             "chunk_tokens": chunk_tokens,
@@ -479,7 +540,39 @@ class AudiobookPanel(QWidget):
                 "[Done] Audiobook created successfully.")
             self.host.output_box.append(
                 "\n[Done] Audiobook created successfully.")
+            self._link_completed_conversion()
+        self._conversion_project_id = None
+        self._conversion_source = None
+        self._conversion_output = None
         self.refresh_books()
+
+    def _link_completed_conversion(self):
+        """Attach only a verified result to the Project captured at start."""
+        if not self._conversion_project_id:
+            return
+        from services.project_artifacts import list_for_project, record
+
+        source = self._conversion_source
+        output = self._conversion_output
+        if not output or not output.is_file():
+            self.audiobook_status_label.setText(
+                "[Warning] Conversion ended but its output file is missing.")
+            return
+        try:
+            # A Write export may already own this path. Keep its original
+            # kind instead of replacing it with a generic audiobook source.
+            linked_paths = {
+                item["path"] for item in list_for_project(
+                    self._conversion_project_id)}
+            if str(source.resolve()) not in linked_paths:
+                record(self._conversion_project_id, "audiobook", "source",
+                       source, source.name)
+            record(self._conversion_project_id, "audiobook", "audiobook", output,
+                   output.name)
+        except Exception as exc:
+            self.host._note_failure("audiobook: link project output", exc)
+            self.audiobook_status_label.setText(
+                "[Done] Audiobook saved; project link failed.")
 
     def _close_request(self, success: bool):
         token = self._request_token or getattr(

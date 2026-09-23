@@ -176,15 +176,19 @@ database links, never the external files.
       Project Draft** action loads the latest Write editor text (or linked
       saved draft) into Quote Finder and sets attribution from the byline.
       It does not silently replace Quote Finder text or approve the draft.
+- [x] Audiobook's **Use Project Book** action selects a linked Write EPUB,
+      PDF or text draft without changing the configured input folder. A
+      successful conversion links its verified MP3 to the Project captured
+      when Start was pressed, even if the user switches Projects meanwhile.
+      An already existing MP3 is never submitted or billed again.
 
 ### Remaining for the cross-workspace P1
 
 - [ ] Add an explicit manuscript approval/version choice for Publishing
       Manager. The current Project handoff intentionally uses a working draft;
       it must not imply that the latest text is approved for publication.
-- [ ] Join Audiobook inputs, conversions, and listening output to the same
-      project, without changing a user's global input/output folders merely
-      because they selected a project.
+- [ ] Add Project filtering or grouping in the Listen library. Conversion
+      output is now linked, but Listen still scans the shared output folder.
 - [ ] Have Video's assembled pipeline and direct provider renders write a
       durable project artifact link. Direct provider jobs already keep a
       project ID for budget recovery, but the library does not yet use it.

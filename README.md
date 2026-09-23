@@ -169,6 +169,10 @@ Manager's **Use Project Draft** loads the selected project's current Write
 text into Quote Finder on request and uses its byline as attribution. This is
 a handoff, not an approval step; the source draft remains editable. See
 `docs/projects_roadmap.md` for the remaining cross-workspace work.
+Audiobook Producer's **Use Project Book** selects a linked Write TXT/EPUB/PDF
+without moving it into the global input folder; a successful conversion links
+the MP3 to the Project that was active at Start. Listen still shows the shared
+output library.
 
 **Agent filter** — narrows the list to one agent. Populated from the chats that
 exist, so it only ever offers agents you have actually used.
@@ -1149,6 +1153,8 @@ The conversion runs as a `QProcess` so the GUI stays responsive. Output is strea
 1. Drop one or more ebooks into the configured input folder.
 2. Click **Audiobooks** under **Creative**.
 3. Click **Refresh List** to populate the book list.
+   Or select a named Project and click **Use Project Book** to add its linked
+   Write export without changing the normal input folder.
 4. Pick a **Voice** and (optionally) adjust **Chunk Tokens**.
 5. If you want a different output destination, click **Change**.
 6. Select a book and click **Start**.

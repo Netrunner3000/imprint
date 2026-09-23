@@ -7,6 +7,12 @@ conversion process lifecycle, billing closure, library and playback actions all
 belong to that workspace; only shared budgets, usage storage, output and the
 narration/library services remain on the umbrella side.
 
+**Use Project Book** adds a named Project's linked Write TXT/EPUB/PDF to the
+Convert list without changing the configured input folder. After a successful
+conversion, the source (unless already linked) and verified MP3 are linked to
+the Project active when Start was pressed. Listen still scans the global output
+folder; Project filtering is not yet implemented.
+
 ## Files
 
 - `__init__.py` — public interface; re-exports `AudiobookConnector` and lazily
