@@ -49,7 +49,16 @@ you intended to measure.
    and click **Use Approved Version** to load that exact text and byline; new
    Write edits cannot change it. Project Overview warns when Write has changed
    since the latest approval. **Load File** remains available for an external
-   manuscript, but loading a file does not approve it in Imprint.
+   manuscript, but loading a file does not approve it in Imprint. Choose
+   **Export Approved…** to create a new EPUB, DOCX or PDF from the selected
+   version. Set a title and byline before approving the version; export refuses
+   a snapshot missing either rather than writing placeholder metadata. Its
+   recorded file fingerprint means a later overwrite cannot
+   silently inherit approval. A normal export in Write has no approved-version
+   receipt. After you manually upload the approved file, open **Submission
+   Ledger…** and record the retailer, actual submission date, and confirmation
+   reference or evidence file. The ledger labels the entry **Self-reported**:
+   Imprint neither uploads to nor checks a retailer on your behalf.
 7. In Audiobook Producer → **Convert**, click **Use Project Book** to add a
    supported saved draft or EPUB/PDF from the selected Project. This does not
    change your normal input/output folders. Successful conversion links the
@@ -90,6 +99,8 @@ session/daily limits or external provider invoices.
 | Visible generated text in other agents | Unsaved until that agent's save behavior is verified |
 | Write Save Draft and EPUB/DOCX/PDF export under a named Project | File stored where you choose; Project stores a link to it |
 | Approved manuscript version | Immutable text, title and byline snapshot in the Project database; later Write edits do not alter it |
+| Export Approved | New local EPUB/DOCX/PDF with a saved approved-version number and SHA-256 file fingerprint; a moved, edited or overwritten file fails the matching check |
+| Submission Ledger | A local, self-reported note attached to a matching approved export; a reference/evidence file is required, but no retailer API receipt is inferred |
 | Other explicit Save actions | Stored in that agent's documented location; Project linking is not yet universal |
 | Export/Save as File | Written to the chosen or documented external location |
 | Provider-hosted media URL | Temporary until Imprint downloads it successfully |

@@ -14,6 +14,7 @@ so nothing here resolves a request by agent name.
 
 import csv
 import os
+import re
 import sqlite3
 from datetime import datetime
 from pathlib import Path
@@ -52,6 +53,8 @@ class ManuscriptPanel(QWidget):
         "quote_finder_text", "quote_finder_load_btn", "quote_finder_count_box",
         "quote_finder_project_btn", "quote_approve_btn",
         "quote_approved_version_box", "quote_use_approved_btn",
+        "quote_approved_export_format_box", "quote_export_approved_btn",
+        "quote_submission_ledger_btn",
         "quote_finder_theme_box", "quote_finder_voice_source_box",
         "quote_finder_voice_box", "quote_finder_attribution",
         "quote_finder_suggest_btn", "quote_finder_list",
@@ -265,6 +268,23 @@ class ManuscriptPanel(QWidget):
         self.quote_use_approved_btn.clicked.connect(self.use_approved_version)
         version_controls.addWidget(self.quote_use_approved_btn)
         layout.addWidget(version_row)
+        publication_row = QWidget()
+        publication_controls = FlowLayout(publication_row, spacing=6)
+        self.quote_approved_export_format_box = QComboBox()
+        self.quote_approved_export_format_box.addItems(["EPUB", "DOCX", "PDF"])
+        self.quote_approved_export_format_box.setAccessibleName(
+            "Approved export format")
+        publication_controls.addWidget(self.quote_approved_export_format_box)
+        self.quote_export_approved_btn = QPushButton("Export Approved…")
+        self.quote_export_approved_btn.setToolTip(
+            "Create a new file from the selected approved version, not from "
+            "the current Write editor.")
+        self.quote_export_approved_btn.clicked.connect(self.export_approved_version)
+        publication_controls.addWidget(self.quote_export_approved_btn)
+        self.quote_submission_ledger_btn = QPushButton("Submission Ledger…")
+        self.quote_submission_ledger_btn.clicked.connect(self.open_submission_ledger)
+        publication_controls.addWidget(self.quote_submission_ledger_btn)
+        layout.addWidget(publication_row)
         self.refresh_project_versions()
 
         settings_row_container = QWidget()
@@ -918,6 +938,7 @@ class ManuscriptPanel(QWidget):
                 picker.setCurrentIndex(index)
         picker.blockSignals(False)
         self.quote_use_approved_btn.setEnabled(picker.count() > 0)
+        self.quote_export_approved_btn.setEnabled(picker.count() > 0)
 
     def approve_project_draft(self):
         from services.project_manuscripts import approve, list_versions
@@ -972,6 +993,60 @@ class ManuscriptPanel(QWidget):
         self.manuscript_status_label.setText(
             f"[Approved source] {project['name']} v{version} "
             f"({len(row['body'].split()):,} words)")
+
+    def export_approved_version(self):
+        """Export the selected immutable snapshot, never the visible editor."""
+        from services.project_artifacts import record
+        from services.project_manuscripts import get_version
+        from services.project_publication import export_approved
+
+        project = self.host._active_project()
+        version = self.quote_approved_version_box.currentData()
+        approved = get_version(project["id"], version) if project and version else None
+        if not approved:
+            QMessageBox.information(
+                self, "No approved version", "Approve a Project draft first.")
+            return
+        fmt = self.quote_approved_export_format_box.currentText().lower()
+        safe = re.sub(r"[^\w\s-]", "", approved["title"]).strip().replace(
+            " ", "_") or "approved_manuscript"
+        proposed = user_data_base() / f"{safe}_v{version}.{fmt}"
+        path, _ = QFileDialog.getSaveFileName(
+            self, "Export Approved Manuscript", str(proposed),
+            f"{fmt.upper()} Files (*.{fmt})")
+        if not path:
+            return
+        destination = Path(path)
+        if not destination.suffix:
+            destination = destination.with_suffix(f".{fmt}")
+        try:
+            exported = export_approved(project["id"], version, fmt, destination)
+        except Exception as exc:
+            self.host._note_failure("manuscript: export approved", exc)
+            QMessageBox.warning(self, "Export failed", str(exc))
+            return
+        try:
+            record(project["id"], "manuscript", f"approved_{fmt}",
+                   exported["path"], f"v{version} · {destination.name}")
+        except Exception as exc:
+            self.host._note_failure("manuscript: link approved export", exc)
+            self.manuscript_status_label.setText(
+                f"[Exported v{version}] {destination.name} · Overview link failed; "
+                "the export receipt was saved.")
+            return
+        self.manuscript_status_label.setText(
+            f"[Exported v{version}] {destination.name}. "
+            "Submission is separate and must be recorded explicitly.")
+
+    def open_submission_ledger(self):
+        project = self.host._active_project()
+        if not project:
+            QMessageBox.information(
+                self, "Choose a project", "Select a named Project first.")
+            return
+        from ui.manuscript_submissions import SubmissionLedgerDialog
+
+        SubmissionLedgerDialog(self, project["id"]).exec()
 
     def quote_finder_suggest(self):
         text = self.quote_finder_text.toPlainText().strip()

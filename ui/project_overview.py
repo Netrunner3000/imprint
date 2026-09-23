@@ -119,6 +119,9 @@ class ProjectOverviewDialog(QDialog):
             f"{('v' + str(data['latest_approved_version'])) if data['latest_approved_version'] else 'none'}"
             f"{' (Write has changed)' if data['working_differs_from_approved'] else ''}"
             f"   ·   "
+            f"Approved exports: {data['approved_exports']}   ·   "
+            f"Submission notes (self-reported): "
+            f"{data['self_reported_submissions']}   ·   "
             f"Linked files: {len(data['artifacts'])}   ·   "
             f"Creator items: {len(data['creator_content'])}")
 

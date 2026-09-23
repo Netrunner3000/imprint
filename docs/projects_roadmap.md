@@ -206,13 +206,21 @@ database links, never the external files.
       an approved version into Quote Finder. Working drafts remain separately
       loadable and clearly marked unapproved. Project Overview shows the
       latest approved version and whether Write has changed since it.
+- [x] **Export Approved…** creates a new EPUB/DOCX/PDF from the selected
+      immutable version and receipts its path, format and file hash. It never
+      reads the mutable Write editor. **Submission Ledger…** attaches a
+      self-reported retailer/distributor note, date and confirmation reference
+      or evidence file to a matching approved export. It refuses missing or
+      changed export bytes. It does not upload, poll a retailer or certify a
+      platform verdict. Deleting the Project cascades the local receipts and
+      notes, but does not delete exported/evidence files.
 
-### Remaining for the cross-workspace P1
+### Boundaries after the cross-workspace P1
 
-- [ ] Associate future store submissions and published-file exports with the
-      chosen approved version. The current approval controls guard Quote
-      Finder's source; they do not yet certify an external EPUB, retailer
-      submission, or platform receipt.
+Regular Write exports predate approval receipts and remain explicitly
+unversioned. A real retailer API submission and verified platform receipt
+would need a separately authorized integration; the manual ledger is never
+presented as that evidence.
 
 Project knowledge-file retrieval is a different feature and remains outside
 this production identity work.

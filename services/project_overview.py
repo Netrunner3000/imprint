@@ -6,6 +6,7 @@ from pathlib import Path
 from services.database import get_connection
 from services.project_artifacts import list_for_project
 from services.project_manuscripts import list_versions
+from services.project_publication import list_exports, list_submissions
 from services.project_workspaces import load
 from services.registry import Registry
 
@@ -33,6 +34,8 @@ def snapshot(project_id: str) -> dict | None:
     draft = load(project_id, "author").get("draft") or ""
     approved_versions = list_versions(project_id)
     latest_approved = approved_versions[0] if approved_versions else None
+    approved_exports = list_exports(project_id)
+    submissions = list_submissions(project_id)
     return {
         "project": project,
         "artifacts": artifacts,
@@ -43,5 +46,7 @@ def snapshot(project_id: str) -> dict | None:
         "working_differs_from_approved": bool(
             latest_approved and sha256(draft.encode("utf-8")).hexdigest()
             != latest_approved["sha256"]),
+        "approved_exports": len(approved_exports),
+        "self_reported_submissions": len(submissions),
         "missing_files": sum(not item["available"] for item in artifacts),
     }

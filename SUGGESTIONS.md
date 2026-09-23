@@ -42,7 +42,6 @@ consequences of what just landed rather than new ideas.
 |---|---|---|---|---|
 | 40 | DONE — **Price the second provider.** Per-unit billing now covers Fiverr images and TTS; Creator renders use Higgsfield's authenticated estimate for the exact prepared payload and pass that amount through the same budget guard. | security | M | DONE |
 | 41 | **A doc test that fails when an agent has no guide.** The Learning Centre silently fell a full agent behind twice. `WORKSPACES` is now checked against both `docs/learn/02-agents.md` and `docs/agents/*.md`; the missing OnlyFans sheet was added with the test. | testing | S | DONE |
-| 42 | **Project as the object everything hangs off.** A book, a release and a product are each worked on across Write, Audio, Video and Creator, but each mode keeps its own state and the projects rail is decorative. Making Project real — one record the modes read from — is what would turn five tools that share a window into a studio. | design | L | PLANNED |
 | 43 | DONE — **Video mode.** vidforge imported from the nested repo (not vendored), long-form and clips as one pipeline, cost estimated per stage and charged against the caps. | feature | L | DONE |
 | 44 | DONE — **Social mode.** Campaigns, per-platform drafting, cadence scheduling, and real posting for the three platforms where that is possible from a personal account. | feature | L | DONE |
 | 45 | **Charts, not monospace.** Three panels now compute genuinely interesting numbers (KDP royalties, creator price points, cost history) and all three render them as aligned text. One small charting layer would serve all of them. | design | M | IDEA |
@@ -68,6 +67,7 @@ consequences of what just landed rather than new ideas.
 
 | Suggestion | When |
 |---|---|
+| #42 Project as the shared production object — work identity and Write state, cross-agent output links and Project views, immutable approved manuscript versions, fingerprinted exports, and clearly self-reported retailer submission notes | Sep 2026 |
 | Documentation centre + Learning Centre v2 / Income Lab — searchable technical reference browser, and a 26-lesson evidence-gated income academy replacing dated forecast-style earnings guidance | Sep 2026 |
 | Structured System/Routing/API-key status cards replacing collapsed diagnostic paragraphs | Sep 2026 |
 | Suno-assisted Songs & Albums workflow in the Music agent, and an OnlyFans → Creator direct "Generate SFW Teaser" handoff | Sep 2026 |

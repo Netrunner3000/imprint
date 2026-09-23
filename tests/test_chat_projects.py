@@ -1,6 +1,7 @@
 """Projects group saved chats without changing legacy chat files."""
 
 from pathlib import Path
+from datetime import date, timedelta
 import json
 import sqlite3
 
@@ -146,6 +147,100 @@ def test_approved_manuscript_versions_are_immutable_and_project_scoped(
     assert list_versions("book-1") == []
 
 
+def test_approved_exports_and_manual_submissions_keep_exact_provenance(
+        tmp_path, monkeypatch):
+    from services import project_publication
+    from services.project_manuscripts import approve
+
+    monkeypatch.setattr(database, "DB_PATH", tmp_path / "imprint.db")
+    database.init_db()
+    registry = Registry()
+    registry.upsert_project("book-1", "First book")
+    registry.upsert_project("book-2", "Second book")
+    approve("book-2", "Reviewed", title="Second", byline="")
+    with pytest.raises(ValueError, match="title and byline"):
+        project_publication.export_approved(
+            "book-2", 1, "epub", tmp_path / "bad.epub")
+    approve("book-1", "Reviewed text v1", title="A Book", byline="A. Writer")
+    approve("book-1", "Working text v2", title="A Book", byline="A. Writer")
+    monkeypatch.setattr(
+        project_publication, "export_book",
+        lambda text, title, author, fmt, path: (
+            path.write_bytes(f"{title}|{author}|{text}".encode()), path)[1])
+    path = tmp_path / "book-v1.epub"
+    receipt = project_publication.export_approved(
+        "book-1", 1, "epub", path)
+    assert receipt["version"] == 1
+    assert path.read_bytes() == b"A Book|A. Writer|Reviewed text v1"
+    assert project_publication.verify_export(receipt["id"])["file_state"] == \
+        "matching"
+    with pytest.raises(FileExistsError):
+        project_publication.export_approved("book-1", 2, "epub", path)
+    def partial_export(text, title, author, fmt, target):
+        target.write_bytes(b"incomplete")
+        raise RuntimeError("renderer stopped")
+    monkeypatch.setattr(project_publication, "export_book", partial_export)
+    partial_path = tmp_path / "partial.pdf"
+    with pytest.raises(RuntimeError, match="renderer stopped"):
+        project_publication.export_approved(
+            "book-1", 2, "pdf", partial_path)
+    assert not partial_path.exists()
+    with pytest.raises(ValueError, match="confirmation reference"):
+        project_publication.record_submission(
+            receipt["id"], "KDP", date.today().isoformat())
+    with pytest.raises(ValueError, match="future date"):
+        project_publication.record_submission(
+            receipt["id"], "KDP", (date.today() + timedelta(days=1)).isoformat(),
+            reference="premature")
+    submission = project_publication.record_submission(
+        receipt["id"], "KDP", date.today().isoformat(), reference="KDP-123")
+    assert submission["reference"] == "KDP-123"
+    with pytest.raises(ValueError, match="already recorded"):
+        project_publication.record_submission(
+            receipt["id"], "kdp", date.today().isoformat(),
+            reference="KDP-123")
+    evidence = tmp_path / "confirmation.pdf"
+    evidence.write_bytes(b"confirmation")
+    proof = project_publication.record_submission(
+        receipt["id"], "PublishDrive", date.today().isoformat(),
+        evidence_path=evidence)
+    assert proof["evidence_sha256"]
+    assert project_publication.list_submissions("book-1")[0]["version"] == 1
+    from services.project_overview import snapshot
+    overview = snapshot("book-1")
+    assert overview["approved_exports"] == 1
+    assert overview["self_reported_submissions"] == 2
+    path.write_bytes(b"overwritten")
+    assert project_publication.verify_export(receipt["id"])["file_state"] == \
+        "changed"
+    with pytest.raises(ValueError, match="missing or changed"):
+        project_publication.record_submission(
+            receipt["id"], "Other Store", date.today().isoformat(),
+            reference="new")
+    registry.delete_project("book-1")
+    assert project_publication.list_exports("book-1") == []
+    assert project_publication.list_submissions("book-1") == []
+    assert path.read_bytes() == b"overwritten"
+
+
+def test_approved_export_uses_real_epub_docx_and_pdf_renderers(
+        tmp_path, monkeypatch):
+    from services.project_manuscripts import approve
+    from services.project_publication import export_approved, verify_export
+
+    monkeypatch.setattr(database, "DB_PATH", tmp_path / "imprint.db")
+    database.init_db()
+    Registry().upsert_project("book", "A Book")
+    approve("book", "Chapter 1\n\nThe opening page.",
+            title="A Book", byline="A. Writer")
+    for fmt in ("epub", "docx", "pdf"):
+        path = tmp_path / f"approved.{fmt}"
+        receipt = export_approved("book", 1, fmt, path)
+        assert receipt["path"] == str(path)
+        assert path.stat().st_size > 100
+        assert verify_export(receipt["id"])["file_state"] == "matching"
+
+
 def test_switching_projects_restores_each_manuscript(app, tmp_path, monkeypatch):
     import main
     from services import project_workspaces
@@ -224,6 +319,29 @@ def test_switching_projects_restores_each_manuscript(app, tmp_path, monkeypatch)
         window.manuscript_panel.use_project_draft()
         assert window.manuscript_panel.quote_finder_text.toPlainText() == \
             "A later working revision"
+        from services import project_publication
+        monkeypatch.setattr(
+            project_publication, "export_book",
+            lambda text, title, byline, fmt, path: (
+                path.write_bytes(text.encode("utf-8")), path)[1])
+        approved_export = tmp_path / "approved-v1.epub"
+        monkeypatch.setattr(
+            QFileDialog, "getSaveFileName",
+            staticmethod(lambda *args: (str(approved_export), "EPUB Files (*.epub)")))
+        window.manuscript_panel.export_approved_version()
+        assert approved_export.read_text() == "The latest chapter"
+        (receipt,) = project_publication.list_exports("book-a")
+        assert (receipt["version"], receipt["path"]) == (
+            1, str(approved_export))
+        from ui.manuscript_submissions import SubmissionLedgerDialog
+        ledger = SubmissionLedgerDialog(window, "book-a",
+                                        select_export_id=receipt["id"])
+        ledger.retailer.setText("KDP")
+        ledger.reference.setText("confirmation-1")
+        ledger._record()
+        assert ledger.submissions.rowCount() == 1
+        assert ledger.submissions.item(0, 4).text() == "Self-reported"
+        ledger.close()
         monkeypatch.setattr(QMessageBox, "information",
                             staticmethod(lambda *args: None))
         window.author_worker = type("BusyWorker", (), {

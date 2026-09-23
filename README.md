@@ -171,7 +171,15 @@ a handoff, not an approval step; the source draft remains editable. In
 Publishing Manager, **Approve Write Draft…** captures an immutable numbered
 version after confirmation. Select that version and click **Use Approved
 Version** to load the exact approved text and byline; later Write edits do not
-change it. Project Overview indicates when Write has changed since approval.
+change it. **Export Approved…** creates a new EPUB, DOCX or PDF from that
+selected version and records the file's SHA-256 fingerprint. A regular export
+from Write is still a working-draft export, not an approved one. In
+**Submission Ledger…**, select the approved export and record the retailer,
+date and confirmation reference or local evidence file after submitting it
+yourself. Imprint checks that the export still matches its fingerprint before
+recording the note. This is a self-reported record, not an upload or retailer
+verification. Project Overview shows approval, export and submission counts
+and indicates when Write has changed since approval.
 See `docs/projects_roadmap.md` for the remaining cross-workspace work.
 Audiobook Producer's **Use Project Book** selects a linked Write TXT/EPUB/PDF
 without moving it into the global input folder; a successful conversion links
@@ -189,7 +197,8 @@ its records.
 **Project Overview** in the left rail brings these links together: Write's
 working-draft count, files grouped by agent, and scheduled Creator content.
 It flags missing files instead of hiding them. Opening a file or its folder
-is explicit; Project deletion removes links, not external files.
+is explicit; Project deletion removes approval/export/submission records and
+links, not external files.
 
 **Agent filter** — narrows the list to one agent. Populated from the chats that
 exist, so it only ever offers agents you have actually used.

@@ -114,6 +114,36 @@ CREATE TABLE IF NOT EXISTS project_manuscript_versions (
     FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
 );
 
+-- Exact files generated from an approved snapshot. A later overwrite or edit
+-- changes the file hash and cannot silently inherit this provenance.
+CREATE TABLE IF NOT EXISTS project_manuscript_exports (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_id  TEXT NOT NULL,
+    version     INTEGER NOT NULL,
+    format      TEXT NOT NULL,
+    path        TEXT NOT NULL,
+    sha256      TEXT NOT NULL,
+    exported_at TEXT NOT NULL,
+    FOREIGN KEY (project_id, version)
+        REFERENCES project_manuscript_versions(project_id, version)
+        ON DELETE CASCADE
+);
+
+-- A user-entered note about an external submission, never an API verdict.
+-- At least one reference or local evidence path is required by the service.
+CREATE TABLE IF NOT EXISTS project_manuscript_submissions (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    export_id       INTEGER NOT NULL,
+    retailer        TEXT NOT NULL,
+    submitted_on    TEXT NOT NULL,
+    reference       TEXT NOT NULL DEFAULT '',
+    evidence_path   TEXT NOT NULL DEFAULT '',
+    evidence_sha256 TEXT NOT NULL DEFAULT '',
+    recorded_at     TEXT NOT NULL,
+    FOREIGN KEY (export_id) REFERENCES project_manuscript_exports(id)
+        ON DELETE CASCADE
+);
+
 CREATE TABLE IF NOT EXISTS runs (
     id             INTEGER PRIMARY KEY AUTOINCREMENT,
     run_id         TEXT NOT NULL UNIQUE,

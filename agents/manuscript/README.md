@@ -14,6 +14,10 @@ attribution. It does not mark that working text as approved for publication.
 **Approve Write Draft…** creates an immutable numbered snapshot after a user
 confirmation. **Use Approved Version** loads the selected snapshot into Quote
 Finder; subsequent Write edits do not rewrite approved content.
+**Export Approved…** creates a new ebook/document from the selected approved
+version and saves a file fingerprint. **Submission Ledger…** records a manual,
+self-reported retailer submission against a matching export, with a reference
+or evidence file; it never submits to or verifies a retailer.
 
 Run focused coverage with `pytest tests/test_book_pipeline.py`.
 

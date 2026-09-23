@@ -22,6 +22,8 @@ Five tabs covering the post-draft, pre/post-launch side of publishing a book:
 | Publishing Todos list + Add/Done | Lightweight checklist, seeded with a standard launch checklist on first use. |
 | Quote Finder: text box / Load File / quote count / theme / voice / attribution | Source text and generation settings for batch quote extraction. |
 | Use Project Draft | Copies the selected named Project's current Write draft into Quote Finder and uses its byline for attribution. If no draft is present, prompts for one rather than borrowing text from another Project. |
+| Approve Write Draft / Use Approved Version | Captures an immutable numbered text/title/byline snapshot after confirmation, then loads the selected version. Later Write changes do not alter it. |
+| Export Approved / Submission Ledger | Exports EPUB/DOCX/PDF from the selected approved version with a saved file hash. The separate ledger accepts a user-entered retailer, date and confirmation reference or evidence file only while that export still matches. Entries are self-reported, not retailer-verified; no upload occurs. |
 | Quote Graphics: quote / attribution / theme / size | Single-graphic generation settings. |
 | Shorts: quote / attribution / theme / voice source / voice | Single-short generation settings. |
 | Calendar: weeks / start date / platform checkboxes / theme / voice / attribution | Scheduling + asset-generation settings for the whole batch. |
