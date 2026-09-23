@@ -7,7 +7,7 @@ from pathlib import Path
 from PySide6.QtCore import Qt, QProcess, QUrl
 from PySide6.QtGui import QDesktopServices, QTextCursor
 from PySide6.QtWidgets import (
-    QFileDialog, QFrame, QGridLayout, QHBoxLayout, QHeaderView, QLabel,
+    QComboBox, QFileDialog, QFrame, QGridLayout, QHBoxLayout, QHeaderView, QLabel,
     QLineEdit, QListWidget, QListWidgetItem, QMessageBox, QProgressBar,
     QPushButton, QSizePolicy, QStackedWidget, QTableWidget, QTableWidgetItem,
     QTabWidget, QVBoxLayout, QWidget,
@@ -42,7 +42,7 @@ class AudiobookPanel(QWidget):
         "audiobook_start_btn", "audiobook_refresh_btn", "stop_btn",
         "audiobook_cost_label", "tool_progress", "audiobook_status_label",
         "audiobook_convert_scroll", "audiobook_library_refresh_btn",
-        "audiobook_library_table", "audiobook_play_btn",
+        "audiobook_library_scope", "audiobook_library_table", "audiobook_play_btn",
         "audiobook_restart_btn", "audiobook_reveal_btn", "audiobook_player",
     )
 
@@ -50,6 +50,7 @@ class AudiobookPanel(QWidget):
         super().__init__()
         self.host = host
         self._audiobook_library = []
+        self._all_audiobook_library = []
         self._text_cache = {}
         self._request_token = None
         self._conversion_project_id = None
@@ -625,6 +626,14 @@ class AudiobookPanel(QWidget):
         header = QHBoxLayout()
         header.addWidget(section("Audiobooks in your output folder"))
         header.addStretch()
+        self.audiobook_library_scope = QComboBox()
+        self.audiobook_library_scope.addItem("All audiobooks", "all")
+        self.audiobook_library_scope.addItem("Current Project", "project")
+        self.audiobook_library_scope.setAccessibleName("Audiobook library scope")
+        self.audiobook_library_scope.setMinimumWidth(180)
+        self.audiobook_library_scope.currentIndexChanged.connect(
+            self.refresh_library)
+        header.addWidget(self.audiobook_library_scope)
         self.audiobook_library_refresh_btn = QPushButton("Rescan")
         self.audiobook_library_refresh_btn.setObjectName("ChipBtn")
         self.audiobook_library_refresh_btn.clicked.connect(self.refresh_library)
@@ -673,13 +682,29 @@ class AudiobookPanel(QWidget):
 
     def refresh_library(self):
         """Rescan the output folder on entry without touching conversion state."""
+        from services.project_artifacts import list_for_project
+
         defaults = self.host.get_audiobook_defaults()
         folder = Path(defaults["output"]).expanduser()
         try:
-            self._audiobook_library = scan(folder)
+            self._all_audiobook_library = scan(folder)
         except Exception as exc:
             self.host._note_failure("audiobook: scan library", exc)
+            self._all_audiobook_library = []
+
+        project = self.host._active_project()
+        scope = self.audiobook_library_scope
+        scope.setItemText(1, f"Project: {project['name']}" if project else
+                          "Select a Project")
+        if scope.currentData() == "project" and project:
+            paths = {row["path"] for row in list_for_project(
+                project["id"], kinds=("audiobook",))}
+            self._audiobook_library = [book for book in self._all_audiobook_library
+                                       if str(book.path.resolve()) in paths]
+        elif scope.currentData() == "project":
             self._audiobook_library = []
+        else:
+            self._audiobook_library = self._all_audiobook_library
 
         table = self.audiobook_library_table
         table.setRowCount(0)
@@ -702,7 +727,13 @@ class AudiobookPanel(QWidget):
 
         if not self._audiobook_library:
             self.audiobook_status_label.setText(
-                f"[Library] No audio files in {folder}. Convert a book first.")
+                (f"[Library] No audiobooks linked to {project['name']}. "
+                 "Switch to All audiobooks to see other files."
+                 if scope.currentData() == "project" and project else
+                 "[Library] Select a Project to filter its audiobooks."
+                 if scope.currentData() == "project" else
+                 f"[Library] No audio files in {folder}. Convert a book first."))
+        self._selection_changed()
 
     def _selected_book(self):
         row = self.audiobook_library_table.currentRow()

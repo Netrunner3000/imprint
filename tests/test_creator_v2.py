@@ -650,6 +650,53 @@ def test_creator_schedule_and_teaser_keep_origin_project_and_account(
     assert list_for_project("creator-second") == []
 
 
+def test_creator_calendar_and_media_keep_all_and_project_views(
+        window, db, tmp_path, monkeypatch):
+    from services.project_artifacts import record
+    from services.registry import Registry
+
+    database, account_id = db
+    Registry().upsert_project("creator-campaign", "Campaign")
+    with database.get_connection() as conn:
+        for title, project_id in (("Linked post", "creator-campaign"),
+                                  ("Unfiled post", None)):
+            conn.execute(
+                "INSERT INTO creator_content "
+                "(account_id, project_id, created_at, scheduled_for, kind, "
+                "title, body, price_usd, status) "
+                "VALUES (?, ?, ?, ?, 'post', ?, 'body', 0, 'draft')",
+                (account_id, project_id, datetime.now().isoformat(),
+                 datetime.now().isoformat(), title))
+    panel = window.creator_panel
+    linked = tmp_path / "linked.jpg"
+    other = tmp_path / "unfiled.jpg"
+    linked.write_bytes(b"linked")
+    other.write_bytes(b"other")
+    panel._store_media(account_id, str(linked))
+    panel._store_media(account_id, str(other))
+    record("creator-campaign", "creator", "creator_image", linked)
+    monkeypatch.setattr(window, "_active_project", lambda: {
+        "id": "creator-campaign", "name": "Campaign"})
+    try:
+        panel.refresh_accounts()
+        panel.creator_calendar_scope.setCurrentIndex(0)
+        panel.creator_media_scope.setCurrentIndex(0)
+        panel.refresh_calendar()
+        panel.refresh_media()
+        assert panel.creator_calendar_table.rowCount() == 2
+        assert panel.creator_media_table.rowCount() == 2
+        panel.creator_calendar_scope.setCurrentIndex(1)
+        panel.creator_media_scope.setCurrentIndex(1)
+        assert panel.creator_calendar_table.rowCount() == 1
+        assert panel._calendar_ids and len(panel._calendar_ids) == 1
+        assert panel.creator_calendar_table.item(0, 2).text() == "Linked post"
+        assert panel.creator_media_table.rowCount() == 1
+        assert panel.creator_media_table.item(0, 0).text() == "linked.jpg"
+    finally:
+        panel.creator_calendar_scope.setCurrentIndex(0)
+        panel.creator_media_scope.setCurrentIndex(0)
+
+
 # ── The ampersand trap ───────────────────────────────────────────────────────
 def test_no_button_text_has_a_bare_ampersand():
     """Qt reads a lone '&' in button text as a mnemonic and swallows it, so

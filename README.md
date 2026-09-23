@@ -171,14 +171,16 @@ a handoff, not an approval step; the source draft remains editable. See
 `docs/projects_roadmap.md` for the remaining cross-workspace work.
 Audiobook Producer's **Use Project Book** selects a linked Write TXT/EPUB/PDF
 without moving it into the global input folder; a successful conversion links
-the MP3 to the Project that was active at Start. Listen still shows the shared
-output library.
+the MP3 to the Project that was active at Start. Listen defaults to all
+audiobooks and can filter to the current Project.
 Video links a finished local clip to the Project captured when its render was
 approved, including provider jobs recovered after restart. Its vidforge
-Library remains shared across Projects and standalone vidforge.
+Library still includes standalone vidforge renders by default; choose the
+current-Project view to show only linked Imprint clips.
 Creator links scheduled content, teaser jobs and media to a Project while its
 profiles, consent and earnings remain account-owned. Calendar and Media are
-still account-wide views; deleting a Project unfiles Creator work rather than
+default to account-wide views, with a current-Project filter for each; deleting
+a Project unfiles Creator work rather than
 deleting the profile or its records.
 **Project Overview** in the left rail brings these links together: Write's
 working-draft count, files grouped by agent, and scheduled Creator content.
@@ -1488,7 +1490,9 @@ result once it has been submitted.
 
 The **Library** tab reads vidforge's own history, so a render started in the
 standalone app appears here and vice versa. Frozen, both share
-`~/Library/Application Support/vidforge/`.
+`~/Library/Application Support/vidforge/`. **All videos** includes standalone
+renders; **Current Project** shows only clips linked to the selected Imprint
+Project. Switching Projects updates that view without relabelling old clips.
 
 ---
 

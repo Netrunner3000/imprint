@@ -9,8 +9,9 @@ Vidforge.  User guidance: `docs/agents/video.md`.
 
 Successful pipeline and direct renders also link their local clip to the
 Project captured at request authorization; resumed provider jobs use the
-Project ID persisted with the job. The shared vidforge Library itself remains
-unfiltered, and standalone vidforge renders have no Imprint Project context.
+Project ID persisted with the job. The shared vidforge Library defaults to all
+renders, including standalone builds with no Imprint Project context; its
+**Current Project** view filters to linked clips.
 
 Run focused coverage with `pytest tests/test_media_generation.py tests/test_vidforge_contract.py tests/test_panel_layout.py -k video`.
 

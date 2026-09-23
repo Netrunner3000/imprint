@@ -3566,6 +3566,18 @@ class GodAI(QWidget):
             self.project_defaults_btn.setEnabled(bool(project))
         if hasattr(self, "project_overview_btn"):
             self.project_overview_btn.setEnabled(bool(project))
+        if hasattr(self, "audiobook_panel"):
+            scope = getattr(self.audiobook_panel, "audiobook_library_scope", None)
+            if scope is not None:
+                self.audiobook_panel.refresh_library()
+        if hasattr(self, "video_panel"):
+            scope = getattr(self.video_panel, "video_library_scope", None)
+            if scope is not None:
+                self.video_panel.refresh_library()
+        if hasattr(self, "creator_panel"):
+            if hasattr(self.creator_panel, "creator_calendar_scope"):
+                self.creator_panel.refresh_calendar()
+                self.creator_panel.refresh_media()
         self.load_history_list()
         if hasattr(self, "update_usage_labels"):
             self.update_usage_labels()

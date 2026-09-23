@@ -11,7 +11,7 @@ narration/library services remain on the umbrella side.
 Convert list without changing the configured input folder. After a successful
 conversion, the source (unless already linked) and verified MP3 are linked to
 the Project active when Start was pressed. Listen still scans the global output
-folder; Project filtering is not yet implemented.
+folder by default; **Current Project** shows only linked audiobooks.
 
 ## Files
 

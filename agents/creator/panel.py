@@ -63,9 +63,11 @@ class CreatorPanel(QWidget):
         "creator_model_box", "creator_generate_btn", "creator_schedule_btn",
         "creator_video_btn", "creator_video_cancel_btn", "creator_stop_btn",
         "creator_status_label", "creator_video_status", "creator_tabs",
-        "creator_output", "creator_calendar_table", "creator_earnings_view",
+        "creator_output", "creator_calendar_scope", "creator_calendar_table",
+        "creator_earnings_view",
         "creator_revenue_btn", "creator_import_btn", "creator_voice_tab",
-        "creator_media_table", "creator_add_media_btn", "creator_agency_table",
+        "creator_media_scope", "creator_media_table", "creator_add_media_btn",
+        "creator_agency_table",
         "creator_records_table", "creator_add_performer_btn",
         "creator_voice_samples", "creator_voice_tone", "creator_voice_emoji",
         "creator_voice_length", "creator_voice_banned",
@@ -258,12 +260,19 @@ class CreatorPanel(QWidget):
             "review it, then post it yourself.")
         self.creator_tabs.addTab(self.creator_output, "Draft")
 
+        self.creator_calendar_scope = self._library_scope(
+            "Calendar scope", self.refresh_calendar)
+        calendar_page = QWidget()
+        calendar_layout = QVBoxLayout(calendar_page)
+        calendar_layout.setContentsMargins(MD, MD, MD, MD)
+        calendar_layout.addWidget(self.creator_calendar_scope, 0, Qt.AlignRight)
         self.creator_calendar_table = QTableWidget(0, 5)
         self.creator_calendar_table.setHorizontalHeaderLabels(
             ["When", "Kind", "Title", "$", "Status"])
         self.creator_calendar_table.horizontalHeader().setSectionResizeMode(
             2, QHeaderView.Stretch)
-        self.creator_tabs.addTab(self.creator_calendar_table, "Calendar")
+        calendar_layout.addWidget(self.creator_calendar_table, 1)
+        self.creator_tabs.addTab(calendar_page, "Calendar")
 
         self.creator_earnings_view = CreatorEarningsView()
         self.creator_revenue_btn = QPushButton("Record outcome")
@@ -281,17 +290,23 @@ class CreatorPanel(QWidget):
         self.creator_voice_tab = self._build_voice_tab()
         self.creator_tabs.addTab(self.creator_voice_tab, "Voice")
 
+        self.creator_media_scope = self._library_scope(
+            "Media scope", self.refresh_media)
+        media_body = QWidget()
+        media_layout = QVBoxLayout(media_body)
+        media_layout.setContentsMargins(0, 0, 0, 0)
+        media_layout.addWidget(self.creator_media_scope, 0, Qt.AlignRight)
         self.creator_media_table = QTableWidget(0, 4)
         self.creator_media_table.setHorizontalHeaderLabels(
             ["File", "Kind", "Source", "Caption"])
         self.creator_media_table.horizontalHeader().setSectionResizeMode(
             0, QHeaderView.Stretch)
+        media_layout.addWidget(self.creator_media_table, 1)
         self.creator_add_media_btn = QPushButton("Add Media")
         self.creator_add_media_btn.clicked.connect(self.add_media)
-        self.creator_tabs.addTab(
-            self._tab_with_actions(
-                self.creator_media_table, [self.creator_add_media_btn]),
-            "Media")
+        self.creator_media_tab = self._tab_with_actions(
+            media_body, [self.creator_add_media_btn])
+        self.creator_tabs.addTab(self.creator_media_tab, "Media")
 
         self.creator_agency_table = QTableWidget(0, 6)
         self.creator_agency_table.setHorizontalHeaderLabels(
@@ -325,6 +340,16 @@ class CreatorPanel(QWidget):
         self._type_changed(self.creator_type_box.currentText())
         self._kind_changed(self.creator_kind_box.currentText())
         self.refresh_accounts()
+
+    @staticmethod
+    def _library_scope(name: str, refresh) -> QComboBox:
+        scope = QComboBox()
+        scope.addItem("All account work", "all")
+        scope.addItem("Current Project", "project")
+        scope.setAccessibleName(name)
+        scope.setMinimumWidth(180)
+        scope.currentIndexChanged.connect(refresh)
+        return scope
 
     @staticmethod
     def _tab_with_actions(body: QWidget, buttons: list) -> QWidget:
@@ -764,6 +789,15 @@ class CreatorPanel(QWidget):
         account = self.current_account()
         self.creator_calendar_table.setRowCount(0)
         if not account:
+            self._calendar_ids = []
+            return
+        project = self.host._active_project()
+        scope = self.creator_calendar_scope
+        scope.setItemText(1, f"Project: {project['name']}" if project else
+                          "Select a Project")
+        project_only = scope.currentData() == "project"
+        if project_only and not project:
+            self._calendar_ids = []
             return
         try:
             with get_connection() as conn:
@@ -772,7 +806,10 @@ class CreatorPanel(QWidget):
                     "c.price_usd, c.status, c.revenue_usd, p.name AS project_name "
                     "FROM creator_content c LEFT JOIN projects p "
                     "ON p.id = c.project_id WHERE c.account_id = ? "
-                    "ORDER BY c.id DESC", (account["id"],)).fetchall()
+                    + ("AND c.project_id = ? " if project_only else "")
+                    + "ORDER BY c.id DESC",
+                    (account["id"], project["id"]) if project_only else
+                    (account["id"],)).fetchall()
         except Exception as exc:
             self.host._note_failure("creator: load calendar", exc)
             return
@@ -1172,7 +1209,7 @@ class CreatorPanel(QWidget):
                         (".mp3", ".m4a") else "creator_image")
                 self._link_project_media(project_id, path, kind)
         self.refresh_media()
-        self.creator_tabs.setCurrentWidget(self.creator_media_table)
+        self.creator_tabs.setCurrentWidget(self.creator_media_tab)
 
     def _store_media(self, account_id: int, path: str,
                      *, source: str = "upload", job_id: str = "",
@@ -1211,9 +1248,18 @@ class CreatorPanel(QWidget):
             self.host._note_failure("creator: link project media", exc)
 
     def refresh_media(self):
+        from services.project_artifacts import list_for_project
+
         account = self.current_account()
         self.creator_media_table.setRowCount(0)
         if not account:
+            return
+        project = self.host._active_project()
+        scope = self.creator_media_scope
+        scope.setItemText(1, f"Project: {project['name']}" if project else
+                          "Select a Project")
+        project_only = scope.currentData() == "project"
+        if project_only and not project:
             return
         try:
             with get_connection() as conn:
@@ -1224,6 +1270,12 @@ class CreatorPanel(QWidget):
         except Exception as exc:
             self.host._note_failure("creator: load media", exc)
             return
+        if project_only:
+            paths = {row["path"] for row in list_for_project(
+                project["id"], kinds=("creator_video", "creator_audio",
+                                      "creator_image"))}
+            rows = [row for row in rows
+                    if str(Path(row["path"]).expanduser().resolve()) in paths]
         for row in rows:
             r = self.creator_media_table.rowCount()
             self.creator_media_table.insertRow(r)

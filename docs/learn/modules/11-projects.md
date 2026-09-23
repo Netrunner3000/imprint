@@ -50,17 +50,20 @@ you intended to measure.
    supported saved draft or EPUB/PDF from the selected Project. This does not
    change your normal input/output folders. Successful conversion links the
    finished MP3 back to the Project that was selected when you pressed Start;
-   Listen currently shows the shared output library.
+   Listen defaults to **All audiobooks**. Choose **Current Project** to see
+   only linked output in that Project; return to All for unfiled books.
 8. In Video, a successful pipeline or direct-provider render links the saved
    clip to the Project selected when its paid request was approved. A job
    recovered after restart keeps that original Project. The Video Library is
-   still shared with standalone vidforge; it does not filter by Project yet.
+   shared with standalone vidforge. Choose **Current Project** in Library to
+   see linked Imprint clips, or **All videos** to include standalone renders.
 9. In Creator, choose both a named Project and the right content profile before
    drafting. Scheduling keeps the Project and profile captured at approval;
    switching to another profile before scheduling is refused. Uploaded media
    and successful teaser clips can be linked to the Project. Consent, account
-   ownership and earnings stay with the profile, and Creator's Calendar/Media
-   tabs remain account-wide.
+   ownership and earnings stay with the profile. Calendar and Media default
+   to **All account work**; use **Current Project** to narrow each tab without
+   changing the selected account or hiding unfiled work permanently.
 10. In agents with **Save**, **Export**, **Save as File**, or **Save Full Plan**,
    treat that button as the boundary between generated workspace content and a
    deliverable outside the editor.

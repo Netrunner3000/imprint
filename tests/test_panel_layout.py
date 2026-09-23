@@ -204,6 +204,71 @@ def test_audiobook_library_actions_use_owned_panel(window, monkeypatch, tmp_path
     assert panel.audiobook_status_label.text() == "[Playing] Example Book"
 
 
+def test_audiobook_library_can_filter_to_current_project(window, monkeypatch, tmp_path):
+    from services import project_artifacts
+
+    linked = tmp_path / "Linked_Book.mp3"
+    other = tmp_path / "Other_Book.mp3"
+    linked.write_bytes(b"linked")
+    other.write_bytes(b"other")
+    monkeypatch.setattr(window, "get_audiobook_defaults",
+                        lambda: {"output": str(tmp_path)})
+    monkeypatch.setattr(window, "_active_project",
+                        lambda: {"id": "book-1", "name": "Book One"})
+    monkeypatch.setattr(project_artifacts, "list_for_project",
+                        lambda project_id, *, kinds: [
+                            {"path": str(linked.resolve())}])
+    panel = window.audiobook_panel
+    try:
+        panel.audiobook_library_scope.setCurrentIndex(0)
+        panel.refresh_library()
+        assert panel.audiobook_library_table.rowCount() == 2
+        panel.audiobook_library_scope.setCurrentIndex(1)
+        assert panel.audiobook_library_scope.itemText(1) == "Project: Book One"
+        assert panel.audiobook_library_table.rowCount() == 1
+        assert panel.audiobook_library_table.item(0, 0).text() == "Linked Book"
+        panel.audiobook_library_table.selectRow(0)
+        assert panel._selected_book().path == linked
+    finally:
+        panel.audiobook_library_scope.setCurrentIndex(0)
+
+
+def test_video_library_keeps_global_entries_and_filters_project(
+        window, monkeypatch, tmp_path):
+    from agents.video import video_studio
+    from services import project_artifacts
+
+    panel = window.video_panel
+    if not panel._available:
+        pytest.skip("Vidforge is unavailable")
+    linked = tmp_path / "linked.mp4"
+    other = tmp_path / "standalone.mp4"
+    linked.write_bytes(b"linked")
+    other.write_bytes(b"other")
+    monkeypatch.setattr(video_studio, "library", lambda: [
+        {"title": "Project render", "path": str(linked), "complete": True},
+        {"title": "Standalone render", "path": str(other), "complete": True},
+    ])
+    monkeypatch.setattr(window, "_active_project",
+                        lambda: {"id": "video-1", "name": "Campaign One"})
+    monkeypatch.setattr(project_artifacts, "list_for_project",
+                        lambda project_id, *, kinds: [
+                            {"path": str(linked.resolve())}])
+    try:
+        panel.video_library_scope.setCurrentIndex(0)
+        panel.refresh_library()
+        assert panel.video_library_table.rowCount() == 2
+        panel.video_library_scope.setCurrentIndex(1)
+        assert panel.video_library_scope.itemText(1) == "Project: Campaign One"
+        assert panel.video_library_table.rowCount() == 1
+        assert panel.video_library_table.item(0, 0).text() == "Project render"
+        assert panel._selected_path() is None
+        panel.video_library_table.selectRow(0)
+        assert panel._selected_path() == linked
+    finally:
+        panel.video_library_scope.setCurrentIndex(0)
+
+
 def _overlapping_pairs(panel):
     """Sibling widgets sharing pixels — i.e. one drawn over the other."""
     from PySide6.QtWidgets import (

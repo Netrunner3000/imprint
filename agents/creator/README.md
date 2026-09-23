@@ -15,7 +15,8 @@ draft keeps the Project and account captured when generation was approved;
 switching accounts before scheduling is refused. Teaser jobs and imported or
 generated media can also be linked to a Project. Deleting that Project unfiles
 content and jobs but does not delete the account, consent, earnings or media.
-Calendar and Media remain account-wide until Project filtering is added.
+Calendar and Media default to all work under the selected account; each has a
+**Current Project** view for linked content or files.
 
 ## Files
 

@@ -158,7 +158,7 @@ exported files use `project_artifacts(project_id, agent, kind, path)` links
 because a path is not an editable document. Deleting a Project removes its
 database links, never the external files.
 
-### Landed 2026-09-22
+### Landed 2026-09-22–23
 
 - [x] Existing project rows migrate in place. Older chats and projects still
       load; chat-default updates preserve work identity.
@@ -185,37 +185,31 @@ database links, never the external files.
       local clip to the Project captured by request authorization. A provider
       job resumed after restart uses its persisted Project ID, not whichever
       Project happens to be selected when the download finishes. The shared
-      vidforge Library remains unfiltered.
+      vidforge Library defaults to all builds, with a current-Project filter.
 - [x] Creator calendar content and teaser jobs carry an optional Project ID.
       Drafts use the Project and account captured at authorization, and
       scheduling refuses to file a draft under a different account. Imported
       media and finished teaser clips gain Project artifact links. Project
       deletion unfiles content and jobs without deleting accounts, consent,
-      earnings or files; Creator's account-wide Calendar and Media tabs are
-      not yet Project-filtered.
+      earnings or files; Creator's Calendar and Media tabs default to all
+      account work, with an explicit current-Project filter.
 - [x] **Project Overview** in the left rail joins Write's working-draft count,
       linked files grouped by agent, and Creator's scheduled content. Broken
       file links stay visible with a missing state; opening or revealing a
       file is explicit, and the view never deletes or moves outputs.
+- [x] Listen, Video Library, and Creator Calendar/Media each offer a current-
+      Project view while retaining the original all-items view by default.
+      Switching Projects refreshes these views; standalone Video builds and
+      unfiled account work remain available in All.
 
 ### Remaining for the cross-workspace P1
 
 - [ ] Add an explicit manuscript approval/version choice for Publishing
       Manager. The current Project handoff intentionally uses a working draft;
       it must not imply that the latest text is approved for publication.
-- [ ] Add Project filtering or grouping in the Listen library. Conversion
-      output is now linked, but Listen still scans the shared output folder.
-- [ ] Add Project grouping or filtering to the shared Video Library. Clip
-      links are durable now, but the Library still displays every vidforge
-      output, including those made in its standalone app with no Imprint
-      Project context.
-- [ ] Add Project grouping or filtering to Creator's account-wide Calendar
-      and Media tabs. The durable associations exist, but those views still
-      show all content for the selected account.
-- [ ] Add a reviewed-manuscript version/approval state and per-agent Project
-      filtering to the existing shared Audio, Video and Creator libraries.
-      Project Overview now surfaces assets centrally, but those agent-local
-      libraries still show their broader account/output collections.
+- [ ] Add a reviewed-manuscript version/approval state. Project Overview and
+      agent-local filters make linked work findable, but do not establish
+      which manuscript version is approved for publishing.
 
 Project knowledge-file retrieval is a different feature and remains outside
 this production identity work.

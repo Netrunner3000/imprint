@@ -37,7 +37,8 @@ class VideoPanel(QWidget):
         "video_visual_model_box", "video_aspect_field", "video_length_field",
         "video_visual_note", "video_render_btn", "video_folder_btn",
         "video_stop_btn", "video_cost_label", "video_progress",
-        "video_status_label", "video_log", "video_library_table",
+        "video_status_label", "video_log", "video_library_scope",
+        "video_library_table",
         "video_play_btn", "video_reveal_btn", "video_refresh_btn",
     )
 
@@ -183,6 +184,18 @@ class VideoPanel(QWidget):
         lib = QVBoxLayout(library_page)
         lib.setContentsMargins(MD, MD, MD, MD)
         lib.setSpacing(MD)
+
+        library_header = QHBoxLayout()
+        library_header.addWidget(section("Rendered videos"))
+        library_header.addStretch()
+        self.video_library_scope = QComboBox()
+        self.video_library_scope.addItem("All videos", "all")
+        self.video_library_scope.addItem("Current Project", "project")
+        self.video_library_scope.setAccessibleName("Video library scope")
+        self.video_library_scope.setMinimumWidth(180)
+        self.video_library_scope.currentIndexChanged.connect(self.refresh_library)
+        library_header.addWidget(self.video_library_scope)
+        lib.addLayout(library_header)
 
         self.video_library_table = QTableWidget(0, 4)
         self.video_library_table.setHorizontalHeaderLabels(
@@ -878,9 +891,21 @@ class VideoPanel(QWidget):
     # ── library ─────────────────────────────────────────────────────────
     def refresh_library(self):
         from agents.video import video_studio
+        from services.project_artifacts import list_for_project
         if not self._available:
             return
         entries = video_studio.library()
+        project = self.host._active_project()
+        scope = self.video_library_scope
+        scope.setItemText(1, f"Project: {project['name']}" if project else
+                          "Select a Project")
+        if scope.currentData() == "project":
+            paths = ({row["path"] for row in list_for_project(
+                project["id"], kinds=("video_pipeline", "video_direct"))}
+                     if project else set())
+            entries = [entry for entry in entries
+                       if entry.get("path") and
+                       str(Path(entry["path"]).expanduser().resolve()) in paths]
         self.video_library_table.setRowCount(0)
         for entry in entries:
             row = self.video_library_table.rowCount()
