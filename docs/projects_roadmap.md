@@ -201,15 +201,18 @@ database links, never the external files.
       Project view while retaining the original all-items view by default.
       Switching Projects refreshes these views; standalone Video builds and
       unfiled account work remain available in All.
+- [x] Publishing Manager can explicitly approve the current Project's Write
+      text as an immutable numbered manuscript version, then choose and load
+      an approved version into Quote Finder. Working drafts remain separately
+      loadable and clearly marked unapproved. Project Overview shows the
+      latest approved version and whether Write has changed since it.
 
 ### Remaining for the cross-workspace P1
 
-- [ ] Add an explicit manuscript approval/version choice for Publishing
-      Manager. The current Project handoff intentionally uses a working draft;
-      it must not imply that the latest text is approved for publication.
-- [ ] Add a reviewed-manuscript version/approval state. Project Overview and
-      agent-local filters make linked work findable, but do not establish
-      which manuscript version is approved for publishing.
+- [ ] Associate future store submissions and published-file exports with the
+      chosen approved version. The current approval controls guard Quote
+      Finder's source; they do not yet certify an external EPUB, retailer
+      submission, or platform receipt.
 
 Project knowledge-file retrieval is a different feature and remains outside
 this production identity work.

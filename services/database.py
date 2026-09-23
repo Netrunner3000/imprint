@@ -99,6 +99,21 @@ CREATE TABLE IF NOT EXISTS project_artifacts (
     FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
 );
 
+-- Immutable, explicitly approved manuscript snapshots. Working Write state
+-- can keep changing without silently changing an approved publishing source.
+CREATE TABLE IF NOT EXISTS project_manuscript_versions (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_id  TEXT NOT NULL,
+    version     INTEGER NOT NULL,
+    title       TEXT NOT NULL DEFAULT '',
+    byline      TEXT NOT NULL DEFAULT '',
+    body        TEXT NOT NULL,
+    sha256      TEXT NOT NULL,
+    approved_at TEXT NOT NULL,
+    UNIQUE (project_id, version),
+    FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+);
+
 CREATE TABLE IF NOT EXISTS runs (
     id             INTEGER PRIMARY KEY AUTOINCREMENT,
     run_id         TEXT NOT NULL UNIQUE,

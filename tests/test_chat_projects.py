@@ -81,6 +81,9 @@ def test_old_project_registry_gains_work_identity_columns(tmp_path, monkeypatch)
     assert project["name"] == "Legacy"
     assert (project["kind"], project["work_title"], project["byline"],
             project["brief"]) == ("", "", "", "")
+    from services.project_manuscripts import approve, list_versions
+    assert list_versions("old") == []
+    assert approve("old", "A reviewed draft")["version"] == 1
 
 
 def test_project_workspace_round_trip_and_cascade(tmp_path, monkeypatch):
@@ -118,6 +121,29 @@ def test_project_artifact_links_leave_export_files_alone(tmp_path, monkeypatch):
     registry.delete_project("book-1")
     assert project_artifacts.list_for_project("book-1") == []
     assert output.read_text(encoding="utf-8") == "Chapter one"
+
+
+def test_approved_manuscript_versions_are_immutable_and_project_scoped(
+        tmp_path, monkeypatch):
+    from services.project_manuscripts import approve, get_version, list_versions
+
+    monkeypatch.setattr(database, "DB_PATH", tmp_path / "imprint.db")
+    database.init_db()
+    registry = Registry()
+    registry.upsert_project("book-1", "First book")
+    registry.upsert_project("book-2", "Other book")
+    first = approve("book-1", "Chapter one", title="A Book", byline="A. Writer")
+    assert first["version"] == 1
+    assert approve("book-1", "Chapter one", title="A Book",
+                   byline="A. Writer")["version"] == 1
+    second = approve("book-1", "Chapter one, revised", title="A Book",
+                     byline="A. Writer")
+    assert second["version"] == 2
+    assert get_version("book-1", 1)["body"] == "Chapter one"
+    assert [v["version"] for v in list_versions("book-1")] == [2, 1]
+    assert get_version("book-2", 1) is None
+    registry.delete_project("book-1")
+    assert list_versions("book-1") == []
 
 
 def test_switching_projects_restores_each_manuscript(app, tmp_path, monkeypatch):
@@ -186,6 +212,18 @@ def test_switching_projects_restores_each_manuscript(app, tmp_path, monkeypatch)
         assert window.manuscript_panel.quote_finder_attribution.text() == \
             "A. Writer"
         from PySide6.QtWidgets import QMessageBox
+        monkeypatch.setattr(QMessageBox, "question",
+                            staticmethod(lambda *args: QMessageBox.Yes))
+        window.manuscript_panel.approve_project_draft()
+        assert window.manuscript_panel.quote_approved_version_box.currentData() == 1
+        author.author_draft_box.setPlainText("A later working revision")
+        window.manuscript_panel.use_approved_version()
+        assert window.manuscript_panel.quote_finder_text.toPlainText() == \
+            "The latest chapter"
+        assert "Approved source" in window.manuscript_panel.manuscript_status_label.text()
+        window.manuscript_panel.use_project_draft()
+        assert window.manuscript_panel.quote_finder_text.toPlainText() == \
+            "A later working revision"
         monkeypatch.setattr(QMessageBox, "information",
                             staticmethod(lambda *args: None))
         window.author_worker = type("BusyWorker", (), {
@@ -193,7 +231,7 @@ def test_switching_projects_restores_each_manuscript(app, tmp_path, monkeypatch)
         })()
         picker.setCurrentIndex(picker.findData("book-b"))
         assert picker.currentData() == "book-a"
-        assert author.author_draft_box.toPlainText() == "The latest chapter"
+        assert author.author_draft_box.toPlainText() == "A later working revision"
         window.author_worker = None
     finally:
         window.author_worker = None
@@ -202,7 +240,8 @@ def test_switching_projects_restores_each_manuscript(app, tmp_path, monkeypatch)
         app.removeEventFilter(window)
         window.close()
         window.deleteLater()
-    assert project_workspaces.load("book-a", "author")["draft"] == "The latest chapter"
+    assert project_workspaces.load("book-a", "author")["draft"] == \
+        "A later working revision"
 
 
 def test_audiobook_uses_project_export_and_links_result_to_start_project(

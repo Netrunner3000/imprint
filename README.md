@@ -167,8 +167,12 @@ their production assets joined to this ID. Saving a Write draft or exporting
 an EPUB, DOCX or PDF also records a project link to that file. Publishing
 Manager's **Use Project Draft** loads the selected project's current Write
 text into Quote Finder on request and uses its byline as attribution. This is
-a handoff, not an approval step; the source draft remains editable. See
-`docs/projects_roadmap.md` for the remaining cross-workspace work.
+a handoff, not an approval step; the source draft remains editable. In
+Publishing Manager, **Approve Write Draft…** captures an immutable numbered
+version after confirmation. Select that version and click **Use Approved
+Version** to load the exact approved text and byline; later Write edits do not
+change it. Project Overview indicates when Write has changed since approval.
+See `docs/projects_roadmap.md` for the remaining cross-workspace work.
 Audiobook Producer's **Use Project Book** selects a linked Write TXT/EPUB/PDF
 without moving it into the global input folder; a successful conversion links
 the MP3 to the Project that was active at Start. Listen defaults to all
@@ -178,10 +182,10 @@ approved, including provider jobs recovered after restart. Its vidforge
 Library still includes standalone vidforge renders by default; choose the
 current-Project view to show only linked Imprint clips.
 Creator links scheduled content, teaser jobs and media to a Project while its
-profiles, consent and earnings remain account-owned. Calendar and Media are
-default to account-wide views, with a current-Project filter for each; deleting
-a Project unfiles Creator work rather than
-deleting the profile or its records.
+profiles, consent and earnings remain account-owned. Calendar and Media
+default to account-wide views, with a current-Project filter for each;
+deleting a Project unfiles Creator work rather than deleting the profile or
+its records.
 **Project Overview** in the left rail brings these links together: Write's
 working-draft count, files grouped by agent, and scheduled Creator content.
 It flags missing files instead of hiding them. Opening a file or its folder

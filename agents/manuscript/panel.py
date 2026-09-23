@@ -50,7 +50,8 @@ class ManuscriptPanel(QWidget):
         "manuscript_todo_input", "manuscript_add_todo_btn",
         "manuscript_done_todo_btn", "manuscript_status_label",
         "quote_finder_text", "quote_finder_load_btn", "quote_finder_count_box",
-        "quote_finder_project_btn",
+        "quote_finder_project_btn", "quote_approve_btn",
+        "quote_approved_version_box", "quote_use_approved_btn",
         "quote_finder_theme_box", "quote_finder_voice_source_box",
         "quote_finder_voice_box", "quote_finder_attribution",
         "quote_finder_suggest_btn", "quote_finder_list",
@@ -247,6 +248,24 @@ class ManuscriptPanel(QWidget):
         load_row.addWidget(QLabel("Supports .txt, .pdf, .epub, .mobi"))
         load_row.addStretch()
         layout.addLayout(load_row)
+
+        version_row = QWidget()
+        version_controls = FlowLayout(version_row, spacing=6)
+        self.quote_approve_btn = QPushButton("Approve Write Draft…")
+        self.quote_approve_btn.setToolTip(
+            "Capture the current Write draft as an immutable publishing version.")
+        self.quote_approve_btn.clicked.connect(self.approve_project_draft)
+        version_controls.addWidget(self.quote_approve_btn)
+        self.quote_approved_version_box = QComboBox()
+        self.quote_approved_version_box.setMinimumWidth(210)
+        self.quote_approved_version_box.setAccessibleName(
+            "Approved manuscript version")
+        version_controls.addWidget(self.quote_approved_version_box)
+        self.quote_use_approved_btn = QPushButton("Use Approved Version")
+        self.quote_use_approved_btn.clicked.connect(self.use_approved_version)
+        version_controls.addWidget(self.quote_use_approved_btn)
+        layout.addWidget(version_row)
+        self.refresh_project_versions()
 
         settings_row_container = QWidget()
         settings_row = FlowLayout(settings_row_container, spacing=6)
@@ -834,32 +853,36 @@ class ManuscriptPanel(QWidget):
         except Exception as e:
             self.manuscript_status_label.setText(f"[Error] {e}")
 
-    def use_project_draft(self):
-        """Explicitly bring Write's current project manuscript into Publish."""
+    def _current_project_draft(self, project: dict) -> tuple[str, str]:
+        """Read the editor before its autosave debounce can hide a change."""
         from services.project_workspaces import load
         from services.project_artifacts import list_for_project
-
-        project = self.host._active_project()
-        if not project:
-            QMessageBox.information(
-                self, "Choose a project", "Select a named Project first.")
-            return
         author_panel = getattr(self.host, "author_panel", None)
         if author_panel is not None and author_panel._project_id == project["id"]:
             # A rapid Write → Publish click can arrive before the 700ms
             # autosave fires; read the actual editor, not yesterday's row.
             author_panel._project_save_timer.stop()
             author_panel._persist_project_state()
-        text = (load(project["id"], "author").get("draft") or "").strip()
+        text = load(project["id"], "author").get("draft") or ""
         source = "Write draft"
-        if not text:
+        if not text.strip():
             for artifact in list_for_project(project["id"], kinds=("draft",)):
                 path = Path(artifact["path"])
                 if path.is_file():
-                    text = path.read_text(encoding="utf-8").strip()
+                    text = path.read_text(encoding="utf-8")
                     source = path.name
                     break
-        if not text:
+        return text, source
+
+    def use_project_draft(self):
+        """Bring mutable Write text into Publish, clearly not approved."""
+        project = self.host._active_project()
+        if not project:
+            QMessageBox.information(
+                self, "Choose a project", "Select a named Project first.")
+            return
+        text, source = self._current_project_draft(project)
+        if not text.strip():
             QMessageBox.information(
                 self, "No project draft",
                 "This project has no saved Write draft yet. Write in the "
@@ -869,7 +892,86 @@ class ManuscriptPanel(QWidget):
         if project.get("byline"):
             self.quote_finder_attribution.setText(project["byline"])
         self.manuscript_status_label.setText(
-            f"[Loaded] {source} from {project['name']} ({len(text):,} chars)")
+            f"[Working draft — not approved] {source} from "
+            f"{project['name']} ({len(text):,} chars)")
+
+    def refresh_project_versions(self):
+        from services.project_manuscripts import list_versions
+
+        picker = self.quote_approved_version_box
+        project = self.host._active_project()
+        selected = picker.currentData()
+        picker.blockSignals(True)
+        picker.clear()
+        for row in list_versions(project["id"] if project else ""):
+            picker.addItem(
+                f"Approved v{row['version']} · {row['approved_at'][:10]}",
+                row["version"])
+            picker.setItemData(
+                picker.count() - 1,
+                f"{row['title'] or project['name']} · "
+                f"{row['characters']:,} characters · "
+                f"SHA-256 {row['sha256'][:12]}", Qt.ToolTipRole)
+        if selected is not None:
+            index = picker.findData(selected)
+            if index >= 0:
+                picker.setCurrentIndex(index)
+        picker.blockSignals(False)
+        self.quote_use_approved_btn.setEnabled(picker.count() > 0)
+
+    def approve_project_draft(self):
+        from services.project_manuscripts import approve, list_versions
+
+        project = self.host._active_project()
+        if not project:
+            QMessageBox.information(
+                self, "Choose a project", "Select a named Project first.")
+            return
+        text, source = self._current_project_draft(project)
+        if not text.strip():
+            QMessageBox.information(
+                self, "No project draft",
+                "Write a draft in this Project before approving a version.")
+            return
+        count = len(list_versions(project["id"]))
+        choice = QMessageBox.question(
+            self, "Approve manuscript version",
+            f"Approve {source} for {project['name']}?\n\n"
+            f"Title: {project.get('work_title') or project['name']}\n"
+            f"Byline: {project.get('byline') or 'Not set'}\n"
+            f"Length: {len(text.split()):,} words\n\n"
+            f"This captures an immutable version. Later Write edits will not "
+            f"change it. Existing versions: {count}.",
+            QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
+        if choice != QMessageBox.Yes:
+            return
+        row = approve(project["id"], text,
+                      title=project.get("work_title") or project["name"],
+                      byline=project.get("byline") or "")
+        self.refresh_project_versions()
+        self.quote_approved_version_box.setCurrentIndex(
+            self.quote_approved_version_box.findData(row["version"]))
+        self.manuscript_status_label.setText(
+            f"[{'Already approved' if row['version'] <= count else 'Approved'}] "
+            f"Version {row['version']} of {project['name']} "
+            f"({len(text.split()):,} words). Use Approved Version to load it.")
+
+    def use_approved_version(self):
+        from services.project_manuscripts import get_version
+
+        project = self.host._active_project()
+        version = self.quote_approved_version_box.currentData()
+        row = get_version(project["id"], version) if project and version else None
+        if not row:
+            QMessageBox.information(
+                self, "No approved version",
+                "Select a Project and approve its Write draft first.")
+            return
+        self.quote_finder_text.setPlainText(row["body"])
+        self.quote_finder_attribution.setText(row["byline"])
+        self.manuscript_status_label.setText(
+            f"[Approved source] {project['name']} v{version} "
+            f"({len(row['body'].split()):,} words)")
 
     def quote_finder_suggest(self):
         text = self.quote_finder_text.toPlainText().strip()

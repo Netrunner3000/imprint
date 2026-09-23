@@ -11,6 +11,9 @@ guidance: `docs/agents/manuscript.md`.
 Quote Finder's **Use Project Draft** action loads the selected Project's
 current Write draft (or linked saved draft) on demand, using its byline for
 attribution. It does not mark that working text as approved for publication.
+**Approve Write Draft…** creates an immutable numbered snapshot after a user
+confirmation. **Use Approved Version** loads the selected snapshot into Quote
+Finder; subsequent Write edits do not rewrite approved content.
 
 Run focused coverage with `pytest tests/test_book_pipeline.py`.
 

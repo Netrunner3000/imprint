@@ -3578,6 +3578,9 @@ class GodAI(QWidget):
             if hasattr(self.creator_panel, "creator_calendar_scope"):
                 self.creator_panel.refresh_calendar()
                 self.creator_panel.refresh_media()
+        if hasattr(self, "manuscript_panel"):
+            if hasattr(self.manuscript_panel, "quote_approved_version_box"):
+                self.manuscript_panel.refresh_project_versions()
         self.load_history_list()
         if hasattr(self, "update_usage_labels"):
             self.update_usage_labels()

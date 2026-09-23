@@ -43,9 +43,13 @@ you intended to measure.
    named Project.
 6. In Publishing Manager → **Quote Finder**, click **Use Project Draft** to
    copy that Project's current Write draft into the quote source and set the
-   byline as attribution. Review the text first: the latest working draft is
-   not an approved publication version. You can still use **Load File** for a
-   separately approved manuscript.
+   byline as attribution. This is working text, not approval. After editorial
+   review, click **Approve Write Draft…** and confirm the title, byline and
+   word count. Imprint saves an immutable numbered snapshot. Choose a version
+   and click **Use Approved Version** to load that exact text and byline; new
+   Write edits cannot change it. Project Overview warns when Write has changed
+   since the latest approval. **Load File** remains available for an external
+   manuscript, but loading a file does not approve it in Imprint.
 7. In Audiobook Producer → **Convert**, click **Use Project Book** to add a
    supported saved draft or EPUB/PDF from the selected Project. This does not
    change your normal input/output folders. Successful conversion links the
@@ -85,6 +89,7 @@ session/daily limits or external provider invoices.
 | Write editor under a named project | Saved to that project's working state after a short pause, on switch, and on app close |
 | Visible generated text in other agents | Unsaved until that agent's save behavior is verified |
 | Write Save Draft and EPUB/DOCX/PDF export under a named Project | File stored where you choose; Project stores a link to it |
+| Approved manuscript version | Immutable text, title and byline snapshot in the Project database; later Write edits do not alter it |
 | Other explicit Save actions | Stored in that agent's documented location; Project linking is not yet universal |
 | Export/Save as File | Written to the chosen or documented external location |
 | Provider-hosted media URL | Temporary until Imprint downloads it successfully |

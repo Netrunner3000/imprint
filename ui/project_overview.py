@@ -115,6 +115,10 @@ class ProjectOverviewDialog(QDialog):
         self.brief.setText(project["brief"] or "No creative brief set yet.")
         self.summary.setText(
             f"Write draft: {data['draft_words']:,} words   ·   "
+            f"Approved: "
+            f"{('v' + str(data['latest_approved_version'])) if data['latest_approved_version'] else 'none'}"
+            f"{' (Write has changed)' if data['working_differs_from_approved'] else ''}"
+            f"   ·   "
             f"Linked files: {len(data['artifacts'])}   ·   "
             f"Creator items: {len(data['creator_content'])}")
 

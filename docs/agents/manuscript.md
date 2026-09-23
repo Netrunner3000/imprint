@@ -8,7 +8,7 @@
 Five tabs covering the post-draft, pre/post-launch side of publishing a book:
 
 1. **Overview** — PublishDrive sales/royalty summary, a question box grounded in that data, and the publishing todo checklist.
-2. **Quote Finder** — load the selected Project's current Write draft with **Use Project Draft**, load a file (`.txt`/`.pdf`/`.epub`/`.mobi`), or paste an excerpt; the agent extracts a batch of verbatim, screenshot-worthy lines. Each candidate has inline buttons to turn it directly into a graphic or a narrated short. Project loading is explicit and does not imply editorial approval.
+2. **Quote Finder** — load the selected Project's current working text with **Use Project Draft**, approve a numbered immutable snapshot with **Approve Write Draft…**, select it with **Use Approved Version**, load a file (`.txt`/`.pdf`/`.epub`/`.mobi`), or paste an excerpt; the agent extracts a batch of verbatim, screenshot-worthy lines. Each candidate has inline buttons to turn it directly into a graphic or a narrated short. Project draft loading remains explicit and unapproved; only the approval action captures a reviewed version.
 3. **Quote Graphics** — turn one quote into a styled PNG (3 themes, square or vertical) for Instagram/Pinterest/TikTok — pure Pillow, no API cost.
 4. **Shorts** — narrate a quote (free on-device TTS by default, ElevenLabs optional) and combine it with a quote graphic into a vertical MP4 via ffmpeg.
 5. **Calendar** — turn the Quote Finder candidates into a dated posting schedule across TikTok/Instagram/Pinterest, with a platform-native caption per post and a one-click Graphic / Short button per row, then export the whole plan as a CSV punch list for manual posting.
