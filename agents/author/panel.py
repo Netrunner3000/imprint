@@ -83,6 +83,14 @@ class AuthorPanel(QWidget):
         self._is_continuing = False
         self._chapter_offsets: list = []
         self._layout_state = None
+        self._project_id: str | None = None
+        self._last_project_identity = ("", "")
+        self._unfiled_state: dict | None = None
+        self._loading_project_state = False
+        self._project_save_timer = QTimer(self)
+        self._project_save_timer.setSingleShot(True)
+        self._project_save_timer.setInterval(700)
+        self._project_save_timer.timeout.connect(self._persist_project_state)
         self.setObjectName("AuthorPanel")
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -620,6 +628,23 @@ class AuthorPanel(QWidget):
 
         self._on_content_type_changed(self.author_content_type_box.currentText())
         self._load_profile()
+        for widget in (
+            self.author_title_input, self.author_name_input,
+            self.author_profile_hook_input, self.author_profile_reader_input,
+            self.author_profile_comps_input, self.author_export_author_input,
+        ):
+            widget.textChanged.connect(self._schedule_project_save)
+        for widget in (
+            self.author_draft_box, self.author_outline_box,
+            self.author_characters_box, self.author_world_box,
+        ):
+            widget.textChanged.connect(self._schedule_project_save)
+        for widget in (
+            self.author_content_type_box, self.author_genre_box,
+            self.author_tone_box, self.author_pov_box,
+            self.author_profile_path_box,
+        ):
+            widget.currentTextChanged.connect(self._schedule_project_save)
 
     # ── responsive footer ───────────────────────────────────────────────
     def resizeEvent(self, event):
@@ -718,6 +743,113 @@ class AuthorPanel(QWidget):
             "publishing_path": self.author_profile_path_box.currentText(),
         }
 
+    def _capture_project_state(self) -> dict:
+        return {
+            "profile": self.get_book_profile(),
+            "tone": self.author_tone_box.currentText(),
+            "pov": self.author_pov_box.currentText(),
+            "draft": self.author_draft_box.toPlainText(),
+            "outline": self.author_outline_box.toPlainText(),
+            "characters": self.author_characters_box.toPlainText(),
+            "world": self.author_world_box.toPlainText(),
+            "export_author": self.author_export_author_input.text(),
+        }
+
+    def _apply_project_state(self, state: dict, project: dict | None = None) -> None:
+        """Restore one workspace without carrying another book into it."""
+        self._loading_project_state = True
+        try:
+            profile = state.get("profile") or {}
+            project = project or {}
+            self.author_title_input.setText(
+                project.get("work_title") if project else profile.get("title") or "")
+            self.author_name_input.setText(
+                project.get("byline") if project else profile.get("author") or "")
+            self.author_content_type_box.setCurrentText(
+                profile.get("content_type") or "Fiction")
+            self.author_genre_box.setCurrentText(
+                profile.get("genre") or "Literary Fiction")
+            self.author_tone_box.setCurrentText(state.get("tone") or "Neutral")
+            self.author_pov_box.setCurrentText(
+                state.get("pov") or "Third Person Limited")
+            self.author_profile_hook_input.setText(profile.get("hook") or "")
+            self.author_profile_reader_input.setText(
+                profile.get("target_reader") or "")
+            self.author_profile_comps_input.setText(
+                profile.get("comp_titles") or "")
+            self.author_profile_path_box.setCurrentText(
+                profile.get("publishing_path") or "Undecided")
+            for widget, key in (
+                (self.author_draft_box, "draft"),
+                (self.author_outline_box, "outline"),
+                (self.author_characters_box, "characters"),
+                (self.author_world_box, "world"),
+            ):
+                widget.setPlainText(state.get(key) or "")
+            self.author_export_author_input.setText(
+                state.get("export_author") or "")
+        finally:
+            self._loading_project_state = False
+
+    def _schedule_project_save(self, *_args) -> None:
+        if self._project_id and not self._loading_project_state:
+            self._project_save_timer.start()
+
+    def _persist_project_state(self) -> None:
+        if not self._project_id:
+            return
+        from services.project_workspaces import save
+        title = self.author_title_input.text().strip()
+        byline = self.author_name_input.text().strip()
+        save(self._project_id, "author", self._capture_project_state(),
+             work_title=title, byline=byline)
+        self._last_project_identity = (title, byline)
+
+    def _sync_project_identity(self, project: dict) -> None:
+        """Apply identity changed in Project Manager without clearing the draft."""
+        identity = (project.get("work_title") or "", project.get("byline") or "")
+        if identity == self._last_project_identity:
+            return
+        self._loading_project_state = True
+        try:
+            self.author_title_input.setText(identity[0])
+            self.author_name_input.setText(identity[1])
+        finally:
+            self._loading_project_state = False
+        self._last_project_identity = identity
+
+    def activate_project(self, project: dict | None) -> None:
+        """Save outgoing work and restore the selected project's manuscript."""
+        from services.project_workspaces import load
+
+        next_id = project["id"] if project else None
+        if next_id == self._project_id:
+            if project:
+                self._sync_project_identity(project)
+            return
+        for worker_name in ("author_worker", "author_pub_worker",
+                            "author_mkt_worker"):
+            worker = getattr(self.host, worker_name, None)
+            if worker is not None and worker.isRunning():
+                raise RuntimeError(
+                    "Finish or stop the current Write request before switching projects.")
+        self._project_save_timer.stop()
+        if self._project_id:
+            # Project Manager may have just deleted the active project. Its
+            # workspace row was cascaded already; never recreate orphan work.
+            if self.host.registry.get_project(self._project_id):
+                self._persist_project_state()
+        elif self._unfiled_state is None:
+            self._unfiled_state = self._capture_project_state()
+        self._project_id = next_id
+        if next_id:
+            self._apply_project_state(load(next_id, "author"), project)
+            self._last_project_identity = (
+                project.get("work_title") or "", project.get("byline") or "")
+        else:
+            self._apply_project_state(self._unfiled_state or {})
+            self._last_project_identity = ("", "")
+
     def _build_book_profile_block(self) -> str:
         """Formats the Book Profile into a system-prompt block shared by Write/Publish/Market
         — the point being you set this once and stop re-explaining the book on every request."""
@@ -748,7 +880,10 @@ class AuthorPanel(QWidget):
     def save_profile(self):
         import json
         from services.database import save_setting
-        save_setting("author_book_profile", json.dumps(self.get_book_profile()))
+        if self._project_id:
+            self._persist_project_state()
+        else:
+            save_setting("author_book_profile", json.dumps(self.get_book_profile()))
         self.author_status_label.setText("[Saved] Book profile.")
         self.host._refresh_next_step_tip()
 

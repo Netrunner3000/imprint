@@ -158,6 +158,12 @@ Agent navigation lives in the header, so the rail is projects only.
 Selecting a project makes its instructions, optional daily cap, and saved
 agent/provider/model defaults active. The header shows its name. **All projects**
 and **Unfiled** browse without adding project context to new requests.
+The same record now also holds a work type, work title, byline or brand, and
+creative brief. In Write, choosing a project restores its own book profile,
+draft, outline, characters, and world notes; edits are saved after a short
+pause, on project switch, and on app close. The title and byline in Write and
+the Project manager refer to the same record. Other workspaces still need
+their production assets joined to this ID; see `docs/projects_roadmap.md`.
 
 **Agent filter** — narrows the list to one agent. Populated from the chats that
 exist, so it only ever offers agents you have actually used.
@@ -178,9 +184,11 @@ agent/provider/model as that project's defaults. **New Chat** clears the
 working conversation while keeping the selected project active.
 
 **Settings → Projects** — edit reusable instructions and a daily project
-budget, change defaults, archive, restore, or delete a project. Archiving hides
+budget, work identity, and creative brief; change defaults, archive, restore,
+or delete a project. Archiving hides
 it from the selector without deleting chats. Deleting it unfiles the chats but
-keeps their files. Long instructions add billable tokens to every request.
+keeps their files; project-specific working drafts are removed. Long
+instructions add billable tokens to every request.
 
 **Remove Chat** — deletes the selected saved chat after a confirmation prompt.
 

@@ -4,8 +4,10 @@ Owns long-form ideation, outlining, character and world development, drafting,
 continuation and revision for fiction and non-fiction.  Imprint imports
 `AuthorAgent` from `agents.author`; the private implementation is `agent.py`.
 
-The umbrella owns the editor, project record, provider execution, request guard
-and export UI.  Book export lives in this package's `book_exporter.py`.
+This package owns the editor and its project-scoped working state. The umbrella
+owns project selection, provider execution and the request guard. Book export
+lives in this package's `book_exporter.py`; exported-file links are not yet
+joined to a project.
 
 ## Files
 

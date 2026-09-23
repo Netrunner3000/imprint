@@ -3527,6 +3527,19 @@ class GodAI(QWidget):
 
     def _switch_project(self, _index=0):
         project = self._active_project()
+        if hasattr(self, "author_panel"):
+            # Save the outgoing manuscript before changing shared context.
+            try:
+                self.author_panel.activate_project(project)
+            except RuntimeError as exc:
+                previous = self.author_panel._project_id
+                self.history_project_filter.blockSignals(True)
+                self.history_project_filter.setCurrentIndex(
+                    self.history_project_filter.findData(
+                        previous or ALL_PROJECTS_FILTER))
+                self.history_project_filter.blockSignals(False)
+                QMessageBox.information(self, "Finish the current request", str(exc))
+                return
         if hasattr(self, "project_context_pill"):
             self.project_context_pill.setVisible(bool(project))
             if project:
@@ -3957,6 +3970,11 @@ class GodAI(QWidget):
             self, RESOURCE_DIR, start_page="overview", start_anchor=anchor)
 
     def closeEvent(self, event):
+        try:
+            self.author_panel._project_save_timer.stop()
+            self.author_panel._persist_project_state()
+        except Exception as exc:
+            self._note_failure("shutdown: save project manuscript", exc)
         try:
             audiobook_process = self.audiobook_panel.process
             if (audiobook_process is not None and

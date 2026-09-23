@@ -7,11 +7,12 @@ import uuid
 
 from PySide6.QtWidgets import (
     QComboBox, QDialog, QFormLayout, QHBoxLayout, QLabel, QLineEdit,
-    QMessageBox, QPushButton, QTextEdit, QVBoxLayout,
+    QMessageBox, QPushButton, QTextEdit, QVBoxLayout, QWidget,
 )
 
 from agents.catalog import AGENT_SPECS
 from ui.panels.base import ALL_PROVIDERS
+from ui.widgets import scrollable
 
 TEXT_SETUP_AGENTS = {
     "chat", "author", "manuscript", "music", "social", "webdesign",
@@ -26,7 +27,7 @@ class ProjectManagerDialog(QDialog):
         self.on_change = on_change or (lambda: None)
         self.history = history
         self.setWindowTitle("Manage Projects")
-        self.resize(620, 560)
+        self.resize(650, 650)
 
         layout = QVBoxLayout(self)
         title = QLabel("Project context")
@@ -49,9 +50,27 @@ class ProjectManagerDialog(QDialog):
         picker_row.addWidget(new_button)
         layout.addLayout(picker_row)
 
-        form = QFormLayout()
+        form_holder = QWidget()
+        form = QFormLayout(form_holder)
         self.name = QLineEdit()
         form.addRow("Name", self.name)
+        self.kind = QComboBox()
+        for label, value in (("Choose a type", ""), ("Book", "book"),
+                             ("Video", "video"), ("Music", "music"),
+                             ("Venture", "venture"), ("Client work", "client"),
+                             ("Other", "other")):
+            self.kind.addItem(label, value)
+        form.addRow("Work type", self.kind)
+        self.work_title = QLineEdit()
+        self.work_title.setPlaceholderText("Title of the book, video, release, or product")
+        form.addRow("Work title", self.work_title)
+        self.byline = QLineEdit()
+        self.byline.setPlaceholderText("Author, artist, creator, or brand")
+        form.addRow("Byline / brand", self.byline)
+        self.brief = QTextEdit()
+        self.brief.setPlaceholderText("What this project makes and who it is for")
+        self.brief.setMaximumHeight(90)
+        form.addRow("Creative brief", self.brief)
         self.instructions = QTextEdit()
         self.instructions.setPlaceholderText(
             "Reusable context and constraints for this project's requests."
@@ -76,7 +95,7 @@ class ProjectManagerDialog(QDialog):
         self.budget = QLineEdit()
         self.budget.setPlaceholderText("No project limit")
         form.addRow("Daily budget (€)", self.budget)
-        layout.addLayout(form)
+        layout.addWidget(scrollable(form_holder), 1)
 
         actions = QHBoxLayout()
         self.archive_button = QPushButton("Archive")
@@ -116,17 +135,26 @@ class ProjectManagerDialog(QDialog):
     def _load_selected(self, _index=0):
         project = self._selected()
         enabled = bool(project)
-        for widget in (self.name, self.instructions, self.agent,
+        for widget in (self.name, self.kind, self.work_title, self.byline,
+                       self.brief, self.instructions, self.agent,
                        self.provider, self.model, self.budget):
             widget.setEnabled(enabled)
         self.archive_button.setEnabled(enabled)
         if not project:
             self.name.clear()
+            self.kind.setCurrentIndex(0)
+            self.work_title.clear()
+            self.byline.clear()
+            self.brief.clear()
             self.instructions.clear()
             self.model.clear()
             self.budget.clear()
             return
         self.name.setText(project["name"])
+        self.kind.setCurrentIndex(max(0, self.kind.findData(project["kind"])))
+        self.work_title.setText(project["work_title"])
+        self.byline.setText(project["byline"])
+        self.brief.setPlainText(project["brief"])
         self.instructions.setPlainText(project["instructions"])
         self.agent.setCurrentIndex(max(0, self.agent.findData(project["default_agent"])))
         self.provider.setCurrentIndex(max(0, self.provider.findData(project["default_provider"])))
@@ -176,6 +204,10 @@ class ProjectManagerDialog(QDialog):
             if self.agent.currentData() in TEXT_SETUP_AGENTS else "",
             budget_eur=budget,
             archived=bool(project["archived"]),
+            kind=self.kind.currentData() or "",
+            work_title=self.work_title.text(),
+            byline=self.byline.text(),
+            brief=self.brief.toPlainText(),
         )
         self._refresh(project["id"])
         self.on_change()
@@ -193,7 +225,8 @@ class ProjectManagerDialog(QDialog):
             return
         answer = QMessageBox.question(
             self, "Delete project",
-            f"Delete '{project['name']}'? Saved chats remain and become unfiled.",
+            f"Delete '{project['name']}'? Saved chats remain and become unfiled. "
+            "Project-specific working drafts and identity will be removed.",
             QMessageBox.Yes | QMessageBox.No,
         )
         if answer != QMessageBox.Yes:

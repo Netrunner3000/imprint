@@ -145,3 +145,47 @@ Project knowledge files (attach a PDF/EPUB whose content is retrieved into
 context) — that is Stage 3. The extraction already exists in the narrator and
 manuscript agents, but retrieval, chunking, and their token cost are a separate
 piece of work and should not be smuggled into Stage 2.
+
+---
+
+## Shared production project — v2 implementation
+
+The chat context record is also becoming the identity of the work being made.
+It keeps a stable ID across renames and now has `kind`, `work_title`, `byline`,
+and `brief`. This is the source for a book's title and author in Write. Working
+documents use `project_workspaces(project_id, workspace, state_json)`, while
+exported files will need a separate artifact link because a path is not an
+editable document.
+
+### Landed 2026-09-22
+
+- [x] Existing project rows migrate in place. Older chats and projects still
+      load; chat-default updates preserve work identity.
+- [x] Settings → Projects edits work type, title, byline/brand, and brief in a
+      scrollable form.
+- [x] Write saves its book profile, draft, outline, characters, world notes,
+      tone and point of view per project. Switching projects cannot carry a
+      manuscript across, and closing the app flushes pending edits. The title
+      and byline synchronize with the shared project record. Unfiled work keeps
+      its previous session behavior.
+- [x] A running Write request blocks a project switch, because its eventual
+      response would otherwise land in the next project's editor.
+
+### Remaining for the cross-workspace P1
+
+- [ ] Join exported manuscripts to the project ID and let Publishing Manager
+      read the selected project's title, author, and approved manuscript.
+- [ ] Join Audiobook inputs, conversions, and listening output to the same
+      project, without changing a user's global input/output folders merely
+      because they selected a project.
+- [ ] Have Video's assembled pipeline and direct provider renders write a
+      durable project artifact link. Direct provider jobs already keep a
+      project ID for budget recovery, but the library does not yet use it.
+- [ ] Join Creator campaigns/content to a project while keeping account
+      ownership and consent records independent of projects.
+- [ ] Surface related assets in one project view and make archive/delete
+      semantics explicit: external files must never be deleted by cascading a
+      database record.
+
+Project knowledge-file retrieval is a different feature and remains outside
+this production identity work.

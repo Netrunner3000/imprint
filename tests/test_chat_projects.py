@@ -2,6 +2,7 @@
 
 from pathlib import Path
 import json
+import sqlite3
 
 import pytest
 
@@ -39,6 +40,123 @@ def test_project_registry_round_trip_and_archive(tmp_path, monkeypatch):
     assert len(registry.list_projects()) == 1
     registry.delete_project("novel-1")
     assert registry.get_project("novel-1") is None
+
+
+def test_project_work_identity_survives_chat_default_updates(tmp_path, monkeypatch):
+    monkeypatch.setattr(database, "DB_PATH", tmp_path / "imprint.db")
+    database.init_db()
+    registry = Registry()
+    registry.upsert_project(
+        "novel-1", "Moonlight Novel", kind="book",
+        work_title="The Salt Road", byline="A. Writer",
+        brief="A quiet novel for literary readers")
+    registry.upsert_project(
+        "novel-1", "Moonlight Novel", default_agent="author",
+        default_provider="anthropic")
+    project = registry.get_project("novel-1")
+    assert (project["kind"], project["work_title"], project["byline"]) == (
+        "book", "The Salt Road", "A. Writer")
+    assert project["brief"] == "A quiet novel for literary readers"
+    registry.update_project_identity("novel-1", work_title="A New Title")
+    assert registry.get_project("novel-1")["default_provider"] == "anthropic"
+    assert registry.get_project("novel-1")["work_title"] == "A New Title"
+
+
+def test_old_project_registry_gains_work_identity_columns(tmp_path, monkeypatch):
+    path = tmp_path / "imprint.db"
+    with sqlite3.connect(path) as conn:
+        conn.execute(
+            """CREATE TABLE projects (
+                 id TEXT PRIMARY KEY, name TEXT NOT NULL,
+                 instructions TEXT NOT NULL DEFAULT '',
+                 default_agent TEXT NOT NULL DEFAULT '',
+                 default_provider TEXT NOT NULL DEFAULT '',
+                 default_model TEXT NOT NULL DEFAULT '',
+                 budget_eur REAL, archived INTEGER NOT NULL DEFAULT 0,
+                 created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)""")
+        conn.execute("INSERT INTO projects (id, name) VALUES ('old', 'Legacy')")
+    monkeypatch.setattr(database, "DB_PATH", path)
+    database.init_db()
+    project = Registry().get_project("old")
+    assert project["name"] == "Legacy"
+    assert (project["kind"], project["work_title"], project["byline"],
+            project["brief"]) == ("", "", "", "")
+
+
+def test_project_workspace_round_trip_and_cascade(tmp_path, monkeypatch):
+    from services import project_workspaces
+
+    monkeypatch.setattr(database, "DB_PATH", tmp_path / "imprint.db")
+    database.init_db()
+    registry = Registry()
+    registry.upsert_project("book-1", "First book")
+    registry.upsert_project("book-2", "Second book")
+    project_workspaces.save("book-1", "author", {"draft": "Chapter one"})
+    project_workspaces.save("book-2", "author", {"draft": "Other work"})
+    assert project_workspaces.load("book-1", "author")["draft"] == "Chapter one"
+    assert project_workspaces.load("book-2", "author")["draft"] == "Other work"
+    registry.delete_project("book-1")
+    assert project_workspaces.load("book-1", "author") == {}
+    assert project_workspaces.load("book-2", "author")["draft"] == "Other work"
+
+
+def test_switching_projects_restores_each_manuscript(app, tmp_path, monkeypatch):
+    import main
+    from services import project_workspaces
+
+    monkeypatch.setattr(database, "DB_PATH", tmp_path / "imprint.db")
+    database.init_db()
+    window = main.GodAI()
+    try:
+        window.registry.upsert_project(
+            "book-a", "First", kind="book",
+            work_title="The Salt Road", byline="A. Writer")
+        window.registry.upsert_project(
+            "book-b", "Second", kind="book",
+            work_title="The River Road", byline="B. Writer")
+        window._refresh_history_project_filter()
+        picker = window.history_project_filter
+        author = window.author_panel
+
+        picker.setCurrentIndex(picker.findData("book-a"))
+        assert author.author_title_input.text() == "The Salt Road"
+        assert author.author_name_input.text() == "A. Writer"
+        author.author_draft_box.setPlainText("Chapter A")
+        author.author_profile_hook_input.setText("The first hook")
+
+        picker.setCurrentIndex(picker.findData("book-b"))
+        assert author.author_title_input.text() == "The River Road"
+        assert author.author_draft_box.toPlainText() == ""
+        author.author_draft_box.setPlainText("Chapter B")
+        picker.setCurrentIndex(picker.findData("book-a"))
+        assert author.author_draft_box.toPlainText() == "Chapter A"
+        assert author.author_profile_hook_input.text() == "The first hook"
+        assert project_workspaces.load("book-b", "author")["draft"] == "Chapter B"
+        author.author_title_input.setText("The Salt Road, revised")
+        author._persist_project_state()
+        assert window.registry.get_project("book-a")["work_title"] == \
+            "The Salt Road, revised"
+        window.registry.update_project_identity("book-a", work_title="Final title")
+        window._switch_project()
+        assert author.author_title_input.text() == "Final title"
+        assert author.author_draft_box.toPlainText() == "Chapter A"
+        from PySide6.QtWidgets import QMessageBox
+        monkeypatch.setattr(QMessageBox, "information",
+                            staticmethod(lambda *args: None))
+        window.author_worker = type("BusyWorker", (), {
+            "isRunning": lambda self: True,
+        })()
+        picker.setCurrentIndex(picker.findData("book-b"))
+        assert picker.currentData() == "book-a"
+        assert author.author_draft_box.toPlainText() == "Chapter A"
+        window.author_worker = None
+    finally:
+        window.author_panel._project_save_timer.stop()
+        window.resource_timer.stop()
+        app.removeEventFilter(window)
+        window.close()
+        window.deleteLater()
+    assert project_workspaces.load("book-a", "author")["draft"] == "Chapter A"
 
 
 def test_project_chat_field_is_optional_and_legacy_chats_load(tmp_path):
@@ -254,14 +372,23 @@ def test_project_manager_edits_instructions_and_budget(app, tmp_path, monkeypatc
     registry.upsert_project("p1", "First")
     manager = ProjectManagerDialog(None, registry)
     try:
+        from PySide6.QtWidgets import QScrollArea
+        assert manager.findChild(QScrollArea) is not None
         manager.name.setText("Renamed")
         manager.instructions.setPlainText("Keep source citations.")
+        manager.kind.setCurrentIndex(manager.kind.findData("book"))
+        manager.work_title.setText("The Salt Road")
+        manager.byline.setText("A. Writer")
+        manager.brief.setPlainText("A novel for literary readers")
         manager.budget.setText("1.75")
         manager._save()
         stored = registry.get_project("p1")
         assert stored["name"] == "Renamed"
         assert stored["instructions"] == "Keep source citations."
         assert stored["budget_eur"] == 1.75
+        assert stored["work_title"] == "The Salt Road"
+        assert stored["byline"] == "A. Writer"
+        assert stored["kind"] == "book"
         manager._archive()
         assert registry.list_projects() == []
         assert registry.get_project("p1")["archived"] == 1

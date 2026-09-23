@@ -60,6 +60,10 @@ CREATE TABLE IF NOT EXISTS usage (
 CREATE TABLE IF NOT EXISTS projects (
     id               TEXT PRIMARY KEY,
     name             TEXT NOT NULL,
+    kind             TEXT NOT NULL DEFAULT '',
+    work_title       TEXT NOT NULL DEFAULT '',
+    byline           TEXT NOT NULL DEFAULT '',
+    brief            TEXT NOT NULL DEFAULT '',
     instructions     TEXT NOT NULL DEFAULT '',
     default_agent    TEXT NOT NULL DEFAULT '',
     default_provider TEXT NOT NULL DEFAULT '',
@@ -67,6 +71,18 @@ CREATE TABLE IF NOT EXISTS projects (
     budget_eur       REAL,
     archived         INTEGER NOT NULL DEFAULT 0,
     created_at       TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Workspace-specific working documents belong to the same stable project ID.
+-- Chat files remain separate documents; these snapshots protect in-app edits
+-- when the user changes projects without first exporting a draft.
+CREATE TABLE IF NOT EXISTS project_workspaces (
+    project_id  TEXT NOT NULL,
+    workspace   TEXT NOT NULL,
+    state_json  TEXT NOT NULL DEFAULT '{}',
+    updated_at  TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (project_id, workspace),
+    FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS runs (
@@ -540,6 +556,12 @@ def _add_missing_columns(conn: sqlite3.Connection) -> None:
     column in SCHEMA never reaches one. Each entry is applied only when absent.
     """
     wanted = {
+        "projects": [
+            ("kind", "TEXT NOT NULL DEFAULT ''"),
+            ("work_title", "TEXT NOT NULL DEFAULT ''"),
+            ("byline", "TEXT NOT NULL DEFAULT ''"),
+            ("brief", "TEXT NOT NULL DEFAULT ''"),
+        ],
         "usage": [("project", "TEXT NOT NULL DEFAULT ''")],
         "pricing": [("cached_input_per_1m_usd", "REAL NOT NULL DEFAULT 0.0")],
         "creator_content": [

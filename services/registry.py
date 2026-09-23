@@ -42,7 +42,9 @@ class Registry:
     def upsert_project(self, project_id: str, name: str, *, instructions: str = "",
                        default_agent: str = "", default_provider: str = "",
                        default_model: str = "", budget_eur: float | None = None,
-                       archived: bool = False) -> None:
+                       archived: bool = False, kind: str | None = None,
+                       work_title: str | None = None, byline: str | None = None,
+                       brief: str | None = None) -> None:
         if not project_id or not name.strip():
             raise ValueError("Project id and name are required")
         if budget_eur is not None and (not math.isfinite(budget_eur) or budget_eur < 0):
@@ -63,6 +65,16 @@ class Registry:
                   archived = excluded.archived
             """, (project_id, name.strip(), instructions, default_agent,
                   default_provider, default_model, budget_eur, int(archived)))
+            # Most existing callers update chat defaults only. Omitted work
+            # identity fields must survive those calls unchanged.
+            identity = {key: value.strip() for key, value in (
+                ("kind", kind), ("work_title", work_title),
+                ("byline", byline), ("brief", brief)) if value is not None}
+            if identity:
+                assignments = ", ".join(f"{key} = ?" for key in identity)
+                conn.execute(
+                    f"UPDATE projects SET {assignments} WHERE id = ?",
+                    (*identity.values(), project_id))
 
     def archive_project(self, project_id: str, archived: bool = True) -> None:
         with get_connection() as conn:
@@ -70,6 +82,19 @@ class Registry:
                 "UPDATE projects SET archived = ? WHERE id = ?",
                 (int(archived), project_id),
             )
+
+    def update_project_identity(self, project_id: str, *,
+                                work_title: str | None = None,
+                                byline: str | None = None) -> None:
+        """Update work identity without touching chat defaults or budget."""
+        fields = {key: value.strip() for key, value in (
+            ("work_title", work_title), ("byline", byline)) if value is not None}
+        if not fields:
+            return
+        assignments = ", ".join(f"{key} = ?" for key in fields)
+        with get_connection() as conn:
+            conn.execute(f"UPDATE projects SET {assignments} WHERE id = ?",
+                         (*fields.values(), project_id))
 
     def delete_project(self, project_id: str) -> None:
         """Remove the registry record; chat files remain and read as unfiled."""

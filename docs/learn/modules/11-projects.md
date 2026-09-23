@@ -20,8 +20,9 @@ you intended to measure.
 
 1. Press **New Project**, give it a stable name such as
    `Client — deliverable — date`, and check that its name appears in the header.
-2. Open **Settings → Projects**. Add only reusable instructions that really
-   belong to this project; optionally set a daily euro cap. Save the current
+2. Open **Settings → Projects**. Set the work type, title, byline or brand, and
+   a short creative brief. Add only reusable instructions that really belong
+   to this project; optionally set a daily euro cap. Save the current
    agent/provider/model with **Save Current Setup** in the left rail.
 3. New chats inherit the selected project. Use **New Chat** for a clean
    conversation in the same project; **All projects** and **Unfiled** have no
@@ -30,8 +31,10 @@ you intended to measure.
    Click a saved chat to see its transcript, then type a new follow-up. Earlier
    turns are sent with the follow-up, so longer conversations cost more. The
    current project's instructions replace any old saved system context.
-5. In Book Author, save the **Book Profile** separately from **Save Draft**. Profile
-   fields become reusable context; the editor is the authoritative manuscript.
+5. In Book Author, the selected project restores its own book profile, draft,
+   outline, character and world notes. Edits save after a short pause, on
+   project switch, and on app close. **Save Profile** also confirms the shared
+   title and byline. **Save Draft** writes a separate text or Markdown file.
 6. In agents with **Save**, **Export**, **Save as File**, or **Save Full Plan**,
    treat that button as the boundary between generated workspace content and a
    deliverable outside the editor.
@@ -50,13 +53,14 @@ session/daily limits or external provider invoices.
 
 | State | Safe assumption |
 |---|---|
-| Visible generated text | Unsaved until the agent's save/project behavior is verified |
+| Write editor under a named project | Saved to that project's working state after a short pause, on switch, and on app close |
+| Visible generated text in other agents | Unsaved until that agent's save behavior is verified |
 | Explicit Save/Save Draft | Stored in the agent/project data path |
 | Export/Save as File | Written to the chosen or documented external location |
 | Provider-hosted media URL | Temporary until Imprint downloads it successfully |
 | Clear | Removes visible working content; it is not undo |
 | Archive project | Hides it from the selector; chats remain and can be restored |
-| Delete project | Unfiles its chats without deleting their files; project settings are removed |
+| Delete project | Unfiles its chats without deleting their files; project identity and project-specific working drafts are removed |
 | Remove chat | Deletes the selected chat file after confirmation |
 
 ## Verification
