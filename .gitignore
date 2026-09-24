@@ -38,3 +38,11 @@ build/
 # Generated at install/build time by scripts/stamp_version.py — regenerated
 # every time, so committing it would just churn between sessions.
 _build_info.json
+
+# Stale index locks parked by the lab tooling — transient, never wanted in git.
+/_to_delete/
+
+# Chat transcripts written at runtime. The handful already tracked are test
+# output ("a sunset" fixtures) committed by accident; they are left in place
+# rather than deleted from someone else's project, but no new ones follow them.
+/data/chats/
