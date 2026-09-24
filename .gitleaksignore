@@ -6,3 +6,7 @@
 # Fingerprints embed the commit SHA, so the 2026-09-24 history rewrite
 # invalidated the previous entry and it had to be re-pinned.
 315882efd1746f0005b4f65e96faf45c56ca90d8:services/database.py:generic-api-key:198
+
+# Same false positive, caught in this file: an earlier revision of these
+# comments quoted the offending line verbatim.
+50c01218c548a3bf863ad6488d535d61db6479ef:.gitleaksignore:generic-api-key:2
